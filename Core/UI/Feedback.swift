@@ -77,6 +77,12 @@ struct ToastOverlay: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 6)
                 .offset(y: min(0, dragY))
+                .background(GeometryReader { g in
+                    Color.clear
+                        .onAppear { PassthroughWindow.toastFrame = g.frame(in: .global) }
+                        .onChange(of: g.frame(in: .global)) { PassthroughWindow.toastFrame = $0 }
+                })
+                .onDisappear { PassthroughWindow.toastFrame = nil }
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .onTapGesture { center.current = nil }
                 // Swipe up to dismiss.

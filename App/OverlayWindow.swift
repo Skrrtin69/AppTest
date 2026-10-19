@@ -32,8 +32,12 @@ enum OverlayWindow {
 
 final class PassthroughWindow: UIWindow {
     var passthrough = true
+    /// Where the current toast is on screen; touches there go to the toast (X / swipe up).
+    static var toastFrame: CGRect?
+
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        passthrough ? nil : super.hitTest(point, with: event)
+        if let f = Self.toastFrame, f.contains(point) { return super.hitTest(point, with: event) }
+        return passthrough ? nil : super.hitTest(point, with: event)
     }
 }
 
