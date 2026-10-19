@@ -32,8 +32,8 @@ final class ImagePipeline {
     /// Raw bytes for a URL: memory → disk → network.
     func data(for url: URL, client: NetworkClient? = nil) async throws -> Data {
         if url.isFileURL { return try Data(contentsOf: url) }
-        if let d = await ImageCache.shared.data(for: url) { return d }
         let c = client ?? NetworkClient.shared
+        if let d = await ImageCache.shared.data(for: url, siteID: c.siteID) { return d }
         let data: Data = try await semaphore.run {
             // Media requests skip the adapter's API rate limit; the semaphore bounds them instead.
             try await c.data(for: url, rateLimited: false).0

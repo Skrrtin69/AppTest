@@ -127,6 +127,16 @@ struct SettingsView: View {
                                 }
                             }
                         }
+                        if let other = siteCacheSizes[""], other > 0 {
+                            Button("Unsorted (\(ByteCountFormatter.string(fromByteCount: Int64(other), countStyle: .file)))") {
+                                Task {
+                                    let freed = await ImageCache.shared.clear(siteID: "")
+                                    ImagePipeline.shared.clearMemory()
+                                    await refreshCache()
+                                    ToastCenter.shared.show("Cleared \(ByteCountFormatter.string(fromByteCount: Int64(freed), countStyle: .file)) of unsorted cache", style: .success)
+                                }
+                            }
+                        }
                     } label: { Text("Clear Cache for One Site…") }
                     .accessibilityIdentifier("clearSiteCache")
                     Button("Clear Cache") {

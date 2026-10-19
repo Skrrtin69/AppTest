@@ -34,8 +34,13 @@ actor ImageCache {
 
     private func fileURL(_ key: String) -> URL { directory.appendingPathComponent(key) }
 
-    func data(for url: URL) -> Data? {
+    /// `siteID` also tags older entries (cached before sites were tracked) as they're used.
+    func data(for url: URL, siteID: String? = nil) -> Data? {
         let key = Self.key(for: url)
+        if let s = siteID, siteIndex[key] == nil, FileManager.default.fileExists(atPath: fileURL(key).path) {
+            siteIndex[key] = s
+            indexDirty = true
+        }
         if let d = memory.object(forKey: key as NSString) { return d as Data }
         let file = fileURL(key)
         guard let d = try? Data(contentsOf: file) else { return nil }
@@ -80,6 +85,7 @@ actor ImageCache {
 
     /// Bytes on disk per site ID ("" for media not tied to a site).
     func sizeBySite() -> [String: Int] {
+        saveIndex()
         var out: [String: Int] = [:]
         for e in entries() { out[siteIndex[e.url.lastPathComponent] ?? "", default: 0] += e.size }
         return out
@@ -94,11 +100,12 @@ actor ImageCache {
         saveIndex()
     }
 
-    /// Deletes only the files that came from one site. Returns the bytes freed.
+    /// Deletes only the files that came from one site ("" = files not tagged with a site).
+    /// Returns the bytes freed.
     @discardableResult
     func clear(siteID: String) -> Int {
         var freed = 0
-        for e in entries() where siteIndex[e.url.lastPathComponent] == siteID {
+        for e in entries() where (siteIndex[e.url.lastPathComponent] ?? "") == siteID {
             try? FileManager.default.removeItem(at: e.url)
             memory.removeObject(forKey: e.url.lastPathComponent as NSString)
             siteIndex[e.url.lastPathComponent] = nil
