@@ -199,8 +199,15 @@ struct TabChip: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Text("\(tab.title)").lineLimit(1).font(.subheadline.weight(isSelected ? .semibold : .regular))
-            Text("· \(tab.siteName)").lineLimit(1).font(.caption).foregroundColor(.secondary)
+            Button(action: onSelect) {
+                HStack(spacing: 4) {
+                    Text("\(tab.title)").lineLimit(1).font(.subheadline.weight(isSelected ? .semibold : .regular))
+                    Text("· \(tab.siteName)").lineLimit(1).font(.caption).foregroundColor(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Tab \(tab.title) on \(tab.siteName)")
+            // Kept as its own element so VoiceOver (and automation) can reach it.
             if canClose && isSelected {
                 Button(action: onClose) { Image(systemName: "xmark").font(.caption2.weight(.bold)) }
                     .accessibilityLabel("Close tab \(tab.title)")
@@ -208,10 +215,7 @@ struct TabChip: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(Capsule().fill(isSelected ? Color.accentColor.opacity(0.22) : Color.gray.opacity(0.14)))
-        .onTapGesture(perform: onSelect)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel("Tab \(tab.title) on \(tab.siteName)")
+        .accessibilityElement(children: .contain)
     }
 }
 
