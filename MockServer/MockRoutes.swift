@@ -110,7 +110,7 @@ enum MockRoutes {
                 "data": [
                     "items": slice.map { ["post": siteBPost($0, origin: origin)] },
                     "has_next": hasNext,
-                    "next_cursor": hasNext ? encodeCursor(end) : NSNull(),
+                    "next_cursor": hasNext ? encodeCursor(end) as Any : NSNull() as Any,
                 ],
                 "meta": ["count": slice.count, "total": all.count],
             ])
