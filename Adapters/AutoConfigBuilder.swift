@@ -123,7 +123,7 @@ extension AutoConfigurator {
             set(.authStyle, .high, loggedIn
                 ? "You chose \(config.authStyle.rawValue), and the server accepted it."
                 : "No login needed, so none is set.")
-            config.authParamName = input.authParamName?.nonEmpty
+            config.authParamName = AdapterConfig.sanitizeParamName(input.authParamName)
             set(.authParamName, config.authParamName == nil ? .medium : .high, config.authParamName == nil
                 ? "Only used by API-key logins; not needed here."
                 : "The key name you entered (\(config.authParamName!)).")
@@ -468,8 +468,11 @@ extension AutoConfigurator {
                     if let b = child as? NSNumber, CFGetTypeID(b) == CFBooleanGetTypeID(),
                        ["has_more", "has_next", "hasmore", "hasnext", "has_next_page", "next_page", "more", "next"].contains(lk) {
                         hasNext = hasNext ?? p
-                    } else if let s = child as? String, !s.isEmpty, !AutoConfigurator.isHTTP(s),
-                              ["next_cursor", "cursor", "nextcursor", "next", "next_page_token", "after", "continuation"].contains(lk) {
+                    } else if ["next_cursor", "cursor", "nextcursor", "next_page_token", "after", "continuation"].contains(lk),
+                              child is NSNull || ((child as? String).map { !$0.isEmpty && !AutoConfigurator.isHTTP($0) } ?? false) {
+                        // null counts too: on the last page the token is simply empty.
+                        cursor = cursor ?? p
+                    } else if lk == "next", let s = child as? String, !s.isEmpty, !AutoConfigurator.isHTTP(s) {
                         cursor = cursor ?? p
                     } else if child is NSNumber, ["page", "count", "total", "pages", "next_page"].contains(lk) {
                         counters.append(p)
@@ -488,6 +491,11 @@ extension AutoConfigurator {
                 if !input.urlTemplate.contains("{cursor}") {
                     set(.searchPath, .low, "Pages use a token, but your address has no {cursor} placeholder. Add it (e.g. &cursor={cursor}) or only page 1 will load.")
                 }
+            } else if input.urlTemplate.contains("{cursor}") {
+                config.paginationStyle = .cursor
+                config.cursorPath = nil
+                set(.paginationStyle, .medium, "Your address uses {cursor}, so pages are fetched by token, but this answer had no token key (it may have been the only page).")
+                set(.cursorPath, .low, "Needs input: the answer didn't show where the next-page token is. Try Analyze with a sample tag that has more results.")
             } else {
                 config.paginationStyle = .pageNumber
                 config.cursorPath = nil
