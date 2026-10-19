@@ -102,6 +102,7 @@ struct LibraryView: View {
     @ViewBuilder func menu(for list: [DownloadItem]) -> some View {
         Button { Task { await downloads.exportToPhotos(list) } } label: { Label("Save to Photos", systemImage: "photo.on.rectangle") }
         Button { downloads.exportToFiles(list) } label: { Label("Export to Files", systemImage: "folder") }
+        Button { downloads.exportZIP(list) } label: { Label("Export as ZIP", systemImage: "doc.zipper") }
         Button { Presenter.share(list.compactMap { $0.fileURL }) } label: { Label("Share", systemImage: "square.and.arrow.up") }
         Button {
             selecting = true
@@ -116,12 +117,15 @@ struct LibraryView: View {
             Button(selected.count == items.count ? "None" : "All") {
                 selected = selected.count == items.count ? [] : Set(items.map { $0.id })
             }
+            Button("Invert") { selected = Set(items.map { $0.id }).subtracting(selected) }
             Text("\(picked.count) selected").font(.subheadline)
             Spacer()
             Button { Task { await downloads.exportToPhotos(picked) } } label: { Image(systemName: "photo.on.rectangle") }
                 .disabled(picked.isEmpty).accessibilityLabel("Save selected to Photos")
             Button { downloads.exportToFiles(picked) } label: { Image(systemName: "folder") }
                 .disabled(picked.isEmpty).accessibilityLabel("Export selected to Files")
+            Button { downloads.exportZIP(picked) } label: { Image(systemName: "doc.zipper") }
+                .disabled(picked.isEmpty).accessibilityLabel("Export selected as ZIP")
             Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
                 .disabled(picked.isEmpty).accessibilityLabel("Delete selected")
         }

@@ -17,6 +17,8 @@ final class NetworkClient {
 
     let config: Config
     let limiter: RateLimiter
+    /// The adapter this client belongs to (lets the media cache be cleared per site).
+    var siteID: String?
     let session: URLSession
 
     init(config: Config) {

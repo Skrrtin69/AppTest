@@ -12,6 +12,12 @@ struct DownloadsView: View {
                                    message: "Finished downloads move to the Library tab.")
                 } else {
                     List {
+                        if manager.failedCount > 0 {
+                            Button { manager.retryFailed() } label: {
+                                Label("Retry All Failed (\(manager.failedCount))", systemImage: "arrow.clockwise")
+                            }
+                            .accessibilityIdentifier("retryAllFailed")
+                        }
                         ForEach(manager.queue) { item in DownloadRow(item: item) }
                     }
                     .listStyle(.plain)
@@ -81,8 +87,13 @@ struct DownloadRow: View {
                 Button { manager.resume(item.id) } label: { Image(systemName: "play.circle") }
                     .accessibilityLabel("Resume \(item.filename)")
             case .failed:
-                Button { manager.retry(item.id) } label: { Image(systemName: "arrow.clockwise.circle") }
-                    .accessibilityLabel("Retry \(item.filename)")
+                if item.error?.hasPrefix("Skipped") == true {
+                    Button { manager.downloadAnyway(item.id) } label: { Image(systemName: "arrow.down.to.line.circle") }
+                        .accessibilityLabel("Download anyway \(item.filename)")
+                } else {
+                    Button { manager.retry(item.id) } label: { Image(systemName: "arrow.clockwise.circle") }
+                        .accessibilityLabel("Retry \(item.filename)")
+                }
             case .completed:
                 EmptyView()
             }

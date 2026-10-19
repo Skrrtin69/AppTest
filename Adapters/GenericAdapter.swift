@@ -10,6 +10,7 @@ final class GenericAdapter: SiteAdapter {
     init(config: AdapterConfig, client: NetworkClient? = nil) {
         self.config = config
         self.client = client ?? NetworkClient(adapter: config)
+        if self.client.siteID == nil { self.client.siteID = config.id }
     }
 
     var id: String { config.id }

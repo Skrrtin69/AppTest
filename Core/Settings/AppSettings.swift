@@ -41,10 +41,12 @@ final class AppSettings: ObservableObject {
         static let updateURL = "updateURL", animateGridGIFs = "animateGridGIFs", autoplayVideos = "autoplayVideos"
         static let blurThumbnails = "blurThumbnails", dimViewed = "dimViewed"
         static let viewerAspect = "viewerAspect", playbackSpeed = "playbackSpeed", verticalReading = "verticalReading"
+        static let warnOnCellular = "warnOnCellular", maxDownloadMB = "maxDownloadMB"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
-                          blurThumbnails, dimViewed, viewerAspect, playbackSpeed, verticalReading]
+                          blurThumbnails, dimViewed, viewerAspect, playbackSpeed, verticalReading,
+                          warnOnCellular, maxDownloadMB]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -82,6 +84,10 @@ final class AppSettings: ObservableObject {
     @Published var playbackSpeed: Double = 1 { didSet { d.set(playbackSpeed, forKey: K.playbackSpeed) } }
     /// Viewer shows posts stacked vertically (comic/webtoon style) instead of paging.
     @Published var verticalReading: Bool = false { didSet { d.set(verticalReading, forKey: K.verticalReading) } }
+    /// Ask before batch/video downloads on cellular or metered data.
+    @Published var warnOnCellular: Bool = true { didSet { d.set(warnOnCellular, forKey: K.warnOnCellular) } }
+    /// Downloads bigger than this many MB are skipped (0 = no limit).
+    @Published var maxDownloadMB: Double = 0 { didSet { d.set(maxDownloadMB, forKey: K.maxDownloadMB) } }
 
     func cycleSpeed() {
         playbackSpeed = playbackSpeed >= 2 ? 1 : (playbackSpeed >= 1.5 ? 2 : 1.5)
@@ -115,6 +121,8 @@ final class AppSettings: ObservableObject {
         viewerAspect = ViewerAspect(rawValue: d.string(forKey: K.viewerAspect) ?? "") ?? .fit
         playbackSpeed = d.object(forKey: K.playbackSpeed) as? Double ?? 1
         verticalReading = d.object(forKey: K.verticalReading) as? Bool ?? false
+        warnOnCellular = d.object(forKey: K.warnOnCellular) as? Bool ?? true
+        maxDownloadMB = d.object(forKey: K.maxDownloadMB) as? Double ?? 0
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }

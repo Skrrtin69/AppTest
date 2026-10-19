@@ -6,6 +6,7 @@ struct SettingsView: View {
     @ObservedObject private var registry = AdapterRegistry.shared
     @ObservedObject private var lock = LockManager.shared
     @State private var cacheSize: Int?
+    @State private var siteCacheSizes: [String: Int] = [:]
     @State private var showPasscodeSetup = false
     @State private var confirm: ConfirmAction?
 
@@ -85,6 +86,14 @@ struct SettingsView: View {
                             .accessibilityLabel("Simultaneous downloads")
                     }
                     Toggle("Background downloads", isOn: $settings.backgroundDownloads)
+                    Toggle("Ask before big downloads on cellular", isOn: $settings.warnOnCellular)
+                    Picker("Skip files larger than", selection: $settings.maxDownloadMB) {
+                        Text("No limit").tag(0.0)
+                        ForEach([0.1, 1, 5, 10, 25, 50, 100, 250], id: \.self) { mb in
+                            Text(mb < 1 ? "\(String(format: "%.1f", mb)) MB" : "\(Int(mb)) MB").tag(mb)
+                        }
+                    }
+                    .accessibilityIdentifier("maxDownloadPicker")
                 } header: { Text("Downloads") } footer: {
                     Text("Name placeholders: {site} {id} {index} {type} {date}. Use / in Folder for sub-folders, e.g. {site}/{type}. Files are saved in Files › On My iPhone › MediaDeck › Downloads. Changing Background downloads applies after restarting the app; if this device can't do background downloads, the app notices and switches to regular downloads automatically.")
                 }
@@ -107,6 +116,19 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                             .accessibilityIdentifier("cacheSize")
                     }
+                    Menu {
+                        ForEach(registry.configs) { c in
+                            Button("\(c.displayName) (\(ByteCountFormatter.string(fromByteCount: Int64(siteCacheSizes[c.id] ?? 0), countStyle: .file)))") {
+                                Task {
+                                    let freed = await ImageCache.shared.clear(siteID: c.id)
+                                    ImagePipeline.shared.clearMemory()
+                                    await refreshCache()
+                                    ToastCenter.shared.show("Cleared \(ByteCountFormatter.string(fromByteCount: Int64(freed), countStyle: .file)) cached from \(c.displayName)", style: .success)
+                                }
+                            }
+                        }
+                    } label: { Text("Clear Cache for One Site…") }
+                    .accessibilityIdentifier("clearSiteCache")
                     Button("Clear Cache") {
                         Task {
                             await ImageCache.shared.clear()
@@ -220,6 +242,7 @@ struct SettingsView: View {
 
     func refreshCache() async {
         cacheSize = await ImageCache.shared.diskSize()
+        siteCacheSizes = await ImageCache.shared.sizeBySite()
     }
 
     func intBinding(_ b: Binding<Int>) -> Binding<Double> {

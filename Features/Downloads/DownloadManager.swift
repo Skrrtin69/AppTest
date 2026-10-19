@@ -38,6 +38,8 @@ final class DownloadManager: NSObject, ObservableObject {
     private var session: URLSession!
     private var tasks: [String: URLSessionDownloadTask] = [:]
     private var lastProgressPublish: [String: Double] = [:]
+    /// Items the user chose to download despite the size limit.
+    private var sizeOverride = Set<String>()
     private var ctx: NSManagedObjectContext { CoreDataStack.shared.context }
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
@@ -141,9 +143,25 @@ final class DownloadManager: NSObject, ObservableObject {
     @MainActor
     func enqueue(_ posts: [Post]) async {
         let settings = AppSettings.shared
+        guard !posts.isEmpty else { return }
+        // Mobile data: confirm batches and videos first.
+        if settings.warnOnCellular, NetworkStatus.shared.onMeteredData,
+           posts.count >= 5 || posts.contains(where: { $0.mediaType == .video }) {
+            let what = posts.count == 1 ? "this video" : "\(posts.count) items"
+            guard await Confirm.ask(title: "You're on mobile data",
+                                    message: "Download \(what) over cellular? (You can turn this question off in Settings › Downloads.)",
+                                    confirm: "Download") else { return }
+        }
         var added = 0, skipped = 0
         for (offset, post) in posts.enumerated() {
-            if items.contains(where: { $0.post.key == post.key && $0.state != .failed }) { skipped += 1; continue }
+            // Duplicate check: same post or same file already downloaded, and the file is still there.
+            if let existing = items.first(where: { ($0.post.key == post.key || $0.remoteURL == post.mediaURL) && $0.state != .failed }) {
+                if existing.state != .completed || existing.fileURL.map({ FileManager.default.fileExists(atPath: $0.path) }) == true {
+                    skipped += 1
+                    continue
+                }
+                remove([existing.id])     // record without its file: download again
+            }
             let url: URL
             if let adapter = AdapterRegistry.shared.adapter(for: post.siteID) {
                 url = (try? await adapter.fetchMediaURL(for: post, quality: settings.downloadQuality)) ?? post.mediaURL
@@ -246,6 +264,32 @@ final class DownloadManager: NSObject, ObservableObject {
         schedule()
     }
 
+    /// "Download anyway" for an item skipped by the size limit.
+    func downloadAnyway(_ id: String) {
+        sizeOverride.insert(id)
+        retry(id)
+    }
+
+    var failedCount: Int { items.filter { $0.state == .failed }.count }
+
+    /// Writes the files to one ZIP in the temp folder and offers to save it in Files.
+    func exportZIP(_ list: [DownloadItem]) {
+        let entries = list.compactMap { i in i.fileURL.map { ZipWriter.Entry(name: i.filename, url: $0) } }
+        guard !entries.isEmpty else { return }
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd-HHmm"
+        let dest = FileManager.default.temporaryDirectory.appendingPathComponent("MediaDeck-\(f.string(from: Date())).zip")
+        ToastCenter.shared.show("Making ZIP of \(entries.count) files…")
+        Task.detached(priority: .userInitiated) {
+            do {
+                try? FileManager.default.removeItem(at: dest)
+                try ZipWriter.write(entries, to: dest)
+                await MainActor.run { Presenter.exportToFiles([dest]) }
+            } catch {
+                ToastCenter.shared.error(error, prefix: "Couldn't make the ZIP")
+            }
+        }
+    }
+
     func retry(_ id: String) {
         update(id) { $0.state = .queued; $0.error = nil; $0.progress = 0 }
         if let m = mo(id) { m.resumeData = nil; CoreDataStack.shared.save() }
@@ -323,6 +367,16 @@ extension DownloadManager: URLSessionDownloadDelegate {
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
                     totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         guard let id = downloadTask.taskDescription else { return }
+        // Size limit: decided as soon as the server says how big the file is.
+        let limitMB = AppSettings.shared.maxDownloadMB
+        if limitMB > 0, totalBytesExpectedToWrite > Int64(limitMB * 1_048_576), !sizeOverride.contains(id) {
+            let size = ByteCountFormatter.string(fromByteCount: totalBytesExpectedToWrite, countStyle: .file)
+            update(id) { $0.state = .failed; $0.error = "Skipped: \(size) is over your \(limitMB < 1 ? String(format: "%.1f", limitMB) : String(Int(limitMB))) MB limit" }
+            downloadTask.cancel()
+            tasks[id] = nil
+            schedule()
+            return
+        }
         let p = totalBytesExpectedToWrite > 0 ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite) : 0
         // Throttle UI updates to whole percents.
         if abs(p - (lastProgressPublish[id] ?? -1)) < 0.01 && p < 1 { return }

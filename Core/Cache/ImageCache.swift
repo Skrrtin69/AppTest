@@ -3,18 +3,28 @@ import CryptoKit
 
 /// Two-tier byte cache for remote media: NSCache in memory, files on disk.
 /// Disk entries are touched on read so eviction removes the least-recently-used files first.
+/// A small index remembers which site each file came from, so one site's cache can be cleared.
 actor ImageCache {
     static let shared = ImageCache()
 
     private let memory = NSCache<NSString, NSData>()
     private let directory: URL
+    private let indexFile: URL
     private var writesSinceTrim = 0
+    /// Cache key → site ID.
+    private var siteIndex: [String: String] = [:]
+    private var indexDirty = false
 
     init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         directory = caches.appendingPathComponent("MediaCache", isDirectory: true)
+        indexFile = caches.appendingPathComponent("MediaCacheIndex.json")
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         memory.totalCostLimit = 80 * 1024 * 1024
+        if let data = try? Data(contentsOf: indexFile),
+           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
+            siteIndex = decoded
+        }
     }
 
     nonisolated static func key(for url: URL) -> String {
@@ -35,15 +45,26 @@ actor ImageCache {
         return d
     }
 
-    func store(_ data: Data, for url: URL) {
+    func store(_ data: Data, for url: URL, siteID: String? = nil) {
         let key = Self.key(for: url)
         memory.setObject(data as NSData, forKey: key as NSString, cost: data.count)
         try? data.write(to: fileURL(key), options: .atomic)
+        if let s = siteID, siteIndex[key] != s {
+            siteIndex[key] = s
+            indexDirty = true
+        }
         writesSinceTrim += 1
         if writesSinceTrim >= 25 {
             writesSinceTrim = 0
             trim()
+            saveIndex()
         }
+    }
+
+    private func saveIndex() {
+        guard indexDirty, let data = try? JSONEncoder().encode(siteIndex) else { return }
+        try? data.write(to: indexFile, options: .atomic)
+        indexDirty = false
     }
 
     /// File URL of a cached entry (used to hand cached media to AVPlayer/WebKit).
@@ -57,10 +78,35 @@ actor ImageCache {
         entries().reduce(0) { $0 + $1.size }
     }
 
+    /// Bytes on disk per site ID ("" for media not tied to a site).
+    func sizeBySite() -> [String: Int] {
+        var out: [String: Int] = [:]
+        for e in entries() { out[siteIndex[e.url.lastPathComponent] ?? "", default: 0] += e.size }
+        return out
+    }
+
     func clear() {
         memory.removeAllObjects()
         try? FileManager.default.removeItem(at: directory)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        siteIndex = [:]
+        indexDirty = true
+        saveIndex()
+    }
+
+    /// Deletes only the files that came from one site. Returns the bytes freed.
+    @discardableResult
+    func clear(siteID: String) -> Int {
+        var freed = 0
+        for e in entries() where siteIndex[e.url.lastPathComponent] == siteID {
+            try? FileManager.default.removeItem(at: e.url)
+            memory.removeObject(forKey: e.url.lastPathComponent as NSString)
+            siteIndex[e.url.lastPathComponent] = nil
+            freed += e.size
+        }
+        indexDirty = true
+        saveIndex()
+        return freed
     }
 
     /// Deletes least-recently-used files until the cache fits the limit from Settings.
@@ -73,6 +119,8 @@ actor ImageCache {
         files.sort { $0.date < $1.date }
         for f in files {
             try? FileManager.default.removeItem(at: f.url)
+            siteIndex[f.url.lastPathComponent] = nil
+            indexDirty = true
             total -= f.size
             if total <= Int(Double(limit) * 0.9) { break }
         }

@@ -298,6 +298,15 @@ struct BrowseView: View {
                 }
                 Button { t.scrollToTopToken += 1 } label: { Label("Scroll to top", systemImage: "arrow.up.to.line") }
                 Button {
+                    let all = t.visiblePosts(blacklist: settings.blacklistSet)
+                    Task {
+                        guard await Confirm.ask(title: "Download all \(all.count) results?",
+                                                message: "Everything loaded in this grid so far will be added to the download queue.",
+                                                confirm: "Download All") else { return }
+                        await DownloadManager.shared.enqueue(all)
+                    }
+                } label: { Label("Download All Results", systemImage: "square.and.arrow.down.on.square") }
+                Button {
                     t.selecting.toggle()
                     t.selected = []
                 } label: { Label(t.selecting ? "Done Selecting" : "Select", systemImage: "checkmark.circle") }
@@ -453,7 +462,12 @@ struct SearchTabView: View {
                 let all = tab.visiblePosts(blacklist: settings.blacklistSet)
                 tab.selected = picked.count == all.count ? [] : Set(all.map { $0.key })
             } label: { Image(systemName: "checklist") }
-            .accessibilityLabel("Select all")
+            .accessibilityLabel(picked.count == tab.visiblePosts(blacklist: settings.blacklistSet).count ? "Select none" : "Select all")
+            Button {
+                let all = Set(tab.visiblePosts(blacklist: settings.blacklistSet).map { $0.key })
+                tab.selected = all.subtracting(tab.selected)
+            } label: { Image(systemName: "arrow.left.arrow.right.circle") }
+            .accessibilityLabel("Invert selection")
             Button { LibraryStore.shared.addFavorites(picked); ToastCenter.shared.show("Favorited \(picked.count)", style: .success) }
                 label: { Image(systemName: "heart") }
                 .disabled(picked.isEmpty).accessibilityLabel("Favorite selected")

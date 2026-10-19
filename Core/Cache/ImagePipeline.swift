@@ -38,7 +38,7 @@ final class ImagePipeline {
             // Media requests skip the adapter's API rate limit; the semaphore bounds them instead.
             try await c.data(for: url, rateLimited: false).0
         }
-        await ImageCache.shared.store(data, for: url)
+        await ImageCache.shared.store(data, for: url, siteID: c.siteID)
         return data
     }
 
