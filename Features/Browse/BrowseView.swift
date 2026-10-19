@@ -249,7 +249,7 @@ struct SearchTabView: View {
                         footer
                     }
                 }
-                .refreshable { await tab.search(recordHistory: false) }
+                .refreshable { await tab.refresh() }
             }
             if tab.selecting { selectionBar }
         }

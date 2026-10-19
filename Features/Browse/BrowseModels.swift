@@ -84,11 +84,40 @@ final class SearchTabModel: ObservableObject, Identifiable {
             hasNext = result.hasNextPage && !result.posts.isEmpty
             error = nil
         } catch {
-            guard gen == generation else { return }
-            if error is CancellationError { return }
+            guard gen == generation, !Self.isCancellation(error) else { return }
             self.error = error.localizedDescription
             ToastCenter.shared.error(error, prefix: siteName)
         }
+    }
+
+    /// Pull-to-refresh: fetches page 1 first and swaps it in, keeping the current grid on
+    /// screen meanwhile (clearing it would tear down the scroll view running the refresh).
+    func refresh() async {
+        guard let adapter = AdapterRegistry.shared.adapter(for: siteID) else { return }
+        generation += 1
+        let gen = generation
+        do {
+            try await AuthManager.shared.ensureSession(for: adapter)
+            let result = try await adapter.search(tags: tags, options: SearchOptions(sort: sort, rating: rating), page: 1)
+            guard gen == generation else { return }
+            var keys = Set<String>()
+            posts = result.posts.filter { keys.insert($0.key).inserted }
+            seen = keys
+            page = 2
+            cursor = result.nextCursor
+            hasNext = result.hasNextPage && !result.posts.isEmpty
+            error = nil
+            hasSearched = true
+            isLoading = false
+        } catch {
+            guard gen == generation, !Self.isCancellation(error) else { return }
+            self.error = error.localizedDescription
+            ToastCenter.shared.error(error, prefix: siteName)
+        }
+    }
+
+    static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? URLError)?.code == .cancelled
     }
 
     /// Infinite scroll trigger: load when one of the last few cells appears.
