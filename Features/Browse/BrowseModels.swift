@@ -34,9 +34,8 @@ final class SearchTabModel: ObservableObject, Identifiable {
     var siteName: String { AdapterRegistry.shared.displayName(for: siteID) }
 
     /// Space-separated tags; a leading "-" excludes a tag and is passed through unchanged.
-    var tags: [String] {
-        query.split(whereSeparator: { $0 == " " || $0 == "\n" }).map(String.init).filter { $0 != "-" }
-    }
+    /// Space-separated tags; "quoted phrases" are one tag; "-" excludes a tag.
+    var tags: [String] { TagQuery.parse(query) }
 
     /// Blacklisted posts are hidden (applied live, so editing the blacklist updates every grid).
     func visiblePosts(blacklist: Set<String>) -> [Post] {
@@ -137,6 +136,41 @@ final class SearchTabModel: ObservableObject, Identifiable {
     }
 
     func selectedPosts() -> [Post] { posts.filter { selected.contains($0.key) } }
+}
+
+/// Debounced tag suggestions for the search bar (adapter's autocompletePath).
+@MainActor
+final class SuggestionModel: ObservableObject {
+    @Published private(set) var suggestions: [String] = []
+    private var task: Task<Void, Never>?
+
+    /// Waits 300 ms after the last keystroke, then asks the site for suggestions.
+    func update(text: String, siteID: String?) {
+        task?.cancel()
+        let token = TagQuery.partialToken(text)
+        guard token.count >= 2, let id = siteID, let adapter = AdapterRegistry.shared.adapter(for: id),
+              adapter.supportsAutocomplete else {
+            suggestions = []
+            return
+        }
+        task = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            do {
+                let found = try await adapter.suggest(token)
+                guard !Task.isCancelled else { return }
+                self?.suggestions = Array(found.filter { $0.lowercased() != token.lowercased() || found.count == 1 }.prefix(8))
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.suggestions = []
+            }
+        }
+    }
+
+    func clear() {
+        task?.cancel()
+        suggestions = []
+    }
 }
 
 /// The set of open search tabs.

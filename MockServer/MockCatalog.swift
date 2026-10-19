@@ -15,7 +15,13 @@ struct MockItem {
     var mediaFile: String {
         switch kind {
         case "gif": return "gif/\(n % 2 == 0 ? 2 : 1).gif"
-        case "webm": return "video/clip\(n % 20 == 0 ? 2 : 1).webm"
+        case "webm":
+            // (n/10) % 3: 0 → a clip that also exists as MP4, 1 → VP8 WebM only, 2 → VP9 WebM only.
+            switch (n / 10) % 3 {
+            case 0: return "video/clip4.webm"
+            case 1: return "video/clip1.webm"
+            default: return "video/clip2.webm"
+            }
         case "mp4": return "video/clip3.mp4"
         default: return "img/\(n).png"
         }
@@ -27,6 +33,9 @@ struct MockItem {
         default: return "thumb/\(n).png"
         }
     }
+    /// MP4 version of the same video, when one exists (demo for "prefer MP4").
+    var mp4Alternate: String? { kind == "webm" && (n / 10) % 3 == 0 ? "video/clip4.mp4" : nil }
+
     var sampleFile: String { kind == "png" ? "sample/\(n).png" : mediaFile }
 }
 
@@ -61,12 +70,27 @@ enum MockCatalog {
         default: tags.append("still")
         }
         if n % 4 == 0 { tags.append("featured") }
+        // A multi-word tag written with "_" (for the tagSpaceReplacement demo).
+        if colors[n % colors.count] == "blue" { tags.append("deep_blue") }
         let day = 1 + (count - n) % 28
         return MockItem(n: n, kind: kind,
                         width: kind == "png" ? w : (kind == "gif" ? 200 : 320),
                         height: kind == "png" ? h : (kind == "gif" ? 200 : 240),
                         tags: tags.sorted(), rating: n % 6 == 0 ? "sensitive" : "general",
                         score: (n * 37) % 100, created: String(format: "2026-01-%02dT12:00:00Z", day))
+    }
+
+    /// Every distinct tag with its post count, for autocomplete.
+    static let tagCounts: [(tag: String, count: Int)] = {
+        var c: [String: Int] = [:]
+        for i in items { for t in i.tags { c[t, default: 0] += 1 } }
+        return c.map { ($0.key, $0.value) }.sorted { $0.count != $1.count ? $0.count > $1.count : $0.tag < $1.tag }
+    }()
+
+    static func suggestions(_ prefix: String) -> [(tag: String, count: Int)] {
+        let p = prefix.lowercased()
+        guard !p.isEmpty else { return [] }
+        return tagCounts.filter { $0.tag.hasPrefix(p) || $0.tag.contains("_" + p) }.prefix(10).map { $0 }
     }
 
     /// Applies tag include/exclude, rating and sort.

@@ -74,11 +74,16 @@ enum PlayerRoutes {
     video,ogvjs{position:absolute!important;top:0;left:0;width:100%!important;height:100%!important;object-fit:contain}
     ogvjs canvas{object-fit:contain}
     #msg{color:#fff;font:16px -apple-system;padding:24px;position:absolute;top:40%;width:100%;box-sizing:border-box;text-align:center}
-    </style></head><body><div id="stage"></div>
+    #snd{position:absolute;right:14px;bottom:140px;width:44px;height:44px;border-radius:22px;border:0;
+         background:rgba(0,0,0,.55);color:#fff;font:20px -apple-system;display:none;z-index:5}
+    </style></head><body><div id="stage"></div><button id="snd" aria-label="Sound">🔊</button>
     <script src="/player/ogv/ogv.js"></script>
     <script>
     var q=new URLSearchParams(location.search), src=q.get('src')||'', type=q.get('type')||'';
-    var stage=document.getElementById('stage'), player=null, usingOgv=false;
+    var stage=document.getElementById('stage'), player=null, usingOgv=false, snd=document.getElementById('snd');
+    function setSoundIcon(){ snd.textContent = (player && player.muted) ? '🔇' : '🔊'; snd.setAttribute('aria-label', (player && player.muted) ? 'Sound off, tap for sound' : 'Sound on'); }
+    // A tap here is also the user gesture iOS needs before it allows audio.
+    snd.onclick=function(e){ e.stopPropagation(); if(!player) return; player.muted=!player.muted; var p=player.play(); if(p&&p.catch){p.catch(function(){});} setSoundIcon(); post('sound '+(player.muted?'off':'on')); };
     function post(m){try{window.webkit.messageHandlers.status.postMessage(m);}catch(e){}}
     function fail(why){stage.innerHTML='<div id="msg">This video can\\'t be played on this device.<br>('+why+')</div>';post('error: '+why);}
     function useOgv(){
@@ -87,7 +92,7 @@ enum PlayerRoutes {
       stage.innerHTML='';
       OGVLoader.base='/player/ogv';
       try{ player=new OGVPlayer({simd:false,threading:false}); }catch(e){fail('decoder failed to start: '+e);return;}
-      player.muted=true;
+      player.muted=false;
       player.addEventListener('ended',function(){player.currentTime=0;player.play();});
       player.addEventListener('error',function(){fail('decoder error');});
       player.addEventListener('playing',function(){post('engine: ogv.js (WebAssembly)');});
@@ -95,15 +100,18 @@ enum PlayerRoutes {
       player.src=src;
       stage.appendChild(player);
       player.play();
+      snd.style.display='block'; setSoundIcon();
       stage.onclick=function(){ if(player.paused) player.play(); else player.pause(); };
     }
     function useNative(){
       var v=document.createElement('video');
-      v.setAttribute('playsinline',''); v.playsInline=true; v.autoplay=true; v.loop=true; v.muted=true; v.controls=true;
+      v.setAttribute('playsinline',''); v.playsInline=true; v.autoplay=true; v.loop=true; v.muted=false; v.controls=true;
       v.addEventListener('error',useOgv);
       v.addEventListener('playing',function(){post('engine: WebKit <video>');});
       v.src=src; stage.appendChild(v); player=v;
-      var p=v.play(); if(p&&p.catch){p.catch(function(){});}
+      snd.style.display='block'; setSoundIcon();
+      // If iOS refuses autoplay with sound, start muted and let the speaker button unmute.
+      var p=v.play(); if(p&&p.catch){p.catch(function(){ v.muted=true; setSoundIcon(); v.play().catch(function(){}); });}
     }
     var isWebm=/webm/i.test(type)||/\\.webm(\\?|$)/i.test(src);
     var can=document.createElement('video').canPlayType('video/webm');

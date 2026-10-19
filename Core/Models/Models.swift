@@ -107,7 +107,8 @@ struct AuthSession: Codable {
 // MARK: - Errors with plain-English messages
 
 enum AppError: LocalizedError {
-    case http(status: Int, url: URL)
+    /// `message` is the server's own explanation (see ErrorParser), shown as-is.
+    case http(status: Int, url: URL, message: String)
     case badResponse(String)
     case pathNotFound(field: String, path: String)
     case notJSON(String)
@@ -118,17 +119,9 @@ enum AppError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .http(let status, let url):
-            switch status {
-            case 401, 403:
-                return "The server refused access (HTTP \(status)). This site probably needs a login — add one under Settings → Sites & Adapters → Account. URL: \(url.absoluteString)"
-            case 404:
-                return "The server says that page doesn't exist (HTTP 404). Check the Search Path / Post Path fields. URL: \(url.absoluteString)"
-            case 429:
-                return "The server says we're going too fast (HTTP 429). Lower 'Requests per second' for this adapter."
-            default:
-                return "The server answered with error code \(status). URL: \(url.absoluteString)"
-            }
+        case .http(let status, _, let message):
+            // The server's words when it gave any, otherwise just the code. No per-code wording.
+            return message == "HTTP \(status)" ? message : "\(message) (HTTP \(status))"
         case .badResponse(let s): return "The server's answer couldn't be understood: \(s)"
         case .pathNotFound(let field, let path):
             return "The field '\(field)' uses the path \"\(path)\", but nothing was found there in the server's answer. Use the Field Mapper to find the right path."

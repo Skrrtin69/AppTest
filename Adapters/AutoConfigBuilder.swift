@@ -54,6 +54,11 @@ extension AutoConfigurator {
                 let vs = values(p)
                 let strings = vs.compactMap { $0 as? String }
                 if strings.count == vs.count, !strings.isEmpty {
+                    // Tags given as one space-separated string ("blue sky_line red"), under a tag-like key.
+                    if Self.contains(AutoConfigurator.lastKey(p), any: ["tag", "label", "keyword"]) != nil,
+                       !strings.contains(where: { AutoConfigurator.isURLString($0) }) {
+                        tagPaths.append((p, nil)); continue
+                    }
                     if strings.allSatisfy({ AutoConfigurator.isURLString($0) }) { urlPaths.append(p); continue }
                     if strings.allSatisfy({ AutoConfigurator.isExtensionValue($0) }) { extPaths.append(p); continue }
                     if strings.allSatisfy({ $0.count <= 40 && !$0.contains(" ") && !$0.isEmpty }),
@@ -75,6 +80,8 @@ extension AutoConfigurator {
             assignID(idPaths)
             assignType(extPaths)
             assignTags(tagPaths)
+            assignTagSpaces()
+            assignAlternates()
             assignMetadata(common, values: values)
             assignPostPath(maps.first ?? [:])
             pagination()
@@ -305,6 +312,106 @@ extension AutoConfigurator {
                 set(.tagsPath, .low, "No list of tags found in the results. Tag search still works, but the Info panel and blacklist won't see tags.")
                 set(.tagsNameKey, .medium, "Not needed because no tags were found.")
             }
+        }
+
+        /// Over 60% of tags written with "_" (or "-") between words → that's how spaces are written.
+        mutating func assignTagSpaces() {
+            let tags = items.prefix(20).flatMap { DottedPath.strings(config.tagsPath, in: $0, nameKey: config.tagsNameKey) }
+            guard !config.tagsPath.isEmpty, !tags.isEmpty else {
+                config.tagSpaceReplacement = nil
+                set(.tagSpaceReplacement, .medium, "No tags to learn from, so spaces inside a tag are left as they are.")
+                return
+            }
+            let underscore = Double(tags.filter { $0.contains("_") }.count) / Double(tags.count)
+            let hyphen = Double(tags.filter { $0.dropFirst().contains("-") }.count) / Double(tags.count)
+            if underscore > 0.6 {
+                config.tagSpaceReplacement = "_"
+                set(.tagSpaceReplacement, .high, "\(Int(underscore * 100))% of \(tags.count) tags use _ between words, so a typed \"blue sky\" is searched as blue_sky.")
+            } else if hyphen > 0.6 {
+                config.tagSpaceReplacement = "-"
+                set(.tagSpaceReplacement, .high, "\(Int(hyphen * 100))% of \(tags.count) tags use - between words, so a typed \"blue sky\" is searched as blue-sky.")
+            } else {
+                config.tagSpaceReplacement = nil
+                set(.tagSpaceReplacement, .medium, "Only \(Int(max(underscore, hyphen) * 100))% of \(tags.count) tags join words with _ or -, so spaces inside a tag are left as they are.")
+            }
+        }
+
+        /// Other MP4/MOV addresses in the results (often only on video posts) become alternates.
+        mutating func assignAlternates() {
+            let taken = Set([config.mediaURLPath, config.thumbnailURLPath, config.sampleURLPath ?? ""])
+            var found: [String] = []
+            for item in items.prefix(30) {
+                for (p, v) in AutoConfigurator.leaves(item) where !taken.contains(p) && !found.contains(p) {
+                    if let s = v as? String, AutoConfigurator.isURLString(s),
+                       ["mp4", "m4v", "mov"].contains(((s.split(separator: "?").first.map(String.init) ?? s) as NSString).pathExtension.lowercased()) {
+                        found.append(p)
+                    }
+                }
+            }
+            config.alternateMediaURLPaths = found.sorted()
+            set(.alternateMediaURLPaths, found.isEmpty ? .medium : .high, found.isEmpty
+                ? "No second (MP4) version of the media found in the first results."
+                : "Some results also have an MP4 at \(found.joined(separator: ", ")); it will be preferred so videos play natively with sound.")
+        }
+
+        /// Tries common suggestion addresses next to the API (then at the site root); the first
+        /// that answers with a list of tag-like items wins.
+        mutating func probeAutocomplete(adapter: GenericAdapter) async {
+            let patterns = ["tags/autocomplete.json?q={query}", "tags/autocomplete?q={query}", "autocomplete.json?q={query}",
+                            "autocomplete?q={query}", "suggest?q={query}", "tags.json?q={query}"]
+            let query = String((input.sampleTag.split(separator: " ").first ?? "a").prefix(2))
+            let bases = parts.base == parts.origin ? [parts.base] : [parts.base, parts.origin]
+            for base in bases {
+                for pattern in patterns {
+                    let filled = pattern.replacingOccurrences(of: "{query}", with: GenericAdapter.encode(query))
+                    guard let url = URL(string: GenericAdapter.join(base, filled)),
+                          let (data, resp) = try? await adapter.fetchRaw(url, rateLimited: false),
+                          (200...299).contains(resp.statusCode),
+                          let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
+                          let found = Self.suggestionList(json) else { continue }
+                    // Under the API folder it's written relative to baseURL; at the root, as a full address.
+                    config.autocompletePath = base == parts.base ? pattern : GenericAdapter.join(base, pattern)
+                    config.autocompleteResultsPath = found.path
+                    config.autocompleteNameKey = found.nameKey
+                    set(.autocompletePath, .high, "\(GenericAdapter.join(base, filled)) answered with \(found.count) tag suggestions for '\(query)'.")
+                    set(.autocompleteResultsPath, .high, found.path.isEmpty ? "The suggestion answer is itself the list." : "Suggestions are listed under '\(found.path)'.")
+                    set(.autocompleteNameKey, found.nameKey == nil ? .medium : .high, found.nameKey == nil
+                        ? "Suggestions are plain words, so no name key is needed."
+                        : "Each suggestion's text is under '\(found.nameKey!)'.")
+                    return
+                }
+            }
+            config.autocompletePath = nil
+            set(.autocompletePath, .medium, "None of the usual suggestion addresses answered, so the search bar won't suggest tags. Add one if the site has it.")
+            set(.autocompleteResultsPath, .medium, "Not needed without suggestions.")
+            set(.autocompleteNameKey, .medium, "Not needed without suggestions.")
+        }
+
+        /// A list of strings, or of objects with a name-like key, at the root or nested in objects.
+        static func suggestionList(_ json: Any) -> (path: String, nameKey: String?, count: Int)? {
+            /// nil = not a suggestion list; .some((nil, n)) = list of plain strings.
+            func check(_ v: Any) -> (nameKey: String?, count: Int)? {
+                guard let a = v as? [Any], !a.isEmpty else { return nil }
+                if a.allSatisfy({ $0 is String }) { return (nil, a.count) }
+                let objs = a.compactMap { $0 as? [String: Any] }
+                guard objs.count == a.count else { return nil }
+                for k in ["name", "label", "tag", "value", "term", "title"] where objs.allSatisfy({ $0[k] is String }) {
+                    return (k, a.count)
+                }
+                return nil
+            }
+            if let found = check(json) { return ("", found.nameKey, found.count) }
+            var result: (path: String, nameKey: String?, count: Int)?
+            func walk(_ v: Any, path: String, depth: Int) {
+                guard result == nil, let d = v as? [String: Any], depth < 4 else { return }
+                for (k, child) in d {
+                    let p = path.isEmpty ? k : "\(path).\(k)"
+                    if let found = check(child) { result = (p, found.nameKey, found.count); return }
+                    walk(child, path: p, depth: depth + 1)
+                }
+            }
+            walk(json, path: "", depth: 0)
+            return result
         }
 
         mutating func assignMetadata(_ common: [String], values: (String) -> [Any]) {

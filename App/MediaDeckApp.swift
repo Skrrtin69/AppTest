@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import AVFoundation
 
 @main
 struct MediaDeckApp: App {
@@ -48,6 +49,8 @@ final class BootModel: ObservableObject {
         started = true
         Theme.apply(AppSettings.shared.theme)
         OverlayWindow.install()
+        // Video sound plays even with the silent switch on, like other media apps.
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         if await MockServer.shared.start() == nil {
             serverProblem = "The built-in demo server couldn't start, so the demo sites won't load. Your own adapters still work."
             ToastCenter.shared.show(serverProblem!, style: .error)

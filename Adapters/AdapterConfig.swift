@@ -50,12 +50,26 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
     var timeoutSeconds: Double
     var headers: [String: String]
 
+    // ---- Phase 1 extras ----
+    /// Other versions of the media (e.g. an MP4 next to a WebM). An MP4 always wins, so
+    /// AVPlayer can play it with sound.
+    var alternateMediaURLPaths: [String]
+    /// Replaces spaces inside one tag before searching (e.g. "blue sky" → "blue_sky").
+    var tagSpaceReplacement: String?
+    /// Address (added to baseURL) for tag suggestions; {query} is what's being typed.
+    var autocompletePath: String?
+    /// Where the suggestion list is in that answer (empty = the answer itself).
+    var autocompleteResultsPath: String?
+    /// For suggestion objects: which key holds the tag name (default "name").
+    var autocompleteNameKey: String?
+
     enum CodingKeys: String, CodingKey, CaseIterable {
         case id, displayName, baseURL, searchPath, postPath, mediaBaseURL, requiresAuth, rateLimitPerSecond
         case searchResultsPath, postIDPath, thumbnailURLPath, mediaURLPath, mediaTypePath, tagsPath, tagsNameKey, sourceURLPath
         case videoExtensions, gifExtensions, authStyle, authParamName, paginationStyle, hasNextPagePath, cursorPath
         case sampleURLPath, postResultPath, metadataPaths, authCheckPath, tagSeparator, firstPageIndex
         case sortOptions, ratingOptions, userAgent, proxyHost, proxyPort, timeoutSeconds, headers
+        case alternateMediaURLPaths, tagSpaceReplacement, autocompletePath, autocompleteResultsPath, autocompleteNameKey
     }
 
     init(id: String, displayName: String, baseURL: URL, searchPath: String, postPath: String,
@@ -76,6 +90,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         self.paginationStyle = paginationStyle; self.hasNextPagePath = hasNextPagePath; self.cursorPath = cursorPath
         self.metadataPaths = [:]; self.tagSeparator = "+"; self.firstPageIndex = 1
         self.sortOptions = []; self.ratingOptions = []; self.timeoutSeconds = 20; self.headers = [:]
+        self.alternateMediaURLPaths = []
     }
 
     init(from decoder: Decoder) throws {
@@ -116,6 +131,11 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         proxyPort = try c.decodeIfPresent(Int.self, forKey: .proxyPort)
         timeoutSeconds = try c.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? 20
         headers = try c.decodeIfPresent([String: String].self, forKey: .headers) ?? [:]
+        alternateMediaURLPaths = try c.decodeIfPresent([String].self, forKey: .alternateMediaURLPaths) ?? []
+        tagSpaceReplacement = try c.decodeIfPresent(String.self, forKey: .tagSpaceReplacement)
+        autocompletePath = try c.decodeIfPresent(String.self, forKey: .autocompletePath)
+        autocompleteResultsPath = try c.decodeIfPresent(String.self, forKey: .autocompleteResultsPath)
+        autocompleteNameKey = try c.decodeIfPresent(String.self, forKey: .autocompleteNameKey)
     }
 
     /// Writes every key, including empty ones as null, so an exported file shows all fields.
@@ -139,6 +159,11 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         try c.encode(ratingOptions, forKey: .ratingOptions); try c.encode(userAgent, forKey: .userAgent)
         try c.encode(proxyHost, forKey: .proxyHost); try c.encode(proxyPort, forKey: .proxyPort)
         try c.encode(timeoutSeconds, forKey: .timeoutSeconds); try c.encode(headers, forKey: .headers)
+        try c.encode(alternateMediaURLPaths, forKey: .alternateMediaURLPaths)
+        try c.encode(tagSpaceReplacement, forKey: .tagSpaceReplacement)
+        try c.encode(autocompletePath, forKey: .autocompletePath)
+        try c.encode(autocompleteResultsPath, forKey: .autocompleteResultsPath)
+        try c.encode(autocompleteNameKey, forKey: .autocompleteNameKey)
     }
 
     /// Starting point for the "Add adapter" form.

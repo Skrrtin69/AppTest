@@ -15,6 +15,7 @@ struct BrowseView: View {
     @State private var viewer: ViewerRequest?
     @State private var collectionBatch: PostBatch?
     @State private var reviewing: EditRequest?
+    @StateObject private var suggester = SuggestionModel()
     @ObservedObject private var reviews = AdapterReviewStore.shared
     @FocusState private var searchFocused: Bool
 
@@ -22,6 +23,7 @@ struct BrowseView: View {
         NavigationView {
             VStack(spacing: 0) {
                 searchBar
+                if searchFocused && !suggester.suggestions.isEmpty { suggestionList }
                 tabStrip
                 Divider()
                 ZStack {
@@ -81,7 +83,8 @@ struct BrowseView: View {
                     .disableAutocorrection(true)
                     .submitLabel(.search)
                     .focused($searchFocused)
-                    .onSubmit { run(query: searchText, siteID: model.current?.siteID) }
+                    .onSubmit { suggester.clear(); run(query: searchText, siteID: model.current?.siteID) }
+                    .onChange(of: searchText) { suggester.update(text: $0, siteID: model.current?.siteID) }
                     .accessibilityIdentifier("searchField")
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.secondary) }
@@ -101,6 +104,29 @@ struct BrowseView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+    }
+
+    var suggestionList: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(suggester.suggestions, id: \.self) { s in
+                    Button {
+                        searchText = TagQuery.applySuggestion(s, to: searchText)
+                        suggester.clear()
+                        Haptics.tap()
+                    } label: {
+                        Label(s, systemImage: "text.badge.plus").font(.subheadline)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Suggestion \(s)")
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
+        }
+        .accessibilityIdentifier("suggestions")
     }
 
     var tabStrip: some View {

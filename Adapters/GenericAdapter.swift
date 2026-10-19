@@ -24,7 +24,7 @@ final class GenericAdapter: SiteAdapter {
         // "+" is inserted literally (it means space in a query string); anything else, such as a
         // plain space, is percent-encoded so the address stays valid.
         let sep = config.tagSeparator == "+" ? "+" : Self.encode(config.tagSeparator)
-        let tagString = tags.map { Self.encode($0) }.joined(separator: sep)
+        let tagString = tags.map { Self.encode(prepareTag($0)) }.joined(separator: sep)
         var vars: [String: String] = [
             "tags": tagString,
             "page": String(page - 1 + config.firstPageIndex),
@@ -34,6 +34,35 @@ final class GenericAdapter: SiteAdapter {
         ]
         for (k, v) in options.extra { vars[k] = Self.encode(v) }
         return try buildURL(path: config.searchPath, vars: vars)
+    }
+
+    /// Applies tagSpaceReplacement to spaces inside one tag ("blue sky" → "blue_sky").
+    func prepareTag(_ tag: String) -> String {
+        let t = tag.trimmingCharacters(in: .whitespaces)
+        guard let r = config.tagSpaceReplacement, !r.isEmpty else { return t }
+        return t.split(separator: " ").joined(separator: r)
+    }
+
+    // MARK: - Suggestions
+
+    var supportsAutocomplete: Bool { config.autocompletePath?.nonEmpty != nil }
+
+    /// Tag suggestions for what's being typed, using autocompletePath. Empty when unsupported.
+    func suggest(_ query: String) async throws -> [String] {
+        guard let path = config.autocompletePath?.nonEmpty else { return [] }
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard q.count >= 1 else { return [] }
+        let url = try buildURL(path: path, vars: ["query": Self.encode(prepareTag(q))])
+        let json = try await fetchJSON(url)
+        let list = DottedPath.evaluate(config.autocompleteResultsPath ?? "", in: json) ?? json
+        let key = config.autocompleteNameKey?.nonEmpty ?? "name"
+        var out: [String] = []
+        for item in (list as? [Any]) ?? [] {
+            if let s = item as? String { out.append(s) }
+            else if let d = item as? [String: Any], let s = DottedPath.stringValue(d[key]) { out.append(s) }
+        }
+        var seen = Set<String>()
+        return out.filter { seen.insert($0).inserted }
     }
 
     func postURL(id: String) throws -> URL {
@@ -90,8 +119,8 @@ final class GenericAdapter: SiteAdapter {
     // MARK: - Requests
 
     /// Raw response with this adapter's auth and headers, without throwing on 4xx/5xx.
-    func fetchRaw(_ url: URL) async throws -> (Data, HTTPURLResponse) {
-        try await client.data(for: url, headers: authHeaders, acceptAnyStatus: true)
+    func fetchRaw(_ url: URL, rateLimited: Bool = true) async throws -> (Data, HTTPURLResponse) {
+        try await client.data(for: url, headers: authHeaders, rateLimited: rateLimited, acceptAnyStatus: true)
     }
 
     /// Fetches and parses JSON from a URL with this adapter's auth and limits.
@@ -152,19 +181,33 @@ final class GenericAdapter: SiteAdapter {
     func mapPost(_ node: Any) -> Post? {
         guard let id = DottedPath.string(config.postIDPath, in: node)?.nonEmpty,
               let mediaString = DottedPath.string(config.mediaURLPath, in: node)?.nonEmpty,
-              let media = resolve(mediaString) else { return nil }
+              let original = resolve(mediaString) else { return nil }
+        var meta: [String: String] = [:]
+        // Prefer an MP4 version when the adapter lists alternates: AVPlayer plays it natively,
+        // with sound, while WebM needs the slower web player.
+        var media = original
+        if !Self.isMP4(original) {
+            let alternates = config.alternateMediaURLPaths.compactMap { DottedPath.string($0, in: node)?.nonEmpty }.compactMap { resolve($0) }
+            if let mp4 = alternates.first(where: Self.isMP4) {
+                media = mp4
+                meta["format"] = "\(mp4.pathExtension.uppercased()) (chosen over \(original.pathExtension.uppercased()))"
+            }
+        }
         let thumb = DottedPath.string(config.thumbnailURLPath, in: node).flatMap { resolve($0) } ?? media
         let sample = config.sampleURLPath.flatMap { DottedPath.string($0, in: node) }.flatMap { resolve($0) }
         let typeStrings = DottedPath.strings(config.mediaTypePath, in: node)
         let tags = DottedPath.strings(config.tagsPath, in: node, nameKey: config.tagsNameKey)
         let source = config.sourceURLPath.flatMap { DottedPath.string($0, in: node) }.flatMap { URL(string: $0) }
-        var meta: [String: String] = [:]
         for (name, path) in config.metadataPaths {
             if let v = DottedPath.string(path, in: node) { meta[name] = v }
         }
         return Post(id: id, siteID: config.id, thumbnailURL: thumb, mediaURL: media,
                     mediaType: Self.mediaType(typeStrings: typeStrings, url: media, config: config),
                     tags: tags, sourceURL: source, metadata: meta, sampleURL: sample)
+    }
+
+    static func isMP4(_ url: URL) -> Bool {
+        ["mp4", "m4v", "mov"].contains(url.pathExtension.lowercased())
     }
 
     /// Plain-English problems with mapping one result, keyed by the field at fault.

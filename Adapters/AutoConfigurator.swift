@@ -54,7 +54,7 @@ enum AutoConfigFailure: Error, Equatable {
         switch self {
         case .badAddress: return "That address can't be used"
         case .network: return "Couldn't reach the server"
-        case .http(let s, _): return "The server answered with error \(s)"
+        case .http(let s, _): return "HTTP \(s)"
         case .needsLogin(let s): return "This address needs a login (HTTP \(s))"
         case .loginRejected: return "The server refused the login"
         case .notJSON: return "This looks like a webpage, not a JSON API"
@@ -158,7 +158,8 @@ struct AutoConfigurator {
             return .failure(.needsLogin(status: response.statusCode))
         }
         guard (200...299).contains(response.statusCode) else {
-            return .failure(.http(status: response.statusCode, body: bodyText))
+            return .failure(.http(status: response.statusCode,
+                                  body: ErrorParser.message(from: data, contentType: response.value(forHTTPHeaderField: "Content-Type")) ?? String(bodyText.prefix(500))))
         }
         let contentType = (response.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
         if contentType.contains("text/html") || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<") {
@@ -187,6 +188,7 @@ struct AutoConfigurator {
                               existingIDs: existingIDs)
         guard builder.build() else { return .failure(.noMedia(rawJSON: raw)) }
         await builder.chooseMediaBase(adapter: adapter)
+        await builder.probeAutocomplete(adapter: adapter)
         builder.finish()
         return .success(AutoConfigProposal(config: builder.config, guesses: builder.guesses,
                                            sampleNodes: Array(items.prefix(5)), rawJSON: raw))

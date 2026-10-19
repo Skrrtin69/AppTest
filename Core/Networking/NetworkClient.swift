@@ -83,7 +83,9 @@ final class NetworkClient {
                     continue
                 }
                 guard acceptAnyStatus || (200...299).contains(http.statusCode) else {
-                    throw AppError.http(status: http.statusCode, url: request.url!)
+                    throw AppError.http(status: http.statusCode, url: request.url ?? http.url ?? URL(fileURLWithPath: "/"),
+                                        message: ErrorParser.describe(status: http.statusCode, data: data,
+                                                                      contentType: http.value(forHTTPHeaderField: "Content-Type")))
                 }
                 return (data, http)
             } catch let e as URLError where Self.isRetryable(e) && attempt < Self.maxRetries {

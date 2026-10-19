@@ -24,9 +24,11 @@ enum FieldGuide {
         Section("Basics", "What this site is called and where it lives.",
          [.id, .displayName, .baseURL, .mediaBaseURL, .requiresAuth, .rateLimitPerSecond]),
         Section("Web addresses", "How to build the address for a search and for a single post. Words in {curly braces} are filled in by the app.",
-         [.searchPath, .postPath, .tagSeparator, .firstPageIndex, .sortOptions, .ratingOptions]),
+         [.searchPath, .postPath, .tagSeparator, .tagSpaceReplacement, .firstPageIndex, .sortOptions, .ratingOptions]),
         Section("Finding things in the answer", "Where each piece of information sits inside the site's JSON answer. Use the Field Mapper to discover these — paste an answer, tap a row, choose \"Use as…\".",
-         [.searchResultsPath, .postIDPath, .thumbnailURLPath, .mediaURLPath, .sampleURLPath, .mediaTypePath, .tagsPath, .tagsNameKey, .sourceURLPath, .postResultPath, .metadataPaths]),
+         [.searchResultsPath, .postIDPath, .thumbnailURLPath, .mediaURLPath, .sampleURLPath, .alternateMediaURLPaths, .mediaTypePath, .tagsPath, .tagsNameKey, .sourceURLPath, .postResultPath, .metadataPaths]),
+        Section("Tag suggestions", "Optional. Lets the search bar suggest tags while you type.",
+         [.autocompletePath, .autocompleteResultsPath, .autocompleteNameKey]),
         Section("Media types", "How the app decides if something is a video, a GIF, or a picture.",
          [.videoExtensions, .gifExtensions]),
         Section("Pages", "How to get the next page of results.",
@@ -78,6 +80,11 @@ enum FieldGuide {
         e(.proxyPort, "Proxy port", "Optional. The proxy server's port number.", "8080")
         e(.timeoutSeconds, "Timeout (seconds)", "How long to wait for an answer before giving up (the app retries 3 times on timeouts and server errors).", "20")
         e(.headers, "Extra headers", "Optional. One per line as  Name = value . Sent with every request to this site.", "Accept = application/json")
+        e(.alternateMediaURLPaths, "Other media versions", "Optional. One per line: paths to other versions of the same media inside one result (for example an MP4 next to a WebM). If any is an MP4, it's used, so videos play natively with sound.", "file_url_mp4")
+        e(.tagSpaceReplacement, "Space inside a tag", "Optional. Many sites write multi-word tags with _ (blue_sky). Type a multi-word tag in \"quotes\" in the search bar and its spaces become this.", "_")
+        e(.autocompletePath, "Suggestions address", "Optional. Added to the base address to get tag suggestions. {query} is replaced by what you're typing.", "tags/autocomplete.json?q={query}")
+        e(.autocompleteResultsPath, "Suggestions list", "Where the list of suggestions is in that answer. Leave empty if the answer itself is the list.", "results")
+        e(.autocompleteNameKey, "Suggestion name key", "If suggestions are objects, which key holds the tag text. Defaults to name.", "name")
         return d
     }()
 

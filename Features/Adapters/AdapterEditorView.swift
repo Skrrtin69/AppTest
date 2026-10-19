@@ -20,6 +20,7 @@ struct AdapterEditorView: View {
     @State private var ratingText: String
     @State private var metadataText: String
     @State private var headersText: String
+    @State private var altMediaText: String
     @State private var problems: [String] = []
     @State private var showProblems = false
     @State private var confirmDelete = false
@@ -50,6 +51,7 @@ struct AdapterEditorView: View {
         _ratingText = State(initialValue: config.ratingOptions.joined(separator: "\n"))
         _metadataText = State(initialValue: config.metadataPaths.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n"))
         _headersText = State(initialValue: config.headers.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n"))
+        _altMediaText = State(initialValue: config.alternateMediaURLPaths.joined(separator: "\n"))
     }
 
     static func num(_ d: Double) -> String { d == d.rounded() ? String(Int(d)) : String(d) }
@@ -214,6 +216,11 @@ struct AdapterEditorView: View {
         case .proxyPort: number($proxyPortText, "(none)", id: "field-proxyPort")
         case .timeoutSeconds: number($timeoutText, "20", id: "field-timeout")
         case .headers: lines($headersText)
+        case .alternateMediaURLPaths: lines($altMediaText)
+        case .tagSpaceReplacement: plain(opt(\.tagSpaceReplacement), "_", id: "field-tagSpaceReplacement")
+        case .autocompletePath: plain(opt(\.autocompletePath), "tags/autocomplete.json?q={query}", id: "field-autocompletePath")
+        case .autocompleteResultsPath: plain(opt(\.autocompleteResultsPath), "(the answer itself)", id: "field-autocompleteResultsPath")
+        case .autocompleteNameKey: plain(opt(\.autocompleteNameKey), "name", id: "field-autocompleteNameKey")
         }
     }
 
@@ -310,6 +317,7 @@ struct AdapterEditorView: View {
         out.ratingOptions = Self.parseLines(ratingText)
         out.metadataPaths = Self.parsePairs(metadataText)
         out.headers = Self.parsePairs(headersText)
+        out.alternateMediaURLPaths = Self.parseLines(altMediaText)
         if out.paginationStyle == .cursor && out.cursorPath?.nonEmpty == nil {
             issues.append("Page style is \"cursor\", so the Next-page token path is needed.")
         }
@@ -373,28 +381,17 @@ struct AdapterEditorView: View {
         ratingText = ex.ratingOptions.joined(separator: "\n")
         metadataText = ex.metadataPaths.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n")
         headersText = ex.headers.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n")
+        altMediaText = ex.alternateMediaURLPaths.joined(separator: "\n")
     }
 
     func loadExample(_ ex: AdapterConfig) {
         let keepID = c.id
         let keepName = c.displayName
-        c = ex
+        setFormFields(from: ex)
         if originalID != nil || !keepID.hasPrefix("new-site") { c.id = keepID; c.displayName = keepName } else {
             c.id = ex.id + "-copy"
             c.displayName = ex.displayName + " Copy"
         }
-        baseURLText = ex.baseURL.absoluteString
-        mediaBaseURLText = ex.mediaBaseURL.absoluteString
-        rateText = Self.num(ex.rateLimitPerSecond)
-        timeoutText = Self.num(ex.timeoutSeconds)
-        firstPageText = String(ex.firstPageIndex)
-        proxyPortText = ex.proxyPort.map(String.init) ?? ""
-        videoExtText = ex.videoExtensions.joined(separator: "\n")
-        gifExtText = ex.gifExtensions.joined(separator: "\n")
-        sortText = ex.sortOptions.joined(separator: "\n")
-        ratingText = ex.ratingOptions.joined(separator: "\n")
-        metadataText = ex.metadataPaths.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n")
-        headersText = ex.headers.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n")
         ToastCenter.shared.show("Filled in from \(ex.displayName)")
     }
 }

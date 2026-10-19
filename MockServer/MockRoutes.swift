@@ -62,7 +62,11 @@ enum MockRoutes {
 
     static func siteA(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
         if sub == "/auth/check" { return .json(["ok": true, "user": demoUser]) }
+        if sub == "/tags/autocomplete.json" {
+            return .json(MockCatalog.suggestions(req.query["q"] ?? "").map { ["name": $0.tag, "count": $0.count] })
+        }
         if sub == "/posts.json" {
+            if let forced = forcedError(req.query["tags"] ?? "") { return forced }
             let all = MockCatalog.search(tagQuery: req.query["tags"] ?? "", sort: req.query["sort"], rating: req.query["rating"])
             let page = max(1, Int(req.query["page"] ?? "1") ?? 1)
             let start = (page - 1) * MockCatalog.pageSize
@@ -99,13 +103,38 @@ enum MockRoutes {
             "score": i.score,
             "created_at": i.created,
             "source": "\(origin)/a/view/\(i.n)",
+            "file_url_mp4": i.mp4Alternate.map { "\(origin)/media/\($0)" as Any } ?? NSNull(),
         ]
+    }
+
+    /// Demo of real-world error answers, each in a different shape, so the app's generic
+    /// ErrorParser can be seen working. Triggered by search words.
+    static func forcedError(_ tagQuery: String) -> HTTPResponse? {
+        let words = tagQuery.replacingOccurrences(of: "+", with: " ").split(separator: " ").map { String($0).lowercased() }
+        if words.count > 6 {
+            return .json(["success": false, "message": "You can search for at most 6 tags at a time."], status: 422)
+        }
+        if words.contains("slowdown") {
+            return .json(["error": ["code": "rate_limited", "message": "Too many requests. Please wait a moment and try again."]], status: 429)
+        }
+        if words.contains("boom") {
+            return .text("<!doctype html><html><head><title>Down for maintenance</title></head><body><h1>Down for maintenance</h1><p>Back soon.</p></body></html>",
+                         status: 503, type: "text/html; charset=utf-8")
+        }
+        return nil
     }
 
     // MARK: Site B
 
     static func siteB(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
+        if sub == "/suggest" {
+            let list = MockCatalog.suggestions(req.query["q"] ?? "").map { ["label": $0.tag, "posts": $0.count] }
+            return .json(["data": ["suggestions": list]])
+        }
         if sub == "/search" {
+            if let words = req.query["q"]?.lowercased(), words.contains("slowdown") {
+                return .json(["errors": [["status": "429", "detail": "Rate limit exceeded: 3 searches per second."]]], status: 429)
+            }
             let all = MockCatalog.search(tagQuery: req.query["q"] ?? "", sort: req.query["order"], rating: req.query["rating"])
             // Cursor is an opaque-looking token encoding the offset.
             let offset = decodeCursor(req.query["cursor"])
@@ -140,6 +169,7 @@ enum MockRoutes {
                 "thumb": "media/\(i.thumbFile)",
                 "full": "media/\(i.mediaFile)",
                 "kind": i.kind,
+                "alt_mp4": i.mp4Alternate.map { "media/\($0)" as Any } ?? NSNull(),
                 "w": i.width,
                 "h": i.height,
             ],
@@ -154,14 +184,35 @@ enum MockRoutes {
 
     static func siteC(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
         guard sub == "/list.json" else { return .json(["error": "not found"], status: 404) }
-        let all = MockCatalog.search(tagQuery: req.query["tags"] ?? "", sort: nil, rating: nil)
+        // Site C writes tags as "kind_word" (color_blue, pattern_dots); accept either form.
+        let query = (req.query["tags"] ?? "").replacingOccurrences(of: "+", with: " ")
+            .split(separator: " ").map { w -> String in
+                let s = String(w)
+                let neg = s.hasPrefix("-")
+                let body = neg ? String(s.dropFirst()) : s
+                let plain = body.split(separator: "_", maxSplits: 1).count == 2 && siteCPrefixes.contains(String(body.split(separator: "_")[0]))
+                    ? String(body.split(separator: "_", maxSplits: 1)[1]) : body
+                return (neg ? "-" : "") + plain
+            }.joined(separator: " ")
+        let all = MockCatalog.search(tagQuery: query, sort: nil, rating: nil)
         let page = max(1, Int(req.query["page"] ?? "1") ?? 1)
         let start = (page - 1) * MockCatalog.pageSize
         let slice = start < all.count ? Array(all[start..<min(all.count, start + MockCatalog.pageSize)]) : []
         return .json([
-            "entries": slice.map { ["ref": "c-\($0.n)", "link": "\(origin)/media/img/\($0.n).png", "labels": $0.tags] },
+            "entries": slice.map { ["ref": "c-\($0.n)", "link": "\(origin)/media/img/\($0.n).png", "labels": $0.tags.map(siteCLabel)] },
             "has_more": start + MockCatalog.pageSize < all.count,
         ])
+    }
+
+    static let siteCPrefixes = ["color", "pattern", "shape", "kind", "extra"]
+
+    static func siteCLabel(_ tag: String) -> String {
+        if tag.contains("_") { return tag }
+        if MockCatalog.colors.contains(tag) { return "color_" + tag }
+        if MockCatalog.patterns.contains(tag) { return "pattern_" + tag }
+        if ["landscape", "portrait", "square"].contains(tag) { return "shape_" + tag }
+        if ["still", "animated", "video", "webm", "mp4"].contains(tag) { return "kind_" + tag }
+        return "extra_" + tag
     }
 
     static func encodeCursor(_ offset: Int) -> String {

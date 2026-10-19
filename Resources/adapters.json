@@ -16,8 +16,15 @@
     "tagsPath": "tags",
     "tagsNameKey": null,
     "sourceURLPath": "source",
-    "videoExtensions": ["mp4", "webm", "mov", "m4v"],
-    "gifExtensions": ["gif"],
+    "videoExtensions": [
+      "mp4",
+      "webm",
+      "mov",
+      "m4v"
+    ],
+    "gifExtensions": [
+      "gif"
+    ],
     "authStyle": "none",
     "authParamName": null,
     "paginationStyle": "pageNumber",
@@ -25,17 +32,38 @@
     "cursorPath": null,
     "sampleURLPath": "sample_url",
     "postResultPath": null,
-    "metadataPaths": { "width": "width", "height": "height", "score": "score", "rating": "rating", "created": "created_at" },
+    "metadataPaths": {
+      "width": "width",
+      "height": "height",
+      "score": "score",
+      "rating": "rating",
+      "created": "created_at"
+    },
     "authCheckPath": null,
     "tagSeparator": "+",
     "firstPageIndex": 1,
-    "sortOptions": ["newest", "oldest", "score", "random"],
-    "ratingOptions": ["general", "sensitive"],
+    "sortOptions": [
+      "newest",
+      "oldest",
+      "score",
+      "random"
+    ],
+    "ratingOptions": [
+      "general",
+      "sensitive"
+    ],
     "userAgent": null,
     "proxyHost": null,
     "proxyPort": null,
     "timeoutSeconds": 20,
-    "headers": {}
+    "headers": {},
+    "alternateMediaURLPaths": [
+      "file_url_mp4"
+    ],
+    "tagSpaceReplacement": "_",
+    "autocompletePath": "tags/autocomplete.json?q={query}",
+    "autocompleteResultsPath": "",
+    "autocompleteNameKey": "name"
   },
   {
     "id": "demo-b",
@@ -54,8 +82,13 @@
     "tagsPath": "post.tag_list",
     "tagsNameKey": "name",
     "sourceURLPath": "post.links.source",
-    "videoExtensions": ["mp4", "webm"],
-    "gifExtensions": ["gif"],
+    "videoExtensions": [
+      "mp4",
+      "webm"
+    ],
+    "gifExtensions": [
+      "gif"
+    ],
     "authStyle": "none",
     "authParamName": null,
     "paginationStyle": "cursor",
@@ -63,16 +96,32 @@
     "cursorPath": "data.next_cursor",
     "sampleURLPath": null,
     "postResultPath": "data.item",
-    "metadataPaths": { "width": "post.media.w", "height": "post.media.h", "author": "post.author.name", "score": "post.stats.score" },
+    "metadataPaths": {
+      "width": "post.media.w",
+      "height": "post.media.h",
+      "author": "post.author.name",
+      "score": "post.stats.score"
+    },
     "authCheckPath": null,
     "tagSeparator": "+",
     "firstPageIndex": 1,
-    "sortOptions": ["newest", "oldest", "random"],
+    "sortOptions": [
+      "newest",
+      "oldest",
+      "random"
+    ],
     "ratingOptions": [],
     "userAgent": "MediaDeck-DemoB/1.0",
     "proxyHost": null,
     "proxyPort": null,
     "timeoutSeconds": 15,
-    "headers": {}
+    "headers": {},
+    "alternateMediaURLPaths": [
+      "post.media.alt_mp4"
+    ],
+    "tagSpaceReplacement": "_",
+    "autocompletePath": "suggest?q={query}",
+    "autocompleteResultsPath": "data.suggestions",
+    "autocompleteNameKey": "label"
   }
 ]
