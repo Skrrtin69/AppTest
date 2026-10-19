@@ -80,6 +80,8 @@ struct AdaptersListView: View {
         .toolbar { EditButton() }
         .sheet(item: $editing) { req in
             NavigationView { AdapterEditorView(config: req.config, isNew: req.isNew) }
+                // Only Cancel/Save close the editor, so a stray swipe can't lose unsaved changes.
+                .interactiveDismissDisabled(true)
         }
         .confirmationDialog("Replace your adapters with the built-in demo ones?", isPresented: $confirmReset, titleVisibility: .visible) {
             Button("Reset", role: .destructive) {

@@ -156,7 +156,7 @@ struct SettingsView: View {
                     HStack {
                         Text("Built-in demo server")
                         Spacer()
-                        Text(MockServer.shared.isRunning ? "127.0.0.1:\(MockServer.shared.port)" : "stopped")
+                        Text(MockServer.shared.isRunning ? "127.0.0.1:" + String(MockServer.shared.port) : "stopped")
                             .font(.caption.monospaced()).foregroundColor(.secondary)
                     }
                     VStack(alignment: .leading, spacing: 4) {

@@ -132,7 +132,28 @@ final class MockServer {
         head += "\r\n"
         var out = Data(head.utf8)
         if request.method != "HEAD" { out.append(body) }
-        conn.send(content: out, completion: .contentProcessed { _ in conn.cancel() })
+        if Self.shouldThrottle(request) {
+            sendSlowly(out, from: 0, on: conn)
+        } else {
+            conn.send(content: out, completion: .contentProcessed { _ in conn.cancel() })
+        }
+    }
+
+    /// Demo only: video *downloads* made by the app's own downloader are served at ~20 KB/s,
+    /// so the download queue's pause/resume/cancel controls can actually be seen working.
+    /// Playback (AVPlayer, WebKit) uses different User-Agents and is never slowed.
+    static func shouldThrottle(_ req: HTTPRequest) -> Bool {
+        req.path.contains("/media/video/") && (req.headers["user-agent"] ?? "").hasPrefix("MediaDeck")
+    }
+
+    private func sendSlowly(_ data: Data, from offset: Int, on conn: NWConnection) {
+        let chunk = 8 * 1024
+        let end = min(data.count, offset + chunk)
+        let isLast = end >= data.count
+        conn.send(content: data.subdata(in: offset..<end), completion: .contentProcessed { [weak self] error in
+            if error != nil || isLast { conn.cancel(); return }
+            self?.workQueue.asyncAfter(deadline: .now() + 0.4) { self?.sendSlowly(data, from: end, on: conn) }
+        })
     }
 
     static func parseRange(_ header: String, length: Int) -> Range<Int>? {

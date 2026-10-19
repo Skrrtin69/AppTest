@@ -61,6 +61,7 @@ struct BrowseView: View {
         }
         .onChange(of: model.selectedID) { _ in searchText = model.current?.query ?? "" }
         .onChange(of: registry.configs) { _ in model.ensureTab() }
+        .onChange(of: registry.disabledIDs) { _ in model.ensureTab() }
     }
 
     // MARK: Pieces

@@ -136,10 +136,26 @@ final class AdapterRegistry: ObservableObject {
 
     // MARK: Editing
 
-    private func writeFile(_ list: [AdapterConfig]) throws {
+    /// Pretty JSON with keys in the same order as the editor form (JSONEncoder's own key
+    /// order is arbitrary, which is confusing when editing the file by hand).
+    static func orderedJSON(_ list: [AdapterConfig]) throws -> Data {
         let enc = JSONEncoder()
-        enc.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
-        let data = try enc.encode(list)
+        var blocks: [String] = []
+        for c in list {
+            guard let dict = try JSONSerialization.jsonObject(with: enc.encode(c)) as? [String: Any] else { continue }
+            var lines: [String] = []
+            for key in AdapterConfig.CodingKeys.allCases {
+                let value = dict[key.rawValue] ?? NSNull()
+                let v = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed, .sortedKeys, .withoutEscapingSlashes])
+                lines.append("    \"\(key.rawValue)\": " + String(decoding: v, as: UTF8.self))
+            }
+            blocks.append("  {\n" + lines.joined(separator: ",\n") + "\n  }")
+        }
+        return Data(("[\n" + blocks.joined(separator: ",\n") + "\n]\n").utf8)
+    }
+
+    private func writeFile(_ list: [AdapterConfig]) throws {
+        let data = try Self.orderedJSON(list)
         lastLoadedData = data
         try data.write(to: Self.documentsFile, options: .atomic)
         loadProblem = nil

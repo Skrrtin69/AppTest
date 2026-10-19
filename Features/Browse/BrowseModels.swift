@@ -129,9 +129,13 @@ final class BrowseModel: ObservableObject {
             selectedID = t.id
             Task { await t.search(recordHistory: false) }
         }
-        for t in tabs where AdapterRegistry.shared.config(for: t.siteID) == nil {
+        // Tabs pointing at a removed or switched-off site move to the first enabled one.
+        let enabledIDs = Set(enabled.map { $0.id })
+        for t in tabs where !enabledIDs.contains(t.siteID) {
             t.siteID = first.id
+            Task { await t.search(recordHistory: false) }
         }
+        objectWillChange.send()
     }
 
     @discardableResult
