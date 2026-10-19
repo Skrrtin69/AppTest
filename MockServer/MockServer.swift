@@ -93,7 +93,14 @@ final class MockServer {
             if let end = buf.range(of: Data("\r\n\r\n".utf8)) {
                 let head = String(decoding: buf[buf.startIndex..<end.lowerBound], as: UTF8.self)
                 guard let request = HTTPRequest(head: head) else { conn.cancel(); return }
-                let response = MockRoutes.respond(to: request, port: self.port)
+                if request.path == "/proxy" {
+                    Task {
+                        let response = await PlayerRoutes.proxy(request)
+                        self.send(response, for: request, on: conn)
+                    }
+                    return
+                }
+                let response = PlayerRoutes.serveStatic(request.path) ?? MockRoutes.respond(to: request, port: self.port)
                 self.send(response, for: request, on: conn)
             } else if isComplete || error != nil || buf.count > 256 * 1024 {
                 conn.cancel()

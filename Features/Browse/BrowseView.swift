@@ -123,6 +123,7 @@ struct BrowseView: View {
                 Button {
                     guard let t = model.current else { return }
                     t.siteID = c.id
+                    model.objectWillChange.send()   // nav title shows the tab's site
                     t.sort = nil
                     t.rating = nil
                     Task { await t.search(recordHistory: false) }

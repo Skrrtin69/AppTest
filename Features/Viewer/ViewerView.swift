@@ -177,7 +177,7 @@ struct ViewerPage: View {
             if !isNear {
                 Color.black
             } else if post.mediaType == .video {
-                MediaVideoView(url: post.mediaURL, isActive: isActive)
+                MediaVideoView(url: post.mediaURL, isActive: isActive, siteID: post.siteID)
             } else {
                 FullImagePage(post: post, onZoom: onZoom, onTap: onTap, onSize: onSize)
             }

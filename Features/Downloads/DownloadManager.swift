@@ -328,7 +328,13 @@ extension DownloadManager: URLSessionDownloadDelegate {
         do {
             try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
             if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
-            try FileManager.default.moveItem(at: location, to: dest)
+            do {
+                try FileManager.default.moveItem(at: location, to: dest)
+            } catch {
+                // Background-session temp files can live outside our sandbox (seen under
+                // TrollStore), where rename is denied but reading is allowed: copy instead.
+                try FileManager.default.copyItem(at: location, to: dest)
+            }
             update(id) { $0.state = .completed; $0.progress = 1; $0.error = nil }
             if let m = mo(id) { m.resumeData = nil; CoreDataStack.shared.save() }
         } catch {

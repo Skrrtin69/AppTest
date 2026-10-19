@@ -27,6 +27,12 @@ targets:
       - path: Adapters
       - path: MockServer
       - path: Resources
+        excludes:
+          - "Player/**"
+      # Folder reference so the ogv.js player files keep their Player/ogv/ layout in the bundle.
+      - path: Resources/Player
+        type: folder
+        buildPhase: resources
     info:
       path: Support/Info.plist
       properties:

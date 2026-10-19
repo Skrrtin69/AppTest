@@ -26,6 +26,8 @@ final class NetworkClient {
         cfg.timeoutIntervalForRequest = config.timeout
         cfg.timeoutIntervalForResource = max(config.timeout * 6, 60)
         cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
+        // ImageCache is the only disk cache; don't let URLSession keep a second copy.
+        cfg.urlCache = nil
         cfg.httpAdditionalHeaders = ["User-Agent": config.userAgent?.nonEmpty ?? Self.defaultUserAgent]
         if let host = config.proxyHost?.nonEmpty, let port = config.proxyPort {
             cfg.connectionProxyDictionary = [

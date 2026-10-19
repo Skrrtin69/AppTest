@@ -45,8 +45,10 @@ struct MediaVideoView: View {
     let url: URL
     let isActive: Bool
     var showControls: Bool = true
+    var siteID: String? = nil
 
     @State private var path: PlaybackPath?
+    @State private var engine: String?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -61,10 +63,10 @@ struct MediaVideoView: View {
                     }
                 }
             case .some(.web):
-                WebVideoView(url: url, isActive: isActive)
+                WebVideoView(url: url, isActive: isActive, siteID: siteID) { engine = $0 }
             }
             if let p = path, showControls {
-                Text(p.label)
+                Text(p == .web ? "\(p.label) · \(engine ?? "loading…")" : p.label)
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .background(Capsule().fill(Color.black.opacity(0.55)))
