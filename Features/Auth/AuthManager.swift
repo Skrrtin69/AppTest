@@ -12,7 +12,7 @@ final class AuthManager: ObservableObject {
             case .notConfigured: return "No account saved"
             case .loggedOut: return "Account saved (not logged in yet)"
             case .loggedIn: return "Logged in"
-            case .failed(let m): return "Login failed: \(m)"
+            case .failed(let m): return m.hasPrefix("Login failed") ? m : "Login failed: \(m)"
             }
         }
         var isGood: Bool { self == .loggedIn || self == .notNeeded }

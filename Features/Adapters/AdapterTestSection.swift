@@ -146,11 +146,16 @@ struct AccountView: View {
             Section("Account") {
                 TextField("Username", text: $username)
                     .textInputAutocapitalization(.never).disableAutocorrection(true)
+                    // .oneTimeCode opts these fields out of iOS password AutoFill, which would
+                    // otherwise offer the phone owner's saved logins for unrelated sites.
+                    .textContentType(.oneTimeCode)
                     .accessibilityIdentifier("acct-username")
                 SecureField("Password (optional)", text: $password)
+                    .textContentType(.oneTimeCode)
                     .accessibilityIdentifier("acct-password")
                 TextField("API key (optional)", text: $apiKey)
                     .textInputAutocapitalization(.never).disableAutocorrection(true)
+                    .textContentType(.oneTimeCode)
                     .accessibilityIdentifier("acct-apikey")
             }
             Section {
