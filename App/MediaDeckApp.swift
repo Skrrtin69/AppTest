@@ -47,6 +47,7 @@ final class BootModel: ObservableObject {
         guard !started else { return }
         started = true
         Theme.apply(AppSettings.shared.theme)
+        OverlayWindow.install()
         if await MockServer.shared.start() == nil {
             serverProblem = "The built-in demo server couldn't start, so the demo sites won't load. Your own adapters still work."
             ToastCenter.shared.show(serverProblem!, style: .error)
@@ -107,15 +108,7 @@ struct RootView: View {
                 }
             }
 
-            ToastOverlay()
-
-            if lock.obscured && !lock.isLocked {
-                Color(UIColor.systemBackground).ignoresSafeArea()
-                    .overlay(Image(systemName: "lock.fill").font(.largeTitle).foregroundColor(.secondary))
-            }
-            if lock.isLocked {
-                LockScreenView().transition(.opacity).zIndex(10)
-            }
+            // Toasts, privacy cover and lock screen live in OverlayWindow (above sheets).
         }
         .preferredColorScheme(settings.theme.colorScheme)
         .onChange(of: settings.theme) { Theme.apply($0) }

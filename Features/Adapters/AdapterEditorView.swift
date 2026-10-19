@@ -52,7 +52,7 @@ struct AdapterEditorView: View {
             }
             Section("Helpers") {
                 NavigationLink(destination: FieldMapperView(config: $c)) { Label("Field Mapper — find paths in a sample answer", systemImage: "list.bullet.indent") }
-                NavigationLink(destination: AccountView(adapterID: c.id, displayName: c.displayName, authStyle: c.authStyle)) { Label("Account (username / password / key)", systemImage: "person.crop.circle") }
+                NavigationLink(destination: AccountView(adapterID: c.id, displayName: c.displayName, authStyle: c.authStyle, draft: { build().0 })) { Label("Account (username / password / key)", systemImage: "person.crop.circle") }
                 Menu {
                     ForEach(registry.configs.filter { $0.id.hasPrefix("demo-") }) { ex in
                         Button("Copy settings from \(ex.displayName)") { loadExample(ex) }

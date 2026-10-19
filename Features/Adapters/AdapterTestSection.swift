@@ -127,6 +127,8 @@ struct AccountView: View {
     let adapterID: String
     let displayName: String
     let authStyle: AuthStyle
+    /// The (possibly unsaved) config from the editor, so logging in works before saving.
+    var draft: (() -> AdapterConfig?)? = nil
 
     @ObservedObject private var auth = AuthManager.shared
     @State private var username = ""
@@ -166,10 +168,8 @@ struct AccountView: View {
                     } catch { ToastCenter.shared.error(error) }
                 }
             }
-            if let cfg = AdapterRegistry.shared.config(for: adapterID) {
-                Section("Status") {
-                    Text(auth.status(for: cfg).label).accessibilityIdentifier("acct-status")
-                }
+            Section("Status") {
+                Text(statusText).accessibilityIdentifier("acct-status")
             }
         }
         .navigationTitle("Account")
@@ -192,9 +192,16 @@ struct AccountView: View {
         }
     }
 
+    var statusText: String {
+        if let s = auth.statuses[adapterID] { return s.label }
+        if let cfg = draft?() ?? AdapterRegistry.shared.config(for: adapterID) { return auth.status(for: cfg).label }
+        return "Not logged in"
+    }
+
     func login() async {
-        guard let a = AdapterRegistry.shared.adapter(for: adapterID) else {
-            ToastCenter.shared.show("Save the adapter first, then log in.", style: .error)
+        let saved = AdapterRegistry.shared.adapter(for: adapterID)
+        guard let a = saved ?? draft?().map({ GenericAdapter(config: $0) }) else {
+            ToastCenter.shared.show("Fix the adapter's form first, then log in.", style: .error)
             return
         }
         busy = true
