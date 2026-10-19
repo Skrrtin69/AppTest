@@ -30,8 +30,7 @@ struct InfoPanel: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 6)], alignment: .leading, spacing: 6) {
                         ForEach(post.tags, id: \.self) { tag in
                             let hidden = settings.blacklistSet.contains(tag.lowercased())
-                            Text(tag).font(.footnote).lineLimit(1)
-                                .strikethrough(hidden)
+                            Text(tag).strikethrough(hidden).font(.footnote).lineLimit(1)
                                 .padding(.horizontal, 10).padding(.vertical, 5)
                                 .background(Capsule().fill(hidden ? Color.red.opacity(0.2) : Color.accentColor.opacity(0.18)))
                                 .onTapGesture { onTag(tag) }
