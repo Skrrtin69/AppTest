@@ -47,18 +47,31 @@ final class DownloadManager: NSObject, ObservableObject {
 
     // MARK: Startup
 
-    func bootstrap() {
+    /// Set after a background transfer's file turned out to be unreadable (some sideload
+    /// setups don't give the app access to the download daemon's files).
+    static let backgroundUnsupportedKey = "backgroundDownloadsUnsupported"
+    private(set) var usingBackground = false
+
+    var backgroundUnsupported: Bool { UserDefaults.standard.bool(forKey: Self.backgroundUnsupportedKey) }
+
+    private func makeSession(background: Bool) {
         let cfg: URLSessionConfiguration
-        if AppSettings.shared.backgroundDownloads {
+        if background {
             cfg = .background(withIdentifier: Self.backgroundID)
             cfg.sessionSendsLaunchEvents = true
             cfg.isDiscretionary = false
         } else {
             cfg = .default
+            cfg.urlCache = nil
         }
         cfg.httpMaximumConnectionsPerHost = 8
         cfg.timeoutIntervalForRequest = 60
+        usingBackground = background
         session = URLSession(configuration: cfg, delegate: self, delegateQueue: .main)
+    }
+
+    func bootstrap() {
+        makeSession(background: AppSettings.shared.backgroundDownloads && !backgroundUnsupported)
         loadFromStore()
         Task { @MainActor in
             let live = await session.allTasks.compactMap { $0 as? URLSessionDownloadTask }
@@ -331,19 +344,45 @@ extension DownloadManager: URLSessionDownloadDelegate {
             do {
                 try FileManager.default.moveItem(at: location, to: dest)
             } catch {
-                // Background-session temp files can live outside our sandbox (seen under
-                // TrollStore), where rename is denied but reading is allowed: copy instead.
                 try FileManager.default.copyItem(at: location, to: dest)
             }
             update(id) { $0.state = .completed; $0.progress = 1; $0.error = nil }
             if let m = mo(id) { m.resumeData = nil; CoreDataStack.shared.save() }
         } catch {
+            if session === self.session, usingBackground, Self.isPermissionError(error) {
+                fallBackToForeground()
+                return
+            }
             update(id) { $0.state = .failed; $0.error = "Couldn't save file: \(error.localizedDescription)" }
         }
     }
 
+    static func isPermissionError(_ error: Error) -> Bool {
+        let e = error as NSError
+        return e.domain == NSCocoaErrorDomain && [NSFileReadNoPermissionError, NSFileWriteNoPermissionError].contains(e.code)
+    }
+
+    /// Background transfers finish into a file this app may not read on some sideload setups.
+    /// Remember that, switch to a regular session, and restart everything in flight.
+    private func fallBackToForeground() {
+        UserDefaults.standard.set(true, forKey: Self.backgroundUnsupportedKey)
+        let old = session!
+        makeSession(background: false)
+        tasks.removeAll()
+        for i in items.indices where items[i].state == .downloading || items[i].state == .failed {
+            items[i].state = .queued
+            items[i].progress = 0
+            items[i].error = nil
+            if let m = mo(items[i].id) { m.resumeData = nil }
+            persist(items[i])
+        }
+        old.invalidateAndCancel()
+        ToastCenter.shared.show("Background downloads aren't available on this device — switched to regular downloads.")
+        schedule()
+    }
+
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let id = task.taskDescription else { return }
+        guard session === self.session, let id = task.taskDescription else { return }
         tasks[id] = nil
         lastProgressPublish[id] = nil
         defer { schedule() }

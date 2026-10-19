@@ -80,7 +80,7 @@ struct SettingsView: View {
                     }
                     Toggle("Background downloads", isOn: $settings.backgroundDownloads)
                 } header: { Text("Downloads") } footer: {
-                    Text("Name placeholders: {site} {id} {index} {type} {date}. Use / in Folder for sub-folders, e.g. {site}/{type}. Files are saved in Files › On My iPhone › MediaDeck › Downloads. Changing Background downloads applies after restarting the app.")
+                    Text("Name placeholders: {site} {id} {index} {type} {date}. Use / in Folder for sub-folders, e.g. {site}/{type}. Files are saved in Files › On My iPhone › MediaDeck › Downloads. Changing Background downloads applies after restarting the app; if this device can't do background downloads, the app notices and switches to regular downloads automatically.")
                 }
 
                 Section {
