@@ -29,7 +29,11 @@ struct LibraryView: View {
         list.compactMap { i in i.fileURL.map { i.post.with(mediaURL: $0, thumbnailURL: i.post.mediaType == .image || i.post.mediaType == .gif ? $0 : nil) } }
     }
 
-    var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: 3), count: settings.gridColumns) }
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    var columns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: settings.gridSpacing),
+              count: settings.columns(landscape: verticalSizeClass == .compact))
+    }
 
     var body: some View {
         NavigationView {
@@ -43,7 +47,7 @@ struct LibraryView: View {
                     ScrollView {
                         let list = items
                         let posts = localPosts(list)
-                        LazyVGrid(columns: columns, spacing: 3) {
+                        LazyVGrid(columns: columns, spacing: settings.gridSpacing) {
                             ForEach(Array(list.enumerated()), id: \.element.id) { i, item in
                                 cell(item, post: posts.indices.contains(i) ? posts[i] : item.post)
                                     .onTapGesture {

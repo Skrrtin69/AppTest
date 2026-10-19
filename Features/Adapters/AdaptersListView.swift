@@ -37,7 +37,7 @@ struct AdaptersListView: View {
                         Toggle("", isOn: Binding(get: { !registry.disabledIDs.contains(c.id) },
                                                  set: { registry.setEnabled($0, id: c.id) }))
                             .labelsHidden()
-                            .accessibilityLabel("Enable \(c.displayName)")
+                            .accessibilityLabel("Show \(c.displayName)")
                         VStack(alignment: .leading, spacing: 2) {
                             Text(c.displayName).font(.body.weight(.medium))
                             Text(c.baseURL.absoluteString).font(.caption2.monospaced()).foregroundColor(.secondary).lineLimit(1)
@@ -54,7 +54,7 @@ struct AdaptersListView: View {
                 }
                 .onMove { registry.move(fromOffsets: $0, toOffset: $1) }
             } header: { Text("Your adapters") } footer: {
-                Text("Switch off to hide a site. Tap Edit (top right) and drag the handles to reorder.")
+                Text("Switch a site off to hide it everywhere without deleting it; switch it back on any time. Tap Edit (top right) and drag the handles to reorder.")
             }
 
             Section("Add") {

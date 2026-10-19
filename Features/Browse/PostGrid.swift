@@ -15,13 +15,16 @@ struct PostGrid<Footer: View>: View {
 
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var viewed = ViewedStore.shared
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 3), count: settings.gridColumns)
+        // iPhones report a compact vertical size class in landscape: reflow with more columns.
+        let n = settings.columns(landscape: verticalSizeClass == .compact)
+        return Array(repeating: GridItem(.flexible(), spacing: settings.gridSpacing), count: n)
     }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 3) {
+        LazyVGrid(columns: columns, spacing: settings.gridSpacing) {
             ForEach(Array(posts.enumerated()), id: \.element.key) { index, post in
                 GridCell(post: post, aspect: settings.thumbAspect, selecting: selecting,
                          isSelected: selected.contains(post.key), showSource: showSource)
@@ -43,7 +46,7 @@ struct PostGrid<Footer: View>: View {
                     .accessibilityIdentifier("cell-\(post.id)")
             }
         }
-        .padding(.horizontal, 3)
+        .padding(.horizontal, settings.gridSpacing)
         footer()
     }
 }

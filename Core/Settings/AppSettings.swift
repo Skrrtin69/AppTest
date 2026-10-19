@@ -41,12 +41,12 @@ final class AppSettings: ObservableObject {
         static let updateURL = "updateURL", animateGridGIFs = "animateGridGIFs", autoplayVideos = "autoplayVideos"
         static let blurThumbnails = "blurThumbnails", dimViewed = "dimViewed"
         static let viewerAspect = "viewerAspect", playbackSpeed = "playbackSpeed", verticalReading = "verticalReading"
-        static let warnOnCellular = "warnOnCellular", maxDownloadMB = "maxDownloadMB"
+        static let warnOnCellular = "warnOnCellular", maxDownloadMB = "maxDownloadMB", gridSpacing = "gridSpacing"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
                           blurThumbnails, dimViewed, viewerAspect, playbackSpeed, verticalReading,
-                          warnOnCellular, maxDownloadMB]
+                          warnOnCellular, maxDownloadMB, gridSpacing]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -88,6 +88,11 @@ final class AppSettings: ObservableObject {
     @Published var warnOnCellular: Bool = true { didSet { d.set(warnOnCellular, forKey: K.warnOnCellular) } }
     /// Downloads bigger than this many MB are skipped (0 = no limit).
     @Published var maxDownloadMB: Double = 0 { didSet { d.set(maxDownloadMB, forKey: K.maxDownloadMB) } }
+    /// Gap between grid thumbnails, 0–12 points.
+    @Published var gridSpacing: Double = 3 { didSet { d.set(gridSpacing, forKey: K.gridSpacing) } }
+
+    /// Columns to use right now: two more when the phone is sideways.
+    func columns(landscape: Bool) -> Int { landscape ? gridColumns + 2 : gridColumns }
 
     func cycleSpeed() {
         playbackSpeed = playbackSpeed >= 2 ? 1 : (playbackSpeed >= 1.5 ? 2 : 1.5)
@@ -123,6 +128,7 @@ final class AppSettings: ObservableObject {
         verticalReading = d.object(forKey: K.verticalReading) as? Bool ?? false
         warnOnCellular = d.object(forKey: K.warnOnCellular) as? Bool ?? true
         maxDownloadMB = d.object(forKey: K.maxDownloadMB) as? Double ?? 0
+        gridSpacing = min(12, max(0, d.object(forKey: K.gridSpacing) as? Double ?? 3))
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }

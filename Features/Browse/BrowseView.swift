@@ -505,6 +505,7 @@ struct PartialFailureBanner: View {
         }
         .padding(10)
         .background(Color.orange.opacity(0.12))
+        .gesture(DragGesture(minimumDistance: 8).onEnded { v in if v.translation.height < -20 { onDismiss() } })
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("partialFailureBanner")
     }

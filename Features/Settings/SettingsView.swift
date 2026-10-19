@@ -35,6 +35,11 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("themePicker")
                     Stepper("Grid columns: \(settings.gridColumns)", value: $settings.gridColumns, in: 2...5)
+                    VStack(alignment: .leading) {
+                        Text("Grid spacing: \(Int(settings.gridSpacing)) pt")
+                        Slider(value: $settings.gridSpacing, in: 0...12, step: 1)
+                            .accessibilityLabel("Grid spacing")
+                    }
                     Picker("Thumbnail shape", selection: $settings.thumbAspect) {
                         ForEach(ThumbAspect.allCases) { Text($0.label).tag($0) }
                     }

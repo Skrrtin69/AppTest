@@ -59,6 +59,7 @@ final class ToastCenter: ObservableObject {
 
 struct ToastOverlay: View {
     @ObservedObject var center = ToastCenter.shared
+    @State private var dragY: CGFloat = 0
 
     var body: some View {
         VStack {
@@ -67,14 +68,24 @@ struct ToastOverlay: View {
                     Image(systemName: icon(t.style))
                     Text(t.message).font(.subheadline).fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
+                    Button { center.current = nil } label: { Image(systemName: "xmark").font(.caption.weight(.bold)) }
+                        .accessibilityLabel("Dismiss message")
                 }
                 .foregroundColor(.white)
                 .padding(12)
                 .background(RoundedRectangle(cornerRadius: 12).fill(color(t.style)))
                 .padding(.horizontal, 12)
                 .padding(.top, 6)
+                .offset(y: min(0, dragY))
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .onTapGesture { center.current = nil }
+                // Swipe up to dismiss.
+                .gesture(DragGesture(minimumDistance: 8)
+                    .onChanged { dragY = $0.translation.height }
+                    .onEnded { v in
+                        if v.translation.height < -30 { center.current = nil }
+                        dragY = 0
+                    })
                 .accessibilityIdentifier("toast")
             }
             Spacer()
