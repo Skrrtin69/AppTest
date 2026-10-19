@@ -50,3 +50,14 @@ Choices made while building MediaDeck, and why.
 - **Demo video downloads are throttled** (~20 KB/s, only for requests whose User-Agent is the app's downloader) so the queue's pause/resume/cancel can be demonstrated. Playback is never throttled.
 - **Disabling a site moves any open tabs on it** to the first enabled site.
 - **The tab chip's close button is its own accessibility element**, so VoiceOver and automation can reach it.
+
+## Auto-Configure
+- **Result list:** every array of objects reachable through objects is scored (+3 length ≥ 3, +2 identical key sets, +2 list-like name, +1 contains a URL, +1 child of root); highest wins.
+- **Profiling:** the first three results' leaf paths (arrays are leaves); only paths present in all three are classified as URL, file type, tags, ID, or source.
+- **URL roles:** thumbnail keywords are checked before media keywords. A key with "sample" becomes the medium-size address unless it's the only thumbnail-like key. Web addresses without a media file ending are source candidates, not media.
+- **Media base:** relative addresses are test-loaded against the API folder, then the site root; the first that loads wins (high), otherwise low.
+- **Confidence:** high = key name explicitly matches the role (or the value is taken directly from your input); medium = shape agrees across all three results, or a safe default; low = single/ambiguous candidate or no evidence. Every field always gets a specific sentence.
+- **postPath** can't be derived when no single-post address appears in the results. It's marked medium "needs input (optional)", not low, because browsing doesn't use it; otherwise every site would get a review badge.
+- **IDs for numeric/local hosts** append the first path folder (e.g. 127-0-0-1-a), since the host alone can't tell sites apart.
+- **Login style is never guessed:** 401/403 stops with a picker that starts with nothing selected.
+- **Review badges:** guesses are stored per adapter with their proposed value; a low guess stops counting as soon as the field's value changes or the user taps "Mark all as reviewed".

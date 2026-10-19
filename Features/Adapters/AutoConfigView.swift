@@ -303,9 +303,14 @@ struct AutoConfigView: View {
         let name = p.config.displayName
         let id = p.config.id
         dismiss()
-        AppRouter.shared.tab = .browse
-        BrowseModel.shared.openTab(siteID: id, query: "")
-        ToastCenter.shared.show(lows.isEmpty ? "Added \(name)." : "Added \(name). Tap the badge on its tile to review low-confidence fields.", style: .success)
+        // Switch tabs only after the pop finishes: doing both at once crashed SwiftUI's
+        // navigation controller on iOS 16 (seen on device).
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            AppRouter.shared.tab = .browse
+            BrowseModel.shared.openTab(siteID: id, query: "")
+            ToastCenter.shared.show(lows.isEmpty ? "Added \(name)." : "Added \(name). Tap the badge on its tile to review low-confidence fields.", style: .success)
+        }
     }
 }
 

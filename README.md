@@ -203,3 +203,18 @@ scripts/      build_ipa.sh, build_deb.sh, make_media.sh
 Third-party code: **ogv.js** 1.9.0 (MIT; includes libvpx, nestegg, libopus and libvorbis under their BSD-style licenses). The license files are in `Resources/Player/ogv/`.
 
 See `DECISIONS.md` for design choices and `BLOCKERS.md` for open issues.
+
+---
+
+## Auto-Configure (replaces most manual Field Mapper steps)
+
+Settings → Sites & Adapters → **Auto-configure from URL** (or the **Auto-configure from URL** button inside the adapter form, which fills that form in place).
+
+1. Paste the site's search address with `{tags}` and `{page}` (or `{cursor}`) placeholders, and type a sample tag that has results. **Try a demo address** fills in demo examples.
+2. Tap **Analyze**. MediaDeck downloads page 1, finds the list of results, looks at the first three, and proposes every field.
+3. Each field shows a dot (green = sure, yellow = likely, red = check this) and one sentence saying exactly why it was chosen.
+4. The preview shows the first 5 results built from the proposal; a broken result shows the failing field in red.
+5. **Test** runs a real search, **Edit fields** opens the normal form, and **Save adapter** adds the site and opens it in Browse. Sites with red-dot fields get a red badge on their Browse tab that opens the form at those fields.
+6. If the site needs a login, Analyze says so and asks you to choose the login style (it never guesses), then run Analyze again.
+
+Failures are explained in plain English with one next step: bad address, unreachable server, HTTP error (with the server's text), a web page instead of an API, or no list found (with a button to the Field Mapper).

@@ -15,3 +15,8 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 ## 3. Not verifiable by automation
 - **Haptics:** implemented behind the two toggles. Automation can't detect vibration.
 - **Face ID:** the permission prompt and unlock were exercised. Face ID succeeded because someone was in front of the phone; a failed scan wasn't simulated (the passcode pad stays available as the fallback).
+
+## 4. Auto-Configure — testing incomplete (usage limit reached)
+- **Verified on device:** Site A end to end (every expected path at high confidence with a specific reason, 5-item preview, Test from the action bar = 8 results, Edit fields → rate 5 persisted, Save → Browse tab + toast, multi-tag search).
+- **Crash found:** after Save adapter, SwiftUI crashed while popping the Auto-Configure screen during the tab switch (EXC_BREAKPOINT in UINavigationController removeChildViewController). The fix (delay the tab switch until the pop finishes) is pushed but **not yet verified on device**.
+- **Not yet run:** Site B, Demo Secure (401 → login picker), broken URL, HTML URL, Site C low-confidence badge, Edit fields dots in the form opened from the badge.
