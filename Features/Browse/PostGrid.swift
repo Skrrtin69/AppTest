@@ -120,15 +120,19 @@ struct SourceBadge: View {
 
     /// "Demo Site A" → "DSA"; single words keep their first 4 letters.
     static func short(_ name: String) -> String {
-        let words = name.split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "." })
-        if words.count >= 2 { return String(words.prefix(3).compactMap { $0.first }).uppercased() }
+        let words = name.split(whereSeparator: { $0 == " " || $0 == "-" })
+        if words.count >= 2 {
+            return String(words.prefix(3).compactMap { w in w.first(where: { $0.isLetter }) ?? w.first }).uppercased()
+        }
         return String(name.prefix(4)).uppercased()
     }
 
     /// Stable color per site.
     static func color(for id: String) -> Color {
         let hash = id.unicodeScalars.reduce(UInt32(5381)) { ($0 &* 33) &+ $1.value }
-        return Color(hue: Double(hash % 360) / 360, saturation: 0.65, brightness: 0.75)
+        // Golden-ratio spacing keeps similar IDs ("demo-a", "demo-b") far apart in hue.
+        let hue = (Double(hash % 1000) * 0.618033988749895).truncatingRemainder(dividingBy: 1)
+        return Color(hue: hue, saturation: 0.7, brightness: 0.8)
     }
 }
 

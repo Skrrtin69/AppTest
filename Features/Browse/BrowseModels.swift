@@ -50,7 +50,8 @@ final class SearchTabModel: ObservableObject, Identifiable {
     /// Sites that failed in a merged tab (site name → message), for the banner.
     @Published private(set) var siteErrors: [String: String] = [:]
     @Published var errorBannerDismissed = false
-    private var seenMedia = Set<String>()
+    /// Media address → the site it was first seen on (cross-site duplicates only).
+    private var seenMedia: [String: String] = [:]
 
     /// Fetches the next page from every site that still has more, in parallel, and merges
     /// them. A failing site is reported in the banner; the others keep going.
@@ -106,8 +107,16 @@ final class SearchTabModel: ObservableObject, Identifiable {
         var merged: [Post] = []
         let longest = perSite.map { $0.count }.max() ?? 0
         for i in 0..<longest { for list in perSite where i < list.count { merged.append(list[i]) } }
-        if replace { seen = []; seenMedia = [] }
-        let fresh = merged.filter { seen.insert($0.key).inserted && seenMedia.insert($0.mediaURL.absoluteString).inserted }
+        if replace { seen = []; seenMedia = [:] }
+        // The same file on two different sites is one cross-post; posts that merely share a file
+        // within one site stay separate.
+        let fresh = merged.filter { p in
+            let m = p.mediaURL.absoluteString
+            if let site = seenMedia[m], site != p.siteID { return false }
+            guard seen.insert(p.key).inserted else { return false }
+            if seenMedia[m] == nil { seenMedia[m] = p.siteID }
+            return true
+        }
         if replace { posts = fresh } else { posts.append(contentsOf: fresh) }
         siteErrors = errors
         if !errors.isEmpty && replace { errorBannerDismissed = false }
@@ -140,7 +149,7 @@ final class SearchTabModel: ObservableObject, Identifiable {
         selected = []
         siteStates = [:]
         siteErrors = [:]
-        seenMedia = []
+        seenMedia = [:]
         if recordHistory, query.nonEmpty != nil, !isMerged {
             LibraryStore.shared.recordSearch(query, siteID: siteID)
         }
