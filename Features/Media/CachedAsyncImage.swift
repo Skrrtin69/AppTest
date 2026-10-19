@@ -1,0 +1,101 @@
+import SwiftUI
+import UIKit
+
+/// Loads an image through ImagePipeline (memory → disk → network). GIFs animate.
+struct CachedAsyncImage: View {
+    let url: URL
+    var maxPixel: CGFloat = 0
+    var animate: Bool = true
+    var contentMode: UIView.ContentMode = .scaleAspectFill
+    var client: NetworkClient? = nil
+    var onLoad: ((UIImage) -> Void)? = nil
+
+    @StateObject private var model = ImageLoadModel()
+
+    var body: some View {
+        ZStack {
+            if let img = model.image {
+                AnimatedImageView(image: img, contentMode: contentMode)
+            } else if let err = model.error {
+                VStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle")
+                    Text("Tap to retry").font(.caption2)
+                }
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture { Task { await model.load(url, maxPixel: maxPixel, animate: animate, client: client, onLoad: onLoad, force: true) } }
+                .accessibilityLabel("Image failed: \(err)")
+            } else {
+                Color.gray.opacity(0.15)
+                    .overlay(ProgressView())
+            }
+        }
+        .task(id: url) {
+            await model.load(url, maxPixel: maxPixel, animate: animate, client: client, onLoad: onLoad)
+        }
+    }
+}
+
+@MainActor
+final class ImageLoadModel: ObservableObject {
+    @Published var image: UIImage?
+    @Published var error: String?
+    private var loadedURL: URL?
+
+    func load(_ url: URL, maxPixel: CGFloat, animate: Bool, client: NetworkClient?,
+              onLoad: ((UIImage) -> Void)?, force: Bool = false) async {
+        if !force, loadedURL == url, image != nil { return }
+        if loadedURL != url { image = nil }
+        error = nil
+        do {
+            let img = try await ImagePipeline.shared.image(for: url, maxPixel: maxPixel, animate: animate, client: client)
+            guard !Task.isCancelled else { return }
+            image = img
+            loadedURL = url
+            onLoad?(img)
+        } catch is CancellationError {
+        } catch let e as URLError where e.code == .cancelled {
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+/// UIImageView wrapper: SwiftUI's Image can't play animated UIImages.
+struct AnimatedImageView: UIViewRepresentable {
+    let image: UIImage
+    var contentMode: UIView.ContentMode = .scaleAspectFill
+
+    final class Container: UIView {
+        let imageView = UIImageView()
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            clipsToBounds = true
+            imageView.frame = bounds
+            imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            imageView.clipsToBounds = true
+            addSubview(imageView)
+        }
+        required init?(coder: NSCoder) { fatalError() }
+        // No intrinsic size, so SwiftUI decides the frame.
+        override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: UIView.noIntrinsicMetric) }
+    }
+
+    func makeUIView(context: Context) -> Container {
+        let c = Container()
+        c.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        c.setContentHuggingPriority(.defaultLow, for: .vertical)
+        c.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        c.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        return c
+    }
+
+    func updateUIView(_ c: Container, context: Context) {
+        c.imageView.contentMode = contentMode
+        if c.imageView.image !== image {
+            c.imageView.image = image
+            if image.images != nil { c.imageView.startAnimating() }
+        }
+    }
+}

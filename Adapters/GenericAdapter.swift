@@ -1,0 +1,218 @@
+import Foundation
+
+/// The only SiteAdapter implementation. Templating and field mapping come from `AdapterConfig`.
+final class GenericAdapter: SiteAdapter {
+    let config: AdapterConfig
+    let client: NetworkClient
+    /// Set by AuthManager after a successful login; applied to every request.
+    var session: AuthSession?
+
+    init(config: AdapterConfig, client: NetworkClient? = nil) {
+        self.config = config
+        self.client = client ?? NetworkClient(adapter: config)
+    }
+
+    var id: String { config.id }
+    var displayName: String { config.displayName }
+    var requiresAuth: Bool { config.requiresAuth }
+    var supportedMediaTypes: Set<MediaType> { [.image, .gif, .video] }
+
+    // MARK: - URL templating
+
+    /// Builds the search URL. Public so the Field Mapper can fetch a raw sample.
+    func searchURL(tags: [String], options: SearchOptions, page: Int) throws -> URL {
+        // The separator is inserted literally ("+" means space in a query string).
+        let tagString = tags.map { Self.encode($0) }.joined(separator: config.tagSeparator)
+        var vars: [String: String] = [
+            "tags": tagString,
+            "page": String(page - 1 + config.firstPageIndex),
+            "cursor": Self.encode(options.cursor ?? ""),
+            "sort": Self.encode(options.sort ?? ""),
+            "rating": Self.encode(options.rating ?? ""),
+        ]
+        for (k, v) in options.extra { vars[k] = Self.encode(v) }
+        return try buildURL(path: config.searchPath, vars: vars)
+    }
+
+    func postURL(id: String) throws -> URL {
+        try buildURL(path: config.postPath, vars: ["id": Self.encode(id)])
+    }
+
+    private func buildURL(path: String, vars: [String: String]) throws -> URL {
+        var p = path
+        for (k, v) in vars { p = p.replacingOccurrences(of: "{\(k)}", with: v) }
+        let full: String
+        if p.lowercased().hasPrefix("http://") || p.lowercased().hasPrefix("https://") {
+            full = p
+        } else {
+            full = Self.join(config.baseURL.absoluteString, p)
+        }
+        guard var comps = URLComponents(string: full) else { throw AppError.invalidURL(full) }
+        if config.authStyle == .apiKeyQuery, let token = session?.token, let name = config.authParamName?.nonEmpty {
+            var items = comps.percentEncodedQueryItems ?? []
+            items.append(URLQueryItem(name: name, value: Self.encode(token)))
+            comps.percentEncodedQueryItems = items
+        }
+        guard let url = comps.url else { throw AppError.invalidURL(full) }
+        return url
+    }
+
+    static func join(_ base: String, _ path: String) -> String {
+        if path.isEmpty { return base }
+        let b = base.hasSuffix("/") ? String(base.dropLast()) : base
+        let p = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        return p.hasPrefix("?") ? b + p : b + "/" + p
+    }
+
+    static func encode(_ s: String) -> String {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&=+#?/")
+        return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s
+    }
+
+    private var authHeaders: [String: String] {
+        guard let token = session?.token else { return [:] }
+        switch config.authStyle {
+        case .basic: return ["Authorization": "Basic \(token)"]
+        case .apiKeyHeader: return [config.authParamName?.nonEmpty ?? "Authorization": token]
+        default: return [:]
+        }
+    }
+
+    // MARK: - Requests
+
+    /// Fetches and parses JSON from a URL with this adapter's auth and limits.
+    func fetchJSON(_ url: URL) async throws -> Any {
+        let (data, _) = try await client.data(for: url, headers: authHeaders)
+        do {
+            return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        } catch {
+            let snippet = String(decoding: data.prefix(120), as: UTF8.self)
+            throw AppError.notJSON(snippet)
+        }
+    }
+
+    func search(tags: [String], options: SearchOptions, page: Int) async throws -> SearchResult {
+        let url = try searchURL(tags: tags, options: options, page: page)
+        let json = try await fetchJSON(url)
+        guard let list = DottedPath.evaluate(config.searchResultsPath, in: json) else {
+            throw AppError.pathNotFound(field: "List of results (searchResultsPath)", path: config.searchResultsPath)
+        }
+        guard let items = list as? [Any] else {
+            throw AppError.badResponse("'searchResultsPath' (\(config.searchResultsPath)) points at something that is not a list.")
+        }
+        let posts = items.compactMap { mapPost($0) }
+        if !items.isEmpty && posts.isEmpty {
+            throw AppError.pathNotFound(field: "Post ID / Media URL (postIDPath, mediaURLPath)", path: "\(config.postIDPath), \(config.mediaURLPath)")
+        }
+
+        var nextCursor: String?
+        if let cp = config.cursorPath?.nonEmpty { nextCursor = DottedPath.string(cp, in: json) }
+        let hasNext: Bool
+        if let hp = config.hasNextPagePath?.nonEmpty, let b = DottedPath.bool(hp, in: json) {
+            hasNext = b
+        } else if config.paginationStyle == .cursor {
+            hasNext = nextCursor?.nonEmpty != nil
+        } else {
+            hasNext = !items.isEmpty
+        }
+        return SearchResult(posts: posts, hasNextPage: hasNext, currentPage: page, nextCursor: nextCursor)
+    }
+
+    func fetchPost(id: String) async throws -> Post {
+        let json = try await fetchJSON(try postURL(id: id))
+        let node = DottedPath.evaluate(config.postResultPath ?? "", in: json) ?? json
+        guard let post = mapPost(node) else {
+            throw AppError.pathNotFound(field: "Post ID / Media URL", path: "\(config.postIDPath), \(config.mediaURLPath)")
+        }
+        return post
+    }
+
+    func fetchMediaURL(for post: Post, quality: MediaQuality) async throws -> URL {
+        switch quality {
+        case .original: return post.mediaURL
+        case .preview: return post.sampleURL ?? post.thumbnailURL
+        }
+    }
+
+    /// Builds a Post from one element of the results list. Returns nil if the ID or media URL is missing.
+    func mapPost(_ node: Any) -> Post? {
+        guard let id = DottedPath.string(config.postIDPath, in: node)?.nonEmpty,
+              let mediaString = DottedPath.string(config.mediaURLPath, in: node)?.nonEmpty,
+              let media = resolve(mediaString) else { return nil }
+        let thumb = DottedPath.string(config.thumbnailURLPath, in: node).flatMap { resolve($0) } ?? media
+        let sample = config.sampleURLPath.flatMap { DottedPath.string($0, in: node) }.flatMap { resolve($0) }
+        let typeStrings = DottedPath.strings(config.mediaTypePath, in: node)
+        let tags = DottedPath.strings(config.tagsPath, in: node, nameKey: config.tagsNameKey)
+        let source = config.sourceURLPath.flatMap { DottedPath.string($0, in: node) }.flatMap { URL(string: $0) }
+        var meta: [String: String] = [:]
+        for (name, path) in config.metadataPaths {
+            if let v = DottedPath.string(path, in: node) { meta[name] = v }
+        }
+        return Post(id: id, siteID: config.id, thumbnailURL: thumb, mediaURL: media,
+                    mediaType: Self.mediaType(typeStrings: typeStrings, url: media, config: config),
+                    tags: tags, sourceURL: source, metadata: meta, sampleURL: sample)
+    }
+
+    /// Absolute URLs pass through; relative ones are joined to mediaBaseURL.
+    func resolve(_ s: String) -> URL? {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        if t.isEmpty { return nil }
+        if t.hasPrefix("//") { return URL(string: "https:" + t) }
+        if let u = URL(string: t), u.scheme != nil { return u }
+        let joined = Self.join(config.mediaBaseURL.absoluteString, t)
+        return URL(string: joined) ?? URL(string: joined.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? joined)
+    }
+
+    /// Lowercased type string(s) or the URL extension, checked against the configured lists.
+    static func mediaType(typeStrings: [String], url: URL, config: AdapterConfig) -> MediaType {
+        var candidates = typeStrings.map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ". ")) }
+        // "video/mp4" style MIME types → also try the subtype
+        candidates += candidates.compactMap { $0.split(separator: "/").last.map(String.init) }
+        if candidates.isEmpty { candidates = [url.pathExtension.lowercased()] }
+        let videos = Set(config.videoExtensions.map { $0.lowercased() })
+        let gifs = Set(config.gifExtensions.map { $0.lowercased() })
+        if candidates.contains(where: { videos.contains($0) }) { return .video }
+        if candidates.contains(where: { gifs.contains($0) }) { return .gif }
+        return .image
+    }
+
+    // MARK: - Auth
+
+    func authenticate(credentials: Credentials) async throws -> AuthSession {
+        let token: String
+        switch config.authStyle {
+        case .none:
+            return AuthSession(siteID: id, token: "", expiresAt: nil)
+        case .basic:
+            let raw = "\(credentials.username):\(credentials.password ?? "")"
+            token = Data(raw.utf8).base64EncodedString()
+        case .apiKeyQuery, .apiKeyHeader:
+            guard let key = credentials.apiKey?.nonEmpty ?? credentials.password?.nonEmpty else {
+                throw AppError.authFailed("This adapter logs in with an API key, but none is saved.")
+            }
+            token = key
+        }
+        let candidate = AuthSession(siteID: id, token: token, expiresAt: Date().addingTimeInterval(3600))
+        guard await validateSession(candidate) else {
+            throw AppError.authFailed("The server rejected the saved username/password/key.")
+        }
+        return candidate
+    }
+
+    /// With `authCheckPath` set, asks the server; otherwise trusts a non-expired token.
+    func validateSession(_ s: AuthSession) async -> Bool {
+        if let exp = s.expiresAt, exp < Date() { return false }
+        guard let check = config.authCheckPath?.nonEmpty else { return config.authStyle == .none || !s.token.isEmpty }
+        let previous = session
+        session = s
+        defer { session = previous }
+        guard let url = try? buildURL(path: check, vars: [:]) else { return false }
+        do {
+            _ = try await client.data(for: url, headers: authHeaders)
+            return true
+        } catch {
+            return false
+        }
+    }
+}

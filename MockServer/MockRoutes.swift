@@ -1,0 +1,156 @@
+import Foundation
+
+/// URL routing for the demo server.
+///
+/// Site A (flat JSON, page numbers):
+///   /a/posts.json?tags=&page=&sort=&rating=      → { "posts": [ {id, preview_url, file_url, file_ext, tags:[..]} ], "has_more" }
+///   /a/post/{id}.json                            → the post object
+///   /a/secure/...                                → same, but needs a login (user "demo", password "demo",
+///                                                  or API key "demo-key" via ?api_key= or X-Api-Key header)
+///   /a/secure/auth/check                         → 200 when logged in, 401 otherwise
+/// Site B (nested JSON, cursors, relative media URLs):
+///   /b/search?q=&cursor=&order=                  → { "data": { "items": [ { "post": { id, media:{thumb,full,kind}, tag_list:[{name}] } } ], "next_cursor", "has_next" } }
+///   /b/item/{id}                                 → { "data": { "item": { "post": {...} } } }
+/// Media (any path containing /media/): img, sample, thumb, vthumb, gif, video
+enum MockRoutes {
+    static let demoUser = "demo"
+    static let demoPassword = "demo"
+    static let demoAPIKey = "demo-key"
+
+    static func respond(to req: HTTPRequest, port: UInt16) -> HTTPResponse {
+        let p = req.path
+        if let r = p.range(of: "/media/") {
+            return MockMedia.serve(String(p[r.upperBound...]))
+        }
+        let origin = "http://127.0.0.1:\(port)"
+        switch true {
+        case p == "/" || p == "/health":
+            return .text("MediaDeck demo server OK")
+        case p.hasPrefix("/a/secure/"):
+            guard isAuthorized(req) else {
+                var r = HTTPResponse.json(["error": "login required"], status: 401)
+                r.headers["WWW-Authenticate"] = "Basic realm=\"demo\""
+                return r
+            }
+            return siteA(String(p.dropFirst("/a/secure".count)), req: req, origin: origin)
+        case p.hasPrefix("/a/"):
+            return siteA(String(p.dropFirst(2)), req: req, origin: origin)
+        case p.hasPrefix("/b/"):
+            return siteB(String(p.dropFirst(2)), req: req, origin: origin)
+        default:
+            return .json(["error": "not found", "path": p], status: 404)
+        }
+    }
+
+    static func isAuthorized(_ req: HTTPRequest) -> Bool {
+        if req.query["api_key"] == demoAPIKey || req.headers["x-api-key"] == demoAPIKey { return true }
+        if let auth = req.headers["authorization"], auth.hasPrefix("Basic "),
+           let data = Data(base64Encoded: String(auth.dropFirst(6))),
+           String(decoding: data, as: UTF8.self) == "\(demoUser):\(demoPassword)" {
+            return true
+        }
+        return false
+    }
+
+    // MARK: Site A
+
+    static func siteA(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
+        if sub == "/auth/check" { return .json(["ok": true, "user": demoUser]) }
+        if sub == "/posts.json" {
+            let all = MockCatalog.search(tagQuery: req.query["tags"] ?? "", sort: req.query["sort"], rating: req.query["rating"])
+            let page = max(1, Int(req.query["page"] ?? "1") ?? 1)
+            let start = (page - 1) * MockCatalog.pageSize
+            let slice = start < all.count ? Array(all[start..<min(all.count, start + MockCatalog.pageSize)]) : []
+            return .json([
+                "posts": slice.map { siteAPost($0, origin: origin) },
+                "page": page,
+                "total": all.count,
+                "has_more": start + MockCatalog.pageSize < all.count,
+            ])
+        }
+        if sub.hasPrefix("/post/"), let n = Int(sub.dropFirst(6).replacingOccurrences(of: ".json", with: "")),
+           (1...MockCatalog.count).contains(n) {
+            return .json(siteAPost(MockCatalog.items[n - 1], origin: origin))
+        }
+        if sub.hasPrefix("/view/") {
+            return .text("<html><body style='font:20px -apple-system;padding:40px'><h1>Demo post \(sub.dropFirst(6))</h1><p>This is the demo server's \"source\" page.</p></body></html>",
+                         type: "text/html; charset=utf-8")
+        }
+        return .json(["error": "not found"], status: 404)
+    }
+
+    static func siteAPost(_ i: MockItem, origin: String) -> [String: Any] {
+        [
+            "id": i.n,
+            "preview_url": "\(origin)/media/\(i.thumbFile)",
+            "sample_url": "\(origin)/media/\(i.sampleFile)",
+            "file_url": "\(origin)/media/\(i.mediaFile)",
+            "file_ext": i.kind,
+            "width": i.width,
+            "height": i.height,
+            "tags": i.tags,
+            "rating": i.rating,
+            "score": i.score,
+            "created_at": i.created,
+            "source": "\(origin)/a/view/\(i.n)",
+        ]
+    }
+
+    // MARK: Site B
+
+    static func siteB(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
+        if sub == "/search" {
+            let all = MockCatalog.search(tagQuery: req.query["q"] ?? "", sort: req.query["order"], rating: req.query["rating"])
+            // Cursor is an opaque-looking token encoding the offset.
+            let offset = decodeCursor(req.query["cursor"])
+            let end = min(all.count, offset + MockCatalog.pageSize)
+            let slice = offset < all.count ? Array(all[offset..<end]) : []
+            let hasNext = end < all.count
+            return .json([
+                "data": [
+                    "items": slice.map { ["post": siteBPost($0, origin: origin)] },
+                    "has_next": hasNext,
+                    "next_cursor": hasNext ? encodeCursor(end) : NSNull(),
+                ],
+                "meta": ["count": slice.count, "total": all.count],
+            ])
+        }
+        if sub.hasPrefix("/item/"), let n = Int(sub.dropFirst(6).replacingOccurrences(of: "b-", with: "")),
+           (1...MockCatalog.count).contains(n) {
+            return .json(["data": ["item": ["post": siteBPost(MockCatalog.items[n - 1], origin: origin)]]])
+        }
+        if sub.hasPrefix("/view/") {
+            return .text("<html><body style='font:20px -apple-system;padding:40px'><h1>Demo B item \(sub.dropFirst(6))</h1></body></html>",
+                         type: "text/html; charset=utf-8")
+        }
+        return .json(["error": "not found"], status: 404)
+    }
+
+    static func siteBPost(_ i: MockItem, origin: String) -> [String: Any] {
+        [
+            "id": "b-\(i.n)",
+            "media": [
+                // Relative on purpose: the adapter joins these to its mediaBaseURL.
+                "thumb": "media/\(i.thumbFile)",
+                "full": "media/\(i.mediaFile)",
+                "kind": i.kind,
+                "w": i.width,
+                "h": i.height,
+            ],
+            "tag_list": i.tags.map { ["name": $0, "count": 1] },
+            "author": ["name": "generator-\(i.n % 5)"],
+            "links": ["source": "\(origin)/b/view/\(i.n)"],
+            "stats": ["score": i.score],
+        ]
+    }
+
+    static func encodeCursor(_ offset: Int) -> String {
+        Data("off:\(offset)".utf8).base64EncodedString()
+    }
+
+    static func decodeCursor(_ c: String?) -> Int {
+        guard let c = c?.nonEmpty, let d = Data(base64Encoded: c) else { return 0 }
+        let s = String(decoding: d, as: UTF8.self)
+        return Int(s.replacingOccurrences(of: "off:", with: "")) ?? 0
+    }
+}

@@ -1,0 +1,306 @@
+import SwiftUI
+
+/// Form for every AdapterConfig field, with plain-English help under each one.
+struct AdapterEditorView: View {
+    typealias Key = AdapterConfig.CodingKeys
+    let originalID: String?
+
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var registry = AdapterRegistry.shared
+    @State private var c: AdapterConfig
+    @State private var baseURLText: String
+    @State private var mediaBaseURLText: String
+    @State private var rateText: String
+    @State private var timeoutText: String
+    @State private var firstPageText: String
+    @State private var proxyPortText: String
+    @State private var videoExtText: String
+    @State private var gifExtText: String
+    @State private var sortText: String
+    @State private var ratingText: String
+    @State private var metadataText: String
+    @State private var headersText: String
+    @State private var problems: [String] = []
+    @State private var showProblems = false
+    @State private var confirmDelete = false
+
+    init(config: AdapterConfig, isNew: Bool) {
+        originalID = isNew ? nil : config.id
+        _c = State(initialValue: config)
+        _baseURLText = State(initialValue: config.baseURL.absoluteString)
+        _mediaBaseURLText = State(initialValue: config.mediaBaseURL.absoluteString)
+        _rateText = State(initialValue: Self.num(config.rateLimitPerSecond))
+        _timeoutText = State(initialValue: Self.num(config.timeoutSeconds))
+        _firstPageText = State(initialValue: String(config.firstPageIndex))
+        _proxyPortText = State(initialValue: config.proxyPort.map(String.init) ?? "")
+        _videoExtText = State(initialValue: config.videoExtensions.joined(separator: "\n"))
+        _gifExtText = State(initialValue: config.gifExtensions.joined(separator: "\n"))
+        _sortText = State(initialValue: config.sortOptions.joined(separator: "\n"))
+        _ratingText = State(initialValue: config.ratingOptions.joined(separator: "\n"))
+        _metadataText = State(initialValue: config.metadataPaths.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n"))
+        _headersText = State(initialValue: config.headers.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n"))
+    }
+
+    static func num(_ d: Double) -> String { d == d.rounded() ? String(Int(d)) : String(d) }
+
+    var body: some View {
+        Form {
+            Section {
+                AdapterTestSection(makeConfig: { build() })
+            } header: { Text("Test adapter") } footer: {
+                Text("Runs a real search with the values on this screen (even before saving) and shows the first 5 results.")
+            }
+            Section("Helpers") {
+                NavigationLink(destination: FieldMapperView(config: $c)) { Label("Field Mapper — find paths in a sample answer", systemImage: "list.bullet.indent") }
+                NavigationLink(destination: AccountView(adapterID: c.id, displayName: c.displayName, authStyle: c.authStyle)) { Label("Account (username / password / key)", systemImage: "person.crop.circle") }
+                Menu {
+                    ForEach(registry.configs.filter { $0.id.hasPrefix("demo-") }) { ex in
+                        Button("Copy settings from \(ex.displayName)") { loadExample(ex) }
+                    }
+                    Button("Demo Secure (login-protected demo)") { loadExample(.mockSecureExample(port: MockServer.shared.port)) }
+                } label: { Label("Fill in from an example…", systemImage: "wand.and.stars") }
+            }
+            ForEach(FieldGuide.sections, id: \.title) { section in
+                Section {
+                    ForEach(section.fields, id: \.self) { key in
+                        fieldRow(key) { control(key) }
+                    }
+                } header: { Text(section.title) } footer: { Text(section.intro) }
+            }
+            if originalID != nil {
+                Section {
+                    Button("Delete This Adapter", role: .destructive) { confirmDelete = true }
+                }
+            }
+        }
+        .navigationTitle(originalID == nil ? "Add Adapter" : c.displayName)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.accessibilityIdentifier("saveAdapter") }
+        }
+        .alert("Please fix these first", isPresented: $showProblems) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(problems.map { "• \($0)" }.joined(separator: "\n")) }
+        .confirmationDialog("Delete \(c.displayName)?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                do { try registry.delete(id: originalID ?? c.id); dismiss() } catch { ToastCenter.shared.error(error) }
+            }
+        }
+    }
+
+    // MARK: Rows
+
+    @ViewBuilder
+    func fieldRow<Content: View>(_ key: Key, @ViewBuilder content: () -> Content) -> some View {
+        let e = FieldGuide.entry(key)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(e.title).font(.subheadline.weight(.semibold))
+                if e.required { Text("required").font(.caption2.weight(.bold)).foregroundColor(.orange) }
+                Spacer()
+                Text(key.rawValue).font(.caption2.monospaced()).foregroundColor(.secondary)
+            }
+            content()
+            Text(e.help).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+            if !e.example.isEmpty {
+                Text("Example: \(e.example.replacingOccurrences(of: "\n", with: " · "))")
+                    .font(.caption2.monospaced()).foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    func control(_ key: Key) -> some View {
+        switch key {
+        case .id: plain($c.id, "my-site", id: "field-id")
+        case .displayName: plain($c.displayName, "My Site", id: "field-displayName")
+        case .baseURL: urlField($baseURLText, id: "field-baseURL") { c.baseURL = $0 }
+        case .mediaBaseURL: urlField($mediaBaseURLText, id: "field-mediaBaseURL") { c.mediaBaseURL = $0 }
+        case .requiresAuth: Toggle("Requires login", isOn: $c.requiresAuth)
+        case .rateLimitPerSecond: number($rateText, "2", id: "field-rate")
+        case .searchPath: plain($c.searchPath, "posts.json?tags={tags}&page={page}", id: "field-searchPath")
+        case .postPath: plain($c.postPath, "post/{id}.json", id: "field-postPath")
+        case .tagSeparator: plain($c.tagSeparator, "+", id: "field-tagSeparator")
+        case .firstPageIndex: number($firstPageText, "1", id: "field-firstPage")
+        case .sortOptions: lines($sortText)
+        case .ratingOptions: lines($ratingText)
+        case .searchResultsPath: plain($c.searchResultsPath, "posts", id: "field-searchResultsPath")
+        case .postIDPath: plain($c.postIDPath, "id", id: "field-postIDPath")
+        case .thumbnailURLPath: plain($c.thumbnailURLPath, "preview_url", id: "field-thumbnailURLPath")
+        case .mediaURLPath: plain($c.mediaURLPath, "file_url", id: "field-mediaURLPath")
+        case .sampleURLPath: plain(opt(\.sampleURLPath), "sample_url", id: "field-sampleURLPath")
+        case .mediaTypePath: plain($c.mediaTypePath, "file_ext", id: "field-mediaTypePath")
+        case .tagsPath: plain($c.tagsPath, "tags", id: "field-tagsPath")
+        case .tagsNameKey: plain(opt(\.tagsNameKey), "name", id: "field-tagsNameKey")
+        case .sourceURLPath: plain(opt(\.sourceURLPath), "source", id: "field-sourceURLPath")
+        case .postResultPath: plain(opt(\.postResultPath), "(empty)", id: "field-postResultPath")
+        case .metadataPaths: lines($metadataText)
+        case .videoExtensions: lines($videoExtText)
+        case .gifExtensions: lines($gifExtText)
+        case .paginationStyle:
+            Picker("Page style", selection: $c.paginationStyle) {
+                ForEach(PaginationStyle.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }.pickerStyle(.segmented)
+        case .hasNextPagePath: plain(opt(\.hasNextPagePath), "has_more", id: "field-hasNextPagePath")
+        case .cursorPath: plain(opt(\.cursorPath), "next_cursor", id: "field-cursorPath")
+        case .authStyle:
+            Picker("Login style", selection: $c.authStyle) {
+                ForEach(AuthStyle.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+        case .authParamName: plain(opt(\.authParamName), "api_key", id: "field-authParamName")
+        case .authCheckPath: plain(opt(\.authCheckPath), "auth/check", id: "field-authCheckPath")
+        case .userAgent: plain(opt(\.userAgent), NetworkClient.defaultUserAgent, id: "field-userAgent")
+        case .proxyHost: plain(opt(\.proxyHost), "(none)", id: "field-proxyHost")
+        case .proxyPort: number($proxyPortText, "(none)", id: "field-proxyPort")
+        case .timeoutSeconds: number($timeoutText, "20", id: "field-timeout")
+        case .headers: lines($headersText)
+        }
+    }
+
+    func plain(_ b: Binding<String>, _ placeholder: String, id: String) -> some View {
+        TextField(placeholder, text: b)
+            .font(.body.monospaced())
+            .textInputAutocapitalization(.never)
+            .disableAutocorrection(true)
+            .accessibilityIdentifier(id)
+    }
+
+    func number(_ b: Binding<String>, _ placeholder: String, id: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            TextField(placeholder, text: b).keyboardType(.decimalPad).accessibilityIdentifier(id)
+            if !b.wrappedValue.isEmpty && Double(b.wrappedValue) == nil {
+                Text("⚠︎ Must be a number").font(.caption).foregroundColor(.red)
+            }
+        }
+    }
+
+    func lines(_ b: Binding<String>) -> some View {
+        TextEditor(text: b)
+            .font(.body.monospaced())
+            .frame(minHeight: 70)
+            .textInputAutocapitalization(.never)
+            .disableAutocorrection(true)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.3)))
+    }
+
+    func urlField(_ b: Binding<String>, id: String, apply: @escaping (URL) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            TextField("http://…", text: b)
+                .font(.body.monospaced())
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .accessibilityIdentifier(id)
+                .onChange(of: b.wrappedValue) { v in if let u = Self.validURL(v) { apply(u) } }
+            if Self.validURL(b.wrappedValue) == nil {
+                Text("⚠︎ Must be a full address starting with http:// or https://").font(.caption).foregroundColor(.red)
+            } else {
+                Text("✓ Valid address").font(.caption).foregroundColor(.green)
+            }
+        }
+    }
+
+    func opt(_ kp: WritableKeyPath<AdapterConfig, String?>) -> Binding<String> {
+        Binding(get: { c[keyPath: kp] ?? "" }, set: { c[keyPath: kp] = $0.isEmpty ? nil : $0 })
+    }
+
+    static func validURL(_ s: String) -> URL? {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        guard let u = URL(string: t), let scheme = u.scheme?.lowercased(), ["http", "https"].contains(scheme),
+              let host = u.host, !host.isEmpty else { return nil }
+        return u
+    }
+
+    static func parseLines(_ s: String) -> [String] {
+        s.split(whereSeparator: { $0 == "\n" || $0 == "," }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    static func parsePairs(_ s: String) -> [String: String] {
+        var d: [String: String] = [:]
+        for line in s.split(separator: "\n") {
+            let parts = line.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            if parts.count == 2, !parts[0].isEmpty { d[parts[0]] = parts[1] }
+        }
+        return d
+    }
+
+    // MARK: Build / save
+
+    /// Combines the form into a config and lists anything that must be fixed.
+    func build() -> (AdapterConfig?, [String]) {
+        var out = c
+        var issues: [String] = []
+        out.id = c.id.trimmingCharacters(in: .whitespaces)
+        if out.id.isEmpty { issues.append("ID is empty.") }
+        if out.id.contains(" ") { issues.append("ID can't contain spaces.") }
+        if out.displayName.nonEmpty == nil { issues.append("Display name is empty.") }
+        if let u = Self.validURL(baseURLText) { out.baseURL = u } else { issues.append("Base address isn't a valid http:// or https:// address.") }
+        if let u = Self.validURL(mediaBaseURLText) { out.mediaBaseURL = u } else { issues.append("Media base address isn't a valid address.") }
+        if out.searchPath.nonEmpty == nil { issues.append("Search path is empty.") }
+        if out.postIDPath.nonEmpty == nil { issues.append("Post ID path is empty.") }
+        if out.mediaURLPath.nonEmpty == nil { issues.append("Full media address path is empty.") }
+        if let r = Double(rateText), r > 0 { out.rateLimitPerSecond = r } else { issues.append("Requests per second must be a number above 0.") }
+        if let t = Double(timeoutText), t > 0 { out.timeoutSeconds = t } else { issues.append("Timeout must be a number above 0.") }
+        if let f = Int(firstPageText) { out.firstPageIndex = f } else { issues.append("First page number must be a whole number.") }
+        if proxyPortText.nonEmpty == nil { out.proxyPort = nil } else if let p = Int(proxyPortText) { out.proxyPort = p } else { issues.append("Proxy port must be a whole number.") }
+        out.videoExtensions = Self.parseLines(videoExtText)
+        out.gifExtensions = Self.parseLines(gifExtText)
+        out.sortOptions = Self.parseLines(sortText)
+        out.ratingOptions = Self.parseLines(ratingText)
+        out.metadataPaths = Self.parsePairs(metadataText)
+        out.headers = Self.parsePairs(headersText)
+        if out.paginationStyle == .cursor && out.cursorPath?.nonEmpty == nil {
+            issues.append("Page style is \"cursor\", so the Next-page token path is needed.")
+        }
+        if (out.authStyle == .apiKeyQuery || out.authStyle == .apiKeyHeader) && out.authParamName?.nonEmpty == nil {
+            issues.append("This login style needs a Key name.")
+        }
+        if originalID != out.id && registry.configs.contains(where: { $0.id == out.id }) {
+            issues.append("Another adapter already uses the ID \"\(out.id)\".")
+        }
+        return (issues.isEmpty ? out : nil, issues)
+    }
+
+    func save() {
+        let (cfg, issues) = build()
+        guard let cfg = cfg else {
+            problems = issues
+            showProblems = true
+            Haptics.error()
+            return
+        }
+        do {
+            try registry.upsert(cfg, replacing: originalID)
+            ToastCenter.shared.show("Saved \(cfg.displayName)", style: .success)
+            dismiss()
+        } catch {
+            problems = [error.localizedDescription]
+            showProblems = true
+        }
+    }
+
+    func loadExample(_ ex: AdapterConfig) {
+        let keepID = c.id
+        let keepName = c.displayName
+        c = ex
+        if originalID != nil || !keepID.hasPrefix("new-site") { c.id = keepID; c.displayName = keepName } else {
+            c.id = ex.id + "-copy"
+            c.displayName = ex.displayName + " Copy"
+        }
+        baseURLText = ex.baseURL.absoluteString
+        mediaBaseURLText = ex.mediaBaseURL.absoluteString
+        rateText = Self.num(ex.rateLimitPerSecond)
+        timeoutText = Self.num(ex.timeoutSeconds)
+        firstPageText = String(ex.firstPageIndex)
+        proxyPortText = ex.proxyPort.map(String.init) ?? ""
+        videoExtText = ex.videoExtensions.joined(separator: "\n")
+        gifExtText = ex.gifExtensions.joined(separator: "\n")
+        sortText = ex.sortOptions.joined(separator: "\n")
+        ratingText = ex.ratingOptions.joined(separator: "\n")
+        metadataText = ex.metadataPaths.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n")
+        headersText = ex.headers.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n")
+        ToastCenter.shared.show("Filled in from \(ex.displayName)")
+    }
+}

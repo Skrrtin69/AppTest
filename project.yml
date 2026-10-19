@@ -1,0 +1,67 @@
+# XcodeGen spec. The CI workflow runs `xcodegen generate` to produce MediaDeck.xcodeproj,
+# so no hand-maintained .xcodeproj lives in the repo.
+name: MediaDeck
+options:
+  bundleIdPrefix: com.skrrtin69
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    ENABLE_BITCODE: NO
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGN_IDENTITY: ""
+targets:
+  MediaDeck:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Core
+      - path: Features
+      - path: Adapters
+      - path: MockServer
+      - path: Resources
+    info:
+      path: Support/Info.plist
+      properties:
+        CFBundleDisplayName: MediaDeck
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - fetch
+          - processing
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSAllowsLocalNetworking: true
+        NSFaceIDUsageDescription: Unlock MediaDeck with Face ID.
+        NSPhotoLibraryAddUsageDescription: Save downloaded media to your photo library.
+        NSPhotoLibraryUsageDescription: Save downloaded media to your photo library.
+        NSLocalNetworkUsageDescription: MediaDeck runs a small built-in demo server on this device.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.skrrtin69.mediadeck
+        PRODUCT_NAME: MediaDeck
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        DEBUG_INFORMATION_FORMAT: dwarf

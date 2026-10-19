@@ -1,0 +1,100 @@
+import SwiftUI
+import UIKit
+
+/// Haptics gated by the toggles in Settings.
+enum Haptics {
+    static func tap() {
+        guard AppSettings.shared.hapticsTap else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+    static func success() {
+        guard AppSettings.shared.hapticsResult else { return }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+    static func error() {
+        guard AppSettings.shared.hapticsResult else { return }
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+    }
+}
+
+/// Banner messages shown at the top of the screen. Every error path reports here
+/// so nothing fails silently.
+final class ToastCenter: ObservableObject {
+    static let shared = ToastCenter()
+
+    struct Toast: Identifiable, Equatable {
+        enum Style { case info, success, error }
+        let id = UUID()
+        let message: String
+        let style: Style
+    }
+
+    @Published var current: Toast?
+    private var hideTask: Task<Void, Never>?
+
+    func show(_ message: String, style: Toast.Style = .info) {
+        DispatchQueue.main.async {
+            self.current = Toast(message: message, style: style)
+            switch style {
+            case .success: Haptics.success()
+            case .error: Haptics.error()
+            case .info: break
+            }
+            self.hideTask?.cancel()
+            let id = self.current?.id
+            self.hideTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: style == .error ? 5_000_000_000 : 2_500_000_000)
+                if !Task.isCancelled, self.current?.id == id { self.current = nil }
+            }
+        }
+    }
+
+    func error(_ error: Error, prefix: String? = nil) {
+        if error is CancellationError { return }
+        if let u = error as? URLError, u.code == .cancelled { return }
+        let msg = error.localizedDescription
+        show(prefix.map { "\($0): \(msg)" } ?? msg, style: .error)
+    }
+}
+
+struct ToastOverlay: View {
+    @ObservedObject var center = ToastCenter.shared
+
+    var body: some View {
+        VStack {
+            if let t = center.current {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: icon(t.style))
+                    Text(t.message).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .foregroundColor(.white)
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 12).fill(color(t.style)))
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .onTapGesture { center.current = nil }
+                .accessibilityIdentifier("toast")
+            }
+            Spacer()
+        }
+        .animation(.spring(), value: center.current)
+    }
+
+    func icon(_ s: ToastCenter.Toast.Style) -> String {
+        switch s {
+        case .info: return "info.circle.fill"
+        case .success: return "checkmark.circle.fill"
+        case .error: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    func color(_ s: ToastCenter.Toast.Style) -> Color {
+        switch s {
+        case .info: return Color.blue.opacity(0.92)
+        case .success: return Color.green.opacity(0.92)
+        case .error: return Color.red.opacity(0.92)
+        }
+    }
+}
