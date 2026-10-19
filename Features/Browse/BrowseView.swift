@@ -16,6 +16,9 @@ struct BrowseView: View {
     @State private var collectionBatch: PostBatch?
     @State private var reviewing: EditRequest?
     @StateObject private var suggester = SuggestionModel()
+    @State private var showJump = false
+    @State private var jumpText = ""
+    @ObservedObject private var viewedStore = ViewedStore.shared
     @ObservedObject private var reviews = AdapterReviewStore.shared
     @FocusState private var searchFocused: Bool
 
@@ -23,6 +26,7 @@ struct BrowseView: View {
         NavigationView {
             VStack(spacing: 0) {
                 searchBar
+                if !chipTags.isEmpty { chipRow }
                 if searchFocused && !suggester.suggestions.isEmpty { suggestionList }
                 tabStrip
                 Divider()
@@ -54,6 +58,27 @@ struct BrowseView: View {
                 }
             }
             .sheet(item: $collectionBatch) { CollectionPickerSheet(posts: $0.posts) }
+            .sheet(isPresented: $showJump) {
+                NavigationView {
+                    Form {
+                        TextField("Page number", text: $jumpText)
+                            .keyboardType(.numberPad)
+                            .accessibilityIdentifier("jumpPageField")
+                        Button("Go") {
+                            if let n = Int(jumpText), n >= 1, let t = model.current {
+                                showJump = false
+                                Task { await t.jump(to: n) }
+                            }
+                        }
+                        .disabled(Int(jumpText) == nil)
+                        .accessibilityIdentifier("jumpGo")
+                    }
+                    .keyboardDoneButton()
+                    .navigationTitle("Go to Page")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { showJump = false } } }
+                }
+            }
             .sheet(item: $reviewing) { req in
                 NavigationView { AdapterEditorView(config: req.config, isNew: false, focus: req.focus) }
                     .interactiveDismissDisabled(true)
@@ -95,6 +120,8 @@ struct BrowseView: View {
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.16)))
             Button { showHistory = true } label: { Image(systemName: "clock.arrow.circlepath") }
                 .accessibilityLabel("Search history and saved searches")
+            Button { randomize() } label: { Image(systemName: "dice") }
+                .accessibilityLabel("Random results")
             Button {
                 if let t = model.current {
                     LibraryStore.shared.saveSearch(name: searchText, query: searchText, siteID: t.siteID)
@@ -104,6 +131,64 @@ struct BrowseView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+    }
+
+    /// Tags shown as pills: everything typed except the word still being typed.
+    var chipTags: [String] {
+        var tags = TagQuery.parse(searchText)
+        if searchFocused && !searchText.hasSuffix(" ") && !tags.isEmpty { tags.removeLast() }
+        return tags
+    }
+
+    var chipRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(Array(chipTags.enumerated()), id: \.offset) { i, tag in
+                    let excluded = tag.hasPrefix("-")
+                    HStack(spacing: 4) {
+                        Text(excluded ? "− " + tag.dropFirst() : tag).font(.caption.weight(.medium))
+                        Button { removeChip(at: i) } label: { Image(systemName: "xmark").font(.system(size: 9, weight: .bold)) }
+                            .accessibilityLabel("Remove tag \(tag)")
+                    }
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(Capsule().fill(excluded ? Color.red.opacity(0.18) : Color.accentColor.opacity(0.18)))
+                    .accessibilityElement(children: .contain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
+        }
+        .accessibilityIdentifier("tagChips")
+    }
+
+    func removeChip(at index: Int) {
+        var tags = TagQuery.parse(searchText)
+        let typing = searchFocused && !searchText.hasSuffix(" ") && !tags.isEmpty ? tags.removeLast() : nil
+        guard tags.indices.contains(index) else { return }
+        tags.remove(at: index)
+        searchText = (tags.map(TagQuery.display) + (typing.map { [$0] } ?? [])).joined(separator: " ")
+        Haptics.tap()
+        if typing == nil { run(query: searchText, siteID: model.current?.siteID) }
+    }
+
+    /// Dice: the site's own random sort if it has one, else its random tag.
+    func randomize() {
+        guard let t = model.current else { return }
+        guard !t.isMerged, let cfg = registry.config(for: t.siteID) else {
+            ToastCenter.shared.show("Pick a single site to get random results.")
+            return
+        }
+        if let r = cfg.sortOptions.first(where: { $0.lowercased().contains("random") }) {
+            t.sort = r
+            t.saveSticky()
+            Task { await t.search(recordHistory: false) }
+            ToastCenter.shared.show("Sorted randomly")
+        } else if let tag = cfg.randomTag?.nonEmpty {
+            if !TagQuery.parse(searchText).contains(tag) { searchText = (searchText.trimmingCharacters(in: .whitespaces) + " " + tag).trimmingCharacters(in: .whitespaces) }
+            run(query: searchText, siteID: t.siteID)
+        } else {
+            ToastCenter.shared.show("\(cfg.displayName) has no random option. Add a Sort choice containing 'random' or a Random tag in its adapter.", style: .error)
+        }
     }
 
     var suggestionList: some View {
@@ -135,7 +220,10 @@ struct BrowseView: View {
                 ForEach(model.tabs) { tab in
                     TabChip(tab: tab, isSelected: tab.id == model.current?.id, canClose: model.tabs.count > 1,
                             reviewCount: reviewFields(tab.siteID).count,
-                            onSelect: { model.selectedID = tab.id },
+                            onSelect: {
+                                // Tapping the tab that's already open scrolls its grid to the top.
+                                if tab.id == model.current?.id { tab.scrollToTopToken += 1 } else { model.selectedID = tab.id }
+                            },
                             onClose: { model.close(tab) },
                             onReview: {
                                 if let cfg = registry.config(for: tab.siteID) {
@@ -174,8 +262,7 @@ struct BrowseView: View {
                     guard let t = model.current else { return }
                     t.siteID = c.id
                     model.objectWillChange.send()   // nav title shows the tab's site
-                    t.sort = nil
-                    t.rating = nil
+                    t.applySticky()
                     Task { await t.search(recordHistory: false) }
                 } label: {
                     if c.id == model.current?.siteID { Label(c.displayName, systemImage: "checkmark") } else { Text(c.displayName) }
@@ -192,20 +279,24 @@ struct BrowseView: View {
             if let t = model.current, let cfg = registry.config(for: t.siteID) {
                 if !cfg.sortOptions.isEmpty {
                     Menu("Sort: \(t.sort ?? "default")") {
-                        Button("Default") { t.sort = nil; Task { await t.search(recordHistory: false) } }
+                        Button("Default") { t.sort = nil; t.saveSticky(); Task { await t.search(recordHistory: false) } }
                         ForEach(cfg.sortOptions, id: \.self) { o in
-                            Button(o) { t.sort = o; Task { await t.search(recordHistory: false) } }
+                            Button(o) { t.sort = o; t.saveSticky(); Task { await t.search(recordHistory: false) } }
                         }
                     }
                 }
                 if !cfg.ratingOptions.isEmpty {
                     Menu("Rating: \(t.rating ?? "any")") {
-                        Button("Any") { t.rating = nil; Task { await t.search(recordHistory: false) } }
+                        Button("Any") { t.rating = nil; t.saveSticky(); Task { await t.search(recordHistory: false) } }
                         ForEach(cfg.ratingOptions, id: \.self) { o in
-                            Button(o) { t.rating = o; Task { await t.search(recordHistory: false) } }
+                            Button(o) { t.rating = o; t.saveSticky(); Task { await t.search(recordHistory: false) } }
                         }
                     }
                 }
+                if t.supportsPageJump {
+                    Button { jumpText = ""; showJump = true } label: { Label("Go to page…", systemImage: "arrow.right.to.line") }
+                }
+                Button { t.scrollToTopToken += 1 } label: { Label("Scroll to top", systemImage: "arrow.up.to.line") }
                 Button {
                     t.selecting.toggle()
                     t.selected = []
@@ -311,7 +402,9 @@ struct SearchTabView: View {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {
+                ScrollViewReader { proxy in
                 ScrollView {
+                    Color.clear.frame(height: 0).id("gridTop")
                     PostGrid(posts: visible, selecting: tab.selecting, selected: tab.selected, showSource: tab.isMerged,
                              onTap: { i in
                                  if tab.selecting { tab.toggleSelect(visible[i]) } else { Haptics.tap(); onOpen(visible, i) }
@@ -323,6 +416,8 @@ struct SearchTabView: View {
                     }
                 }
                 .refreshable { await tab.refresh() }
+                .onChange(of: tab.scrollToTopToken) { _ in withAnimation { proxy.scrollTo("gridTop", anchor: .top) } }
+                }
             }
             if tab.selecting { selectionBar }
         }

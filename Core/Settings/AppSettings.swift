@@ -39,9 +39,11 @@ final class AppSettings: ObservableObject {
         static let hapticsTap = "hapticsTap", hapticsResult = "hapticsResult"
         static let backgroundDownloads = "backgroundDownloads", biometrics = "biometrics", lockGrace = "lockGrace"
         static let updateURL = "updateURL", animateGridGIFs = "animateGridGIFs", autoplayVideos = "autoplayVideos"
+        static let blurThumbnails = "blurThumbnails", dimViewed = "dimViewed"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
-                          hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos]
+                          hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
+                          blurThumbnails, dimViewed]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -70,6 +72,10 @@ final class AppSettings: ObservableObject {
     @Published var updateURL: String = defaultUpdateURL { didSet { d.set(updateURL, forKey: K.updateURL) } }
     @Published var animateGridGIFs: Bool = true { didSet { d.set(animateGridGIFs, forKey: K.animateGridGIFs) } }
     @Published var autoplayVideos: Bool = true { didSet { d.set(autoplayVideos, forKey: K.autoplayVideos) } }
+    /// Thumbnails stay blurred until tapped once.
+    @Published var blurThumbnails: Bool = false { didSet { d.set(blurThumbnails, forKey: K.blurThumbnails) } }
+    /// Thumbnails of posts already opened are dimmed.
+    @Published var dimViewed: Bool = true { didSet { d.set(dimViewed, forKey: K.dimViewed) } }
 
     private init() { load() }
 
@@ -94,6 +100,8 @@ final class AppSettings: ObservableObject {
         updateURL = d.string(forKey: K.updateURL)?.nonEmpty ?? Self.defaultUpdateURL
         animateGridGIFs = d.object(forKey: K.animateGridGIFs) as? Bool ?? true
         autoplayVideos = d.object(forKey: K.autoplayVideos) as? Bool ?? true
+        blurThumbnails = d.object(forKey: K.blurThumbnails) as? Bool ?? false
+        dimViewed = d.object(forKey: K.dimViewed) as? Bool ?? true
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }

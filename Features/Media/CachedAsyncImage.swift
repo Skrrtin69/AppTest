@@ -34,6 +34,9 @@ struct CachedAsyncImage: View {
         .task(id: url) {
             await model.load(url, maxPixel: maxPixel, animate: animate, client: client, onLoad: onLoad)
         }
+        // Off-screen cells drop their image so long sessions don't pile up memory;
+        // it comes back from the caches when the cell reappears.
+        .onDisappear { model.release() }
     }
 }
 
@@ -48,6 +51,12 @@ final class ImageLoadModel: ObservableObject {
         if !force, loadedURL == url, image != nil { return }
         if loadedURL != url { image = nil }
         error = nil
+        // Fast-scroll throttle: a cell that scrolls past within 150 ms is cancelled (this task
+        // ends when the cell disappears) before it costs a network request.
+        if !ImagePipeline.shared.isInMemory(url, maxPixel: maxPixel, animate: animate) {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            if Task.isCancelled { return }
+        }
         do {
             let img = try await ImagePipeline.shared.image(for: url, maxPixel: maxPixel, animate: animate, client: client)
             guard !Task.isCancelled else { return }
@@ -59,6 +68,11 @@ final class ImageLoadModel: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    func release() {
+        image = nil
+        loadedURL = nil
     }
 }
 

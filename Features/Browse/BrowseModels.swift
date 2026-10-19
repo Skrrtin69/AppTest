@@ -21,9 +21,47 @@ final class SearchTabModel: ObservableObject, Identifiable {
     private var generation = 0
     private var seen = Set<String>()
 
+    /// Incremented to ask the grid to scroll back to the top.
+    @Published var scrollToTopToken = 0
+    /// First page for "Go to page…" (page-number sites only).
+    private var startPage = 1
+
     init(siteID: String, query: String = "") {
         self.siteID = siteID
         self.query = query
+        applySticky()
+    }
+
+    /// Restores this site's remembered sort and rating.
+    func applySticky() {
+        guard !isMerged else { sort = nil; rating = nil; return }
+        let s = StickyOptions.load(siteID)
+        sort = s.sort
+        rating = s.rating
+    }
+
+    func saveSticky() {
+        guard !isMerged else { return }
+        StickyOptions.save(siteID, sort: sort, rating: rating)
+    }
+
+    var supportsPageJump: Bool {
+        !isMerged && AdapterRegistry.shared.config(for: siteID)?.paginationStyle == .pageNumber
+    }
+
+    /// Starts the current search at page `n`.
+    func jump(to n: Int) async {
+        startPage = max(1, n)
+        await search(recordHistory: false)
+        startPage = 1
+    }
+
+    /// A query that's only digits is treated as a post ID when the site has a post address.
+    var idQuery: String? {
+        let t = query.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, t.allSatisfy(\.isNumber), !isMerged,
+              AdapterRegistry.shared.config(for: siteID)?.postPath.nonEmpty != nil else { return nil }
+        return t
     }
 
     var title: String {
@@ -140,7 +178,7 @@ final class SearchTabModel: ObservableObject, Identifiable {
         generation += 1
         posts = []
         seen = []
-        page = 1
+        page = startPage
         cursor = nil
         hasNext = true
         error = nil
@@ -167,6 +205,16 @@ final class SearchTabModel: ObservableObject, Identifiable {
         let gen = generation
         isLoading = true
         defer { if gen == generation { isLoading = false } }
+        // Search by ID: a numbers-only query opens that post directly (falls back to a tag search).
+        if posts.isEmpty, page == startPage, let id = idQuery {
+            if let post = try? await adapter.fetchPost(id: id), gen == generation {
+                posts = [post]
+                seen = [post.key]
+                hasNext = false
+                error = nil
+                return
+            }
+        }
         do {
             try await AuthManager.shared.ensureSession(for: adapter)
             let options = SearchOptions(sort: sort, rating: rating, extra: [:], cursor: cursor)

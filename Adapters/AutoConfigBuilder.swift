@@ -156,6 +156,8 @@ extension AutoConfigurator {
                 : "Not needed: the site doesn't require a login.")
             config.postResultPath = nil
             set(.postResultPath, .medium, "Not needed unless you open single posts by ID.")
+            config.randomTag = nil
+            set(.randomTag, .medium, "Not found automatically. The dice button uses a Sort choice containing 'random' if there is one.")
         }
 
         mutating func resultsList() {

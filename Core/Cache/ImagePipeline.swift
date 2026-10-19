@@ -13,6 +13,16 @@ final class ImagePipeline {
         let initial = UserDefaults.standard.object(forKey: AppSettings.K.maxThumbLoads) as? Int ?? 6
         semaphore = AsyncSemaphore(limit: initial)
         decoded.totalCostLimit = 120 * 1024 * 1024
+        decoded.countLimit = 400
+        // Under memory pressure, drop every decoded image (bytes stay in the disk cache).
+        NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification,
+                                               object: nil, queue: .main) { [weak self] _ in
+            self?.decoded.removeAllObjects()
+        }
+    }
+
+    func isInMemory(_ url: URL, maxPixel: CGFloat, animate: Bool) -> Bool {
+        decoded.object(forKey: "\(url.absoluteString)|\(Int(maxPixel))|\(animate)" as NSString) != nil
     }
 
     func setConcurrency(_ n: Int) {

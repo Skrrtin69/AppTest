@@ -221,6 +221,7 @@ struct AdapterEditorView: View {
         case .autocompletePath: plain(opt(\.autocompletePath), "tags/autocomplete.json?q={query}", id: "field-autocompletePath")
         case .autocompleteResultsPath: plain(opt(\.autocompleteResultsPath), "(the answer itself)", id: "field-autocompleteResultsPath")
         case .autocompleteNameKey: plain(opt(\.autocompleteNameKey), "name", id: "field-autocompleteNameKey")
+        case .randomTag: plain(opt(\.randomTag), "order:random", id: "field-randomTag")
         }
     }
 

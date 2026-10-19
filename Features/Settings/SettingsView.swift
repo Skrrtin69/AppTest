@@ -39,6 +39,12 @@ struct SettingsView: View {
                     }
                     Toggle("Animate GIFs in grids", isOn: $settings.animateGridGIFs)
                     Toggle("Autoplay videos in viewer", isOn: $settings.autoplayVideos)
+                    Toggle("Blur thumbnails until tapped", isOn: $settings.blurThumbnails)
+                    Toggle("Dim posts I've already opened", isOn: $settings.dimViewed)
+                    Button("Forget which posts I've opened") {
+                        ViewedStore.shared.clearViewed()
+                        ToastCenter.shared.show("Viewed history cleared", style: .success)
+                    }
                 }
 
                 Section("Browsing") {

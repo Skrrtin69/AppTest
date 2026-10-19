@@ -50,9 +50,13 @@ struct ViewerView: View {
             }
         }
         .statusBar(hidden: !chrome)
-        .onAppear { prefetchNeighbors() }
+        .onAppear {
+            prefetchNeighbors()
+            if let p = current { ViewedStore.shared.markViewed(p) }
+        }
         .onChange(of: index) { _ in
             prefetchNeighbors()
+            if let p = current { ViewedStore.shared.markViewed(p) }
             if !slideshow { Haptics.tap() }
         }
         .task(id: slideshow) {

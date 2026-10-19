@@ -62,6 +62,8 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
     var autocompleteResultsPath: String?
     /// For suggestion objects: which key holds the tag name (default "name").
     var autocompleteNameKey: String?
+    /// Tag that asks the site for random order, for sites without a "random" sort choice.
+    var randomTag: String?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case id, displayName, baseURL, searchPath, postPath, mediaBaseURL, requiresAuth, rateLimitPerSecond
@@ -69,7 +71,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         case videoExtensions, gifExtensions, authStyle, authParamName, paginationStyle, hasNextPagePath, cursorPath
         case sampleURLPath, postResultPath, metadataPaths, authCheckPath, tagSeparator, firstPageIndex
         case sortOptions, ratingOptions, userAgent, proxyHost, proxyPort, timeoutSeconds, headers
-        case alternateMediaURLPaths, tagSpaceReplacement, autocompletePath, autocompleteResultsPath, autocompleteNameKey
+        case alternateMediaURLPaths, tagSpaceReplacement, autocompletePath, autocompleteResultsPath, autocompleteNameKey, randomTag
     }
 
     init(id: String, displayName: String, baseURL: URL, searchPath: String, postPath: String,
@@ -136,6 +138,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         autocompletePath = try c.decodeIfPresent(String.self, forKey: .autocompletePath)
         autocompleteResultsPath = try c.decodeIfPresent(String.self, forKey: .autocompleteResultsPath)
         autocompleteNameKey = try c.decodeIfPresent(String.self, forKey: .autocompleteNameKey)
+        randomTag = try c.decodeIfPresent(String.self, forKey: .randomTag)
     }
 
     /// Writes every key, including empty ones as null, so an exported file shows all fields.
@@ -164,6 +167,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         try c.encode(autocompletePath, forKey: .autocompletePath)
         try c.encode(autocompleteResultsPath, forKey: .autocompleteResultsPath)
         try c.encode(autocompleteNameKey, forKey: .autocompleteNameKey)
+        try c.encode(randomTag, forKey: .randomTag)
     }
 
     /// Starting point for the "Add adapter" form.

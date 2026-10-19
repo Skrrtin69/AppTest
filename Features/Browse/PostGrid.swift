@@ -14,6 +14,7 @@ struct PostGrid<Footer: View>: View {
     @ViewBuilder var footer: () -> Footer
 
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var viewed = ViewedStore.shared
 
     var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: 3), count: settings.gridColumns)
@@ -25,7 +26,15 @@ struct PostGrid<Footer: View>: View {
                 GridCell(post: post, aspect: settings.thumbAspect, selecting: selecting,
                          isSelected: selected.contains(post.key), showSource: showSource)
                     .contentShape(Rectangle())
-                    .onTapGesture { onTap(index) }
+                    .onTapGesture {
+                        // With blur on, the first tap only reveals the thumbnail.
+                        if settings.blurThumbnails && !selecting && !viewed.isRevealed(post.key) {
+                            viewed.reveal(post.key)
+                            Haptics.tap()
+                        } else {
+                            onTap(index)
+                        }
+                    }
                     .contextMenu {
                         PostMenuItems(post: post, onSelect: onLongPressSelect.map { f in { f(post) } },
                                       onAddToCollection: { onAddToCollection([post]) })
@@ -47,7 +56,11 @@ struct GridCell: View {
     var showSource: Bool = false
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var store = LibraryStore.shared
+    @ObservedObject private var viewed = ViewedStore.shared
     @State private var loadedRatio: CGFloat?
+
+    var blurred: Bool { settings.blurThumbnails && !viewed.isRevealed(post.key) }
+    var dimmed: Bool { settings.dimViewed && viewed.isViewed(post.key) && !selecting }
 
     var ratio: CGFloat {
         guard aspect == .original else { return 1 }
@@ -65,8 +78,15 @@ struct GridCell: View {
                                  onLoad: { img in
                                      if img.size.height > 0 { loadedRatio = img.size.width / img.size.height }
                                  })
+                    .blur(radius: blurred ? 16 : 0)
             )
             .clipped()
+            .opacity(dimmed ? 0.45 : 1)
+            .overlay {
+                if blurred {
+                    Image(systemName: "eye.slash").font(.title3).foregroundColor(.white.opacity(0.85)).shadow(radius: 3)
+                }
+            }
             .overlay(alignment: .topTrailing) {
                 if post.mediaType != .image {
                     Image(systemName: post.mediaType == .video ? "play.fill" : "sparkles")
@@ -100,7 +120,7 @@ struct GridCell: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(post.mediaType.label) \(post.id)\(showSource ? " from \(AdapterRegistry.shared.displayName(for: post.siteID))" : "")\(isSelected ? ", selected" : "")")
+            .accessibilityLabel("\(post.mediaType.label) \(post.id)\(showSource ? " from \(AdapterRegistry.shared.displayName(for: post.siteID))" : "")\(blurred ? ", hidden" : "")\(dimmed ? ", viewed" : "")\(isSelected ? ", selected" : "")")
             .accessibilityAddTraits(.isButton)
     }
 }
