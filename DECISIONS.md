@@ -38,3 +38,15 @@ Choices made while building MediaDeck, and why.
 - **Theme:** AMOLED = dark mode + pure-black UIKit chrome via appearance proxies; the tab view is rebuilt on theme change so proxies apply.
 - **Passcode** is stored as a salted SHA-256 hash in the Keychain; biometrics are only offered once a passcode exists. A privacy cover hides content in the app switcher.
 - **"Check for updates"** opens a user-editable URL defaulting to `https://updates.invalid/mediadeck` (`.invalid` is a reserved, never-resolving TLD).
+
+## Decisions made during device testing
+- **WebM → bundled ogv.js.** WebKit on iOS 16.2 can't play WebM and has no WebM feature flags to switch on. The app's local server now serves a player page (`/player/video.html`) plus the ogv.js files. The page tries WebKit `<video>` first and falls back to ogv.js (WebAssembly VP8/VP9, with SIMD and threads off since 16.2 lacks them). Downloaded files are served at `/local/…`; remote files go through `/proxy` so the decoder isn't blocked by CORS. Vendored, not downloaded at runtime.
+- **Background downloads fall back automatically** when the background session's temp file can't be read (see BLOCKERS.md #1). The setting stays, and the fallback is remembered.
+- **Toasts and the lock screen live in a separate overlay window** above all sheets and full-screen covers. Inside the normal view tree, toasts were invisible behind sheets, and the lock screen sat *below* an open viewer (a privacy hole). The window ignores touches unless it is locked or covered.
+- **The adapter editor sheet can't be swiped away**, only closed with Cancel or Save, so unsaved work isn't lost.
+- **Account fields opt out of iOS password AutoFill** (`textContentType(.oneTimeCode)`). During testing, iOS offered and filled in the phone owner's saved login for an unrelated site.
+- **Pull-to-refresh fetches page 1 before replacing the grid.** Clearing first tore down the scroll view running the refresh and cancelled the request.
+- **adapters.json is written with keys in form order.** JSONEncoder's order is arbitrary, which is confusing when editing by hand.
+- **Demo video downloads are throttled** (~20 KB/s, only for requests whose User-Agent is the app's downloader) so the queue's pause/resume/cancel can be demonstrated. Playback is never throttled.
+- **Disabling a site moves any open tabs on it** to the first enabled site.
+- **The tab chip's close button is its own accessibility element**, so VoiceOver and automation can reach it.
