@@ -21,8 +21,10 @@ final class GenericAdapter: SiteAdapter {
 
     /// Builds the search URL. Public so the Field Mapper can fetch a raw sample.
     func searchURL(tags: [String], options: SearchOptions, page: Int) throws -> URL {
-        // The separator is inserted literally ("+" means space in a query string).
-        let tagString = tags.map { Self.encode($0) }.joined(separator: config.tagSeparator)
+        // "+" is inserted literally (it means space in a query string); anything else, such as a
+        // plain space, is percent-encoded so the address stays valid.
+        let sep = config.tagSeparator == "+" ? "+" : Self.encode(config.tagSeparator)
+        let tagString = tags.map { Self.encode($0) }.joined(separator: sep)
         var vars: [String: String] = [
             "tags": tagString,
             "page": String(page - 1 + config.firstPageIndex),
@@ -80,6 +82,11 @@ final class GenericAdapter: SiteAdapter {
     }
 
     // MARK: - Requests
+
+    /// Raw response with this adapter's auth and headers, without throwing on 4xx/5xx.
+    func fetchRaw(_ url: URL) async throws -> (Data, HTTPURLResponse) {
+        try await client.data(for: url, headers: authHeaders, acceptAnyStatus: true)
+    }
 
     /// Fetches and parses JSON from a URL with this adapter's auth and limits.
     func fetchJSON(_ url: URL) async throws -> Any {
@@ -152,6 +159,31 @@ final class GenericAdapter: SiteAdapter {
         return Post(id: id, siteID: config.id, thumbnailURL: thumb, mediaURL: media,
                     mediaType: Self.mediaType(typeStrings: typeStrings, url: media, config: config),
                     tags: tags, sourceURL: source, metadata: meta, sampleURL: sample)
+    }
+
+    /// Plain-English problems with mapping one result, keyed by the field at fault.
+    /// Empty when `mapPost` would produce a complete post.
+    func diagnose(_ node: Any) -> [AdapterConfig.CodingKeys: String] {
+        var out: [AdapterConfig.CodingKeys: String] = [:]
+        if DottedPath.string(config.postIDPath, in: node)?.nonEmpty == nil {
+            out[.postIDPath] = "postIDPath returned nothing"
+        }
+        if let m = DottedPath.string(config.mediaURLPath, in: node)?.nonEmpty {
+            if resolve(m) == nil { out[.mediaURLPath] = "mediaURLPath is not a valid URL (\(m.prefix(60)))" }
+        } else {
+            out[.mediaURLPath] = "mediaURLPath returned nothing"
+        }
+        if config.thumbnailURLPath.nonEmpty != nil {
+            if let t = DottedPath.string(config.thumbnailURLPath, in: node)?.nonEmpty {
+                if resolve(t) == nil { out[.thumbnailURLPath] = "thumbnailURLPath is not a valid URL (\(t.prefix(60)))" }
+            } else {
+                out[.thumbnailURLPath] = "thumbnailURLPath returned nothing"
+            }
+        }
+        if config.tagsPath.nonEmpty != nil, DottedPath.strings(config.tagsPath, in: node, nameKey: config.tagsNameKey).isEmpty {
+            out[.tagsPath] = "tagsPath returned no tags"
+        }
+        return out
     }
 
     /// Absolute URLs pass through; relative ones are joined to mediaBaseURL.

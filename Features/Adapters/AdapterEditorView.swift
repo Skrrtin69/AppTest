@@ -23,9 +23,20 @@ struct AdapterEditorView: View {
     @State private var problems: [String] = []
     @State private var showProblems = false
     @State private var confirmDelete = false
+    /// Auto-Configure's guesses: shown as a dot + reason under each field while unchanged.
+    @State private var guesses: FieldGuesses
+    /// Field to scroll to and highlight on open (from the Browse review badge).
+    let focus: Key?
+    /// When set, Save hands the config back instead of writing adapters.json
+    /// (used by Auto-Configure's "Edit fields").
+    let onSubmit: ((AdapterConfig) -> Void)?
 
-    init(config: AdapterConfig, isNew: Bool) {
+    init(config: AdapterConfig, isNew: Bool, guesses: FieldGuesses? = nil, focus: Key? = nil,
+         onSubmit: ((AdapterConfig) -> Void)? = nil) {
         originalID = isNew ? nil : config.id
+        self.focus = focus
+        self.onSubmit = onSubmit
+        _guesses = State(initialValue: guesses ?? (isNew ? [:] : AdapterReviewStore.shared.guesses(for: config.id)))
         _c = State(initialValue: config)
         _baseURLText = State(initialValue: config.baseURL.absoluteString)
         _mediaBaseURLText = State(initialValue: config.mediaBaseURL.absoluteString)
@@ -44,13 +55,42 @@ struct AdapterEditorView: View {
     static func num(_ d: Double) -> String { d == d.rounded() ? String(Int(d)) : String(d) }
 
     var body: some View {
+        let current = build().0 ?? c
+        let pendingLow = FieldGuide.sections.flatMap { $0.fields }.filter { k in
+            guard let g = guesses[k] else { return false }
+            return g.level == .low && current.jsonValue(for: k) == g.value
+        }
+        return ScrollViewReader { proxy in
         Form {
+            if !pendingLow.isEmpty {
+                Section {
+                    ForEach(pendingLow, id: \.self) { k in
+                        Button {
+                            withAnimation { proxy.scrollTo(k.rawValue, anchor: .top) }
+                        } label: {
+                            HStack { ConfidenceDot(level: .low); Text(FieldGuide.entry(k).title); Spacer(); Image(systemName: "arrow.down.circle") }
+                        }
+                        .accessibilityLabel("Review \(FieldGuide.entry(k).title)")
+                    }
+                    Button("Mark all as reviewed") {
+                        for k in pendingLow { guesses[k]?.level = .medium; guesses[k]?.reason = "You reviewed this guess." }
+                        if let id = originalID { AdapterReviewStore.shared.set(guesses, for: id) }
+                        ToastCenter.shared.show("Marked as reviewed", style: .success)
+                    }
+                } header: { Text("Needs review") } footer: {
+                    Text("Auto-Configure wasn't sure about these. Check each one (the red line explains why); changing a value also clears it.")
+                }
+            }
             Section {
                 AdapterTestSection(makeConfig: { build() })
             } header: { Text("Test adapter") } footer: {
                 Text("Runs a real search with the values on this screen (even before saving) and shows the first 5 results.")
             }
             Section("Helpers") {
+                NavigationLink(destination: AutoConfigView(mode: .fillForm(keepIdentity: originalID != nil) { cfg, g in apply(cfg, g) })) {
+                    Label("Auto-configure from URL", systemImage: "sparkles")
+                }
+                .accessibilityIdentifier("autoConfigureInForm")
                 NavigationLink(destination: FieldMapperView(config: $c)) { Label("Field Mapper — find paths in a sample answer", systemImage: "list.bullet.indent") }
                 NavigationLink(destination: AccountView(adapterID: c.id, displayName: c.displayName, authStyle: c.authStyle, draft: { build().0 })) { Label("Account (username / password / key)", systemImage: "person.crop.circle") }
                 Menu {
@@ -63,7 +103,9 @@ struct AdapterEditorView: View {
             ForEach(FieldGuide.sections, id: \.title) { section in
                 Section {
                     ForEach(section.fields, id: \.self) { key in
-                        fieldRow(key) { control(key) }
+                        fieldRow(key, current: current) { control(key) }
+                            .id(key.rawValue)
+                            .listRowBackground(key == focus ? Color.orange.opacity(0.15) : nil)
                     }
                 } header: { Text(section.title) } footer: { Text(section.intro) }
             }
@@ -84,22 +126,39 @@ struct AdapterEditorView: View {
         } message: { Text(problems.map { "• \($0)" }.joined(separator: "\n")) }
         .confirmationDialog("Delete \(c.displayName)?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
-                do { try registry.delete(id: originalID ?? c.id); dismiss() } catch { ToastCenter.shared.error(error) }
+                do {
+                    try registry.delete(id: originalID ?? c.id)
+                    AdapterReviewStore.shared.clear(originalID ?? c.id)
+                    dismiss()
+                } catch { ToastCenter.shared.error(error) }
             }
+        }
+        .onAppear {
+            guard let f = focus else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { withAnimation { proxy.scrollTo(f.rawValue, anchor: .top) } }
+        }
         }
     }
 
     // MARK: Rows
 
     @ViewBuilder
-    func fieldRow<Content: View>(_ key: Key, @ViewBuilder content: () -> Content) -> some View {
+    func fieldRow<Content: View>(_ key: Key, current: AdapterConfig, @ViewBuilder content: () -> Content) -> some View {
         let e = FieldGuide.entry(key)
+        let guess = guesses[key].flatMap { current.jsonValue(for: key) == $0.value ? $0 : nil }
         VStack(alignment: .leading, spacing: 5) {
             HStack {
+                if let g = guess { ConfidenceDot(level: g.level) }
                 Text(e.title).font(.subheadline.weight(.semibold))
                 if e.required { Text("required").font(.caption2.weight(.bold)).foregroundColor(.orange) }
                 Spacer()
                 Text(key.rawValue).font(.caption2.monospaced()).foregroundColor(.secondary)
+            }
+            if let g = guess {
+                Text("Auto-Configure (\(g.level.rawValue)): \(g.reason)")
+                    .font(.caption).foregroundColor(g.level == .low ? .red : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("guess-\(key.rawValue)")
             }
             content()
             Text(e.help).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -146,9 +205,7 @@ struct AdapterEditorView: View {
         case .hasNextPagePath: plain(opt(\.hasNextPagePath), "has_more", id: "field-hasNextPagePath")
         case .cursorPath: plain(opt(\.cursorPath), "next_cursor", id: "field-cursorPath")
         case .authStyle:
-            Picker("Login style", selection: $c.authStyle) {
-                ForEach(AuthStyle.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
+            AuthStylePicker(selection: Binding(get: { c.authStyle }, set: { c.authStyle = $0 ?? .none }))
         case .authParamName: plain(opt(\.authParamName), "api_key", id: "field-authParamName")
         case .authCheckPath: plain(opt(\.authCheckPath), "auth/check", id: "field-authCheckPath")
         case .userAgent: plain(opt(\.userAgent), NetworkClient.defaultUserAgent, id: "field-userAgent")
@@ -271,14 +328,49 @@ struct AdapterEditorView: View {
             Haptics.error()
             return
         }
+        if let submit = onSubmit {
+            submit(cfg)
+            dismiss()
+            return
+        }
         do {
             try registry.upsert(cfg, replacing: originalID)
+            if let old = originalID, old != cfg.id { AdapterReviewStore.shared.clear(old) }
+            if !guesses.isEmpty { AdapterReviewStore.shared.set(guesses, for: cfg.id) }
             ToastCenter.shared.show("Saved \(cfg.displayName)", style: .success)
             dismiss()
         } catch {
             problems = [error.localizedDescription]
             showProblems = true
         }
+    }
+
+    /// Auto-Configure "fills the form in place": every field, plus its confidence notes.
+    func apply(_ proposal: AdapterConfig, _ g: FieldGuesses) {
+        let keepID = c.id, keepName = c.displayName
+        setFormFields(from: proposal)
+        guesses = g
+        if originalID != nil {
+            c.id = keepID; c.displayName = keepName
+            guesses[.id] = nil; guesses[.displayName] = nil
+        }
+        ToastCenter.shared.show("Filled in from Auto-Configure. Check any red dots.")
+    }
+
+    func setFormFields(from ex: AdapterConfig) {
+        c = ex
+        baseURLText = ex.baseURL.absoluteString
+        mediaBaseURLText = ex.mediaBaseURL.absoluteString
+        rateText = Self.num(ex.rateLimitPerSecond)
+        timeoutText = Self.num(ex.timeoutSeconds)
+        firstPageText = String(ex.firstPageIndex)
+        proxyPortText = ex.proxyPort.map(String.init) ?? ""
+        videoExtText = ex.videoExtensions.joined(separator: "\n")
+        gifExtText = ex.gifExtensions.joined(separator: "\n")
+        sortText = ex.sortOptions.joined(separator: "\n")
+        ratingText = ex.ratingOptions.joined(separator: "\n")
+        metadataText = ex.metadataPaths.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n")
+        headersText = ex.headers.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n")
     }
 
     func loadExample(_ ex: AdapterConfig) {

@@ -13,8 +13,11 @@ struct FieldMapperView: View {
     @State private var fetching = false
     @State private var analyzed = false
 
-    init(config: Binding<AdapterConfig>? = nil) {
+    /// `initialJSON` opens the mapper already analyzed (used by Auto-Configure's
+    /// "Open Field Mapper" when it couldn't find the list itself).
+    init(config: Binding<AdapterConfig>? = nil, initialJSON: String = "") {
         self.config = config
+        _input = State(initialValue: initialJSON)
     }
 
     var filteredRows: [DottedPath.Row] {
@@ -100,6 +103,7 @@ struct FieldMapperView: View {
         }
         .navigationTitle("Field Mapper")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { if !input.isEmpty && !analyzed { analyze() } }
     }
 
     func analyze() {

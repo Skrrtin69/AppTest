@@ -37,6 +37,12 @@ enum MockRoutes {
             return siteA(String(p.dropFirst(2)), req: req, origin: origin)
         case p.hasPrefix("/b/"):
             return siteB(String(p.dropFirst(2)), req: req, origin: origin)
+        case p.hasPrefix("/c/"):
+            return siteC(String(p.dropFirst(2)), req: req, origin: origin)
+        case p.hasPrefix("/html/"):
+            // A normal web page, so Auto-Configure's "not a JSON API" message can be seen.
+            return .text("<!doctype html><html><head><title>Demo page</title></head><body><h1>Demo web page</h1><p>This is HTML for browsers, not a JSON API.</p></body></html>",
+                         type: "text/html; charset=utf-8")
         default:
             return .json(["error": "not found", "path": p], status: 404)
         }
@@ -142,6 +148,20 @@ enum MockRoutes {
             "links": ["source": "\(origin)/b/view/\(i.n)"],
             "stats": ["score": i.score],
         ]
+    }
+
+    // MARK: Site C (deliberately unclear: one address field with a non-descriptive name)
+
+    static func siteC(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
+        guard sub == "/list.json" else { return .json(["error": "not found"], status: 404) }
+        let all = MockCatalog.search(tagQuery: req.query["tags"] ?? "", sort: nil, rating: nil)
+        let page = max(1, Int(req.query["page"] ?? "1") ?? 1)
+        let start = (page - 1) * MockCatalog.pageSize
+        let slice = start < all.count ? Array(all[start..<min(all.count, start + MockCatalog.pageSize)]) : []
+        return .json([
+            "entries": slice.map { ["ref": "c-\($0.n)", "link": "\(origin)/media/img/\($0.n).png", "labels": $0.tags] },
+            "has_more": start + MockCatalog.pageSize < all.count,
+        ])
     }
 
     static func encodeCursor(_ offset: Int) -> String {

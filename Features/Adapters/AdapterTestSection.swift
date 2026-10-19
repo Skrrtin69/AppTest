@@ -3,8 +3,14 @@ import SwiftUI
 /// Runs a search with the config currently on screen and shows the first 5 results.
 struct AdapterTestSection: View {
     let makeConfig: () -> (AdapterConfig?, [String])
+    /// Optional login step run before searching (Auto-Configure logs in with typed credentials
+    /// instead of the Keychain). When nil, stored credentials are used.
+    var prepare: ((GenericAdapter) async throws -> Void)? = nil
+    /// Changing this value runs the test (lets an outside button trigger it).
+    var trigger: Int = 0
+    var initialTag: String = ""
 
-    @State private var tag = ""
+    @State private var tag = "
     @State private var running = false
     @State private var results: [Post] = []
     @State private var error: String?
@@ -35,20 +41,7 @@ struct AdapterTestSection: View {
                 Label(s, systemImage: "checkmark.seal.fill").foregroundColor(.green).font(.footnote)
                     .accessibilityIdentifier("testSummary")
             }
-            ForEach(results.prefix(5)) { p in
-                HStack(spacing: 10) {
-                    CachedAsyncImage(url: p.thumbnailURL, maxPixel: 160)
-                        .frame(width: 48, height: 48)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("ID \(p.id)").font(.subheadline.monospaced())
-                        Text("\(p.mediaType.label) · \(p.tags.prefix(4).joined(separator: " "))")
-                            .font(.caption).foregroundColor(.secondary).lineLimit(1)
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("testResult")
-            }
+            ForEach(results.prefix(5)) { p in ResultPreviewRow(post: p) }
             Button {
                 Task { await rateTest() }
             } label: { Label("Check rate limit (6 quick requests)", systemImage: "speedometer") }
@@ -59,6 +52,8 @@ struct AdapterTestSection: View {
             }
         }
         .padding(.vertical, 4)
+        .onAppear { if tag.isEmpty { tag = initialTag } }
+        .onChange(of: trigger) { _ in Task { await run() } }
     }
 
     func adapterOrError() -> GenericAdapter? {
@@ -76,7 +71,9 @@ struct AdapterTestSection: View {
         running = true
         defer { running = false }
         do {
-            if adapter.requiresAuth || adapter.config.authStyle != .none {
+            if let prepare = prepare {
+                try await prepare(adapter)
+            } else if adapter.requiresAuth || adapter.config.authStyle != .none {
                 try await AuthManager.shared.ensureSession(for: adapter)
             }
             let tags = tag.split(separator: " ").map(String.init)
@@ -144,19 +141,7 @@ struct AccountView: View {
                     .font(.footnote).foregroundColor(.secondary)
             }
             Section("Account") {
-                TextField("Username", text: $username)
-                    .textInputAutocapitalization(.never).disableAutocorrection(true)
-                    // .oneTimeCode opts these fields out of iOS password AutoFill, which would
-                    // otherwise offer the phone owner's saved logins for unrelated sites.
-                    .textContentType(.oneTimeCode)
-                    .accessibilityIdentifier("acct-username")
-                SecureField("Password (optional)", text: $password)
-                    .textContentType(.oneTimeCode)
-                    .accessibilityIdentifier("acct-password")
-                TextField("API key (optional)", text: $apiKey)
-                    .textInputAutocapitalization(.never).disableAutocorrection(true)
-                    .textContentType(.oneTimeCode)
-                    .accessibilityIdentifier("acct-apikey")
+                CredentialFields(username: $username, password: $password, apiKey: $apiKey)
             }
             Section {
                 Button("Save") { save() }.accessibilityIdentifier("acct-save")

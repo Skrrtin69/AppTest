@@ -14,6 +14,8 @@ struct BrowseView: View {
     @State private var showHistory = false
     @State private var viewer: ViewerRequest?
     @State private var collectionBatch: PostBatch?
+    @State private var reviewing: EditRequest?
+    @ObservedObject private var reviews = AdapterReviewStore.shared
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -50,6 +52,10 @@ struct BrowseView: View {
                 }
             }
             .sheet(item: $collectionBatch) { CollectionPickerSheet(posts: $0.posts) }
+            .sheet(item: $reviewing) { req in
+                NavigationView { AdapterEditorView(config: req.config, isNew: false, focus: req.focus) }
+                    .interactiveDismissDisabled(true)
+            }
             .fullScreenCover(item: $viewer) { req in
                 ViewerView(posts: req.posts, startIndex: req.index)
             }
@@ -102,8 +108,14 @@ struct BrowseView: View {
             HStack(spacing: 6) {
                 ForEach(model.tabs) { tab in
                     TabChip(tab: tab, isSelected: tab.id == model.current?.id, canClose: model.tabs.count > 1,
+                            reviewCount: reviewFields(tab.siteID).count,
                             onSelect: { model.selectedID = tab.id },
-                            onClose: { model.close(tab) })
+                            onClose: { model.close(tab) },
+                            onReview: {
+                                if let cfg = registry.config(for: tab.siteID) {
+                                    reviewing = EditRequest(config: cfg, isNew: false, focus: reviewFields(tab.siteID).first)
+                                }
+                            })
                 }
                 Button {
                     let site = model.current?.siteID ?? registry.enabledConfigs.first?.id
@@ -180,6 +192,13 @@ struct BrowseView: View {
         .accessibilityLabel("View options")
     }
 
+    /// Low-confidence Auto-Configure fields the user hasn't looked at for this site.
+    func reviewFields(_ siteID: String) -> [AdapterConfig.CodingKeys] {
+        _ = reviews.all.count   // re-evaluate when the store changes
+        guard let cfg = registry.config(for: siteID) else { return [] }
+        return reviews.pendingLowFields(for: cfg)
+    }
+
     func run(query: String, siteID: String?) {
         searchFocused = false
         guard let t = model.current else { return }
@@ -194,8 +213,10 @@ struct TabChip: View {
     @ObservedObject var tab: SearchTabModel
     let isSelected: Bool
     let canClose: Bool
+    var reviewCount: Int = 0
     let onSelect: () -> Void
     let onClose: () -> Void
+    var onReview: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 4) {
@@ -207,6 +228,14 @@ struct TabChip: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Tab \(tab.title) on \(tab.siteName)")
+            if reviewCount > 0 {
+                Button(action: onReview) {
+                    Text("\(reviewCount)").font(.caption2.weight(.bold)).foregroundColor(.white)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(Color.red))
+                }
+                .accessibilityLabel("Review \(reviewCount) low-confidence field\(reviewCount == 1 ? "" : "s") for \(tab.siteName)")
+            }
             // Kept as its own element so VoiceOver (and automation) can reach it.
             if canClose && isSelected {
                 Button(action: onClose) { Image(systemName: "xmark").font(.caption2.weight(.bold)) }

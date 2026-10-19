@@ -5,6 +5,8 @@ struct EditRequest: Identifiable {
     let id = UUID()
     let config: AdapterConfig
     let isNew: Bool
+    /// Field to scroll to when the form opens.
+    var focus: AdapterConfig.CodingKeys? = nil
 }
 
 /// Sites & Adapters: enable/disable, reorder, add/edit, import/export adapters.json.
@@ -56,6 +58,10 @@ struct AdaptersListView: View {
             }
 
             Section("Add") {
+                NavigationLink(destination: AutoConfigView(mode: .standalone)) {
+                    Label("Auto-configure from URL", systemImage: "sparkles")
+                }
+                .accessibilityIdentifier("autoConfigure")
                 Button { editing = EditRequest(config: .blank(), isNew: true) } label: {
                     Label("Add Adapter", systemImage: "plus.circle.fill")
                 }
@@ -79,7 +85,7 @@ struct AdaptersListView: View {
         .navigationTitle("Sites & Adapters")
         .toolbar { EditButton() }
         .sheet(item: $editing) { req in
-            NavigationView { AdapterEditorView(config: req.config, isNew: req.isNew) }
+            NavigationView { AdapterEditorView(config: req.config, isNew: req.isNew, focus: req.focus) }
                 // Only Cancel/Save close the editor, so a stray swipe can't lose unsaved changes.
                 .interactiveDismissDisabled(true)
         }

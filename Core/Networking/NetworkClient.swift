@@ -50,14 +50,17 @@ final class NetworkClient {
     /// Shared client for media that isn't tied to an adapter (e.g. library thumbnails).
     static let shared = NetworkClient(config: Config(ratePerSecond: 50))
 
-    func data(for url: URL, headers: [String: String] = [:], rateLimited: Bool = true) async throws -> (Data, HTTPURLResponse) {
+    /// `acceptAnyStatus` returns 4xx/5xx responses instead of throwing (used by Auto-Configure
+    /// to show the server's own error text).
+    func data(for url: URL, headers: [String: String] = [:], rateLimited: Bool = true,
+              acceptAnyStatus: Bool = false) async throws -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: url)
         for (k, v) in config.headers { request.setValue(v, forHTTPHeaderField: k) }
         for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        return try await data(for: request, rateLimited: rateLimited)
+        return try await data(for: request, rateLimited: rateLimited, acceptAnyStatus: acceptAnyStatus)
     }
 
-    func data(for request: URLRequest, rateLimited: Bool = true) async throws -> (Data, HTTPURLResponse) {
+    func data(for request: URLRequest, rateLimited: Bool = true, acceptAnyStatus: Bool = false) async throws -> (Data, HTTPURLResponse) {
         if request.url?.isFileURL == true, let url = request.url {
             let d = try Data(contentsOf: url)
             return (d, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
@@ -75,7 +78,7 @@ final class NetworkClient {
                     try await backoff(attempt)
                     continue
                 }
-                guard (200...299).contains(http.statusCode) else {
+                guard acceptAnyStatus || (200...299).contains(http.statusCode) else {
                     throw AppError.http(status: http.statusCode, url: request.url!)
                 }
                 return (data, http)

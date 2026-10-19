@@ -166,6 +166,16 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         return c
     }
 
+    /// Any field's value as compact JSON text (e.g. `"file_url"`, `2`, `["gif"]`, `null`).
+    /// Used to notice when the user has changed a field away from an Auto-Configure guess.
+    func jsonValue(for key: CodingKeys) -> String {
+        guard let data = try? JSONEncoder().encode(self),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return "" }
+        let value = dict[key.rawValue] ?? NSNull()
+        guard let v = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed, .sortedKeys, .withoutEscapingSlashes]) else { return "" }
+        return String(decoding: v, as: UTF8.self)
+    }
+
     /// Fields the Field Mapper's "Use as…" menu can fill in.
     struct MappableField {
         let key: CodingKeys
