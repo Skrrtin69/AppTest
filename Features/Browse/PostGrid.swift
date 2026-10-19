@@ -176,6 +176,7 @@ struct CollectionPickerSheet: View {
                     }
                 }
             }
+            .keyboardDoneButton()
             .navigationTitle("Add to Collection")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }

@@ -48,6 +48,7 @@ enum AutoConfigFailure: Error, Equatable {
     case notJSON(snippet: String)
     case noList(rawJSON: String)
     case noMedia(rawJSON: String)
+    case emptyList(path: String)
 
     var title: String {
         switch self {
@@ -59,6 +60,7 @@ enum AutoConfigFailure: Error, Equatable {
         case .notJSON: return "This looks like a webpage, not a JSON API"
         case .noList: return "Couldn't find a list of results"
         case .noMedia: return "Found a list, but no picture or video addresses in it"
+        case .emptyList: return "0 results"
         }
     }
 
@@ -71,6 +73,7 @@ enum AutoConfigFailure: Error, Equatable {
         case .loginRejected(let why): return why
         case .notJSON(let snippet): return "MediaDeck needs the site's data address (an API that answers in JSON), not a page meant for a browser. The answer started with: \(snippet)"
         case .noList: return "Couldn't find a list of results. Open the Field Mapper and pick the list manually."
+        case .emptyList(let p): return "The answer has a list (\(p.isEmpty ? "the answer itself" : "'\(p)'")) but it's empty, so there's nothing to learn the fields from."
         case .noMedia: return "None of the results contain a web address (http…) or a file path ending in a picture/video type. Open the Field Mapper and pick the addresses manually."
         }
     }
@@ -84,6 +87,7 @@ enum AutoConfigFailure: Error, Equatable {
         case .loginRejected: return "Check the username/password/key below, then tap Analyze."
         case .notJSON: return "Find the site's API address (often contains /api/ or ends in .json) and paste that instead."
         case .noList, .noMedia: return "Open the Field Mapper"
+        case .emptyList: return "Use a sample tag that has results (or leave it empty), then tap Analyze."
         }
     }
 }
@@ -110,15 +114,21 @@ struct AutoConfigurator {
         }
 
         // Temporary adapter: reuses GenericAdapter's templating, auth headers and NetworkClient.
+        guard let originURL = URL(string: parts.origin), let rootURL = URL(string: parts.origin + "/") else {
+            return .failure(.badAddress("The host part of the address isn't valid."))
+        }
         var probe = AdapterConfig.blank()
-        probe.baseURL = URL(string: parts.origin)!
-        probe.mediaBaseURL = URL(string: parts.origin + "/")!
+        probe.baseURL = originURL
+        probe.mediaBaseURL = rootURL
         probe.searchPath = template
         probe.timeoutSeconds = 30
         probe.headers = input.headers
         probe.tagSeparator = " "
         probe.authStyle = input.authStyle ?? .none
-        probe.authParamName = input.authParamName
+        probe.authParamName = AdapterConfig.sanitizeParamName(input.authParamName)
+        if (input.authStyle == .apiKeyQuery || input.authStyle == .apiKeyHeader), probe.authParamName == nil {
+            return .failure(.badAddress("This login style needs the key's name (for example api_key or X-Api-Key). Fill in the Key name field."))
+        }
         let adapter = GenericAdapter(config: probe)
         if let style = input.authStyle, style != .none, let creds = input.credentials {
             do { adapter.session = try await adapter.authenticate(credentials: creds) } catch {
@@ -150,14 +160,26 @@ struct AutoConfigurator {
         guard (200...299).contains(response.statusCode) else {
             return .failure(.http(status: response.statusCode, body: bodyText))
         }
-        guard let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
-              json is [String: Any] || json is [Any] else {
+        let contentType = (response.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
+        if contentType.contains("text/html") || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<") {
+            return .failure(.notJSON(snippet: String(bodyText.prefix(160))))
+        }
+        let json: Any
+        do {
+            json = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        } catch {
+            return .failure(.notJSON(snippet: String(bodyText.prefix(160))))
+        }
+        guard json is [String: Any] || json is [Any] else {
             return .failure(.notJSON(snippet: String(bodyText.prefix(160))))
         }
         let raw = (try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]))
             .map { String(decoding: $0, as: UTF8.self) } ?? bodyText
 
-        guard let list = Self.findResultArray(json) else { return .failure(.noList(rawJSON: raw)) }
+        guard let list = Self.findResultArray(json) else {
+            if let empty = Self.findEmptyList(json) { return .failure(.emptyList(path: empty)) }
+            return .failure(.noList(rawJSON: raw))
+        }
         guard let items = DottedPath.evaluate(list.path, in: json) as? [Any] else { return .failure(.noList(rawJSON: raw)) }
 
         var builder = Builder(input: input, parts: parts, json: json, list: list, items: items,
@@ -186,10 +208,11 @@ struct AutoConfigurator {
         let host = String(after[..<hostEnd])
         guard !host.isEmpty, !host.contains(" "), !host.contains("{") else { return nil }
         let origin = "\(scheme)://\(host)"
+        guard URL(string: origin) != nil else { return nil }
         let path = String(after[hostEnd...])
         let pathOnly = path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
         let segments = pathOnly.split(separator: "/").map(String.init)
-        if segments.count >= 2, !segments[0].contains("{") {
+        if segments.count >= 2, !segments[0].contains("{"), URL(string: origin + "/" + segments[0]) != nil {
             let rest = String(path.dropFirst(1 + segments[0].count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             return TemplateParts(scheme: scheme, host: host, origin: origin, base: origin + "/" + segments[0], rest: rest, firstSegment: segments[0])
         }
@@ -240,6 +263,22 @@ struct AutoConfigurator {
         }
         walk(json, path: "", key: "", depth: 0)
         return best
+    }
+
+    /// An empty array with a list-like name (or an empty top-level array): "0 results".
+    static func findEmptyList(_ json: Any) -> String? {
+        if let a = json as? [Any], a.isEmpty { return "" }
+        var found: String?
+        func walk(_ v: Any, path: String, depth: Int) {
+            guard found == nil, let d = v as? [String: Any], depth < 6 else { return }
+            for (k, child) in d {
+                let p = path.isEmpty ? k : "\(path).\(k)"
+                if let a = child as? [Any], a.isEmpty, listNames.contains(k.lowercased()) { found = p; return }
+                walk(child, path: p, depth: depth + 1)
+            }
+        }
+        walk(json, path: "", depth: 0)
+        return found
     }
 
     static func containsURL(_ v: Any, depth: Int) -> Bool {

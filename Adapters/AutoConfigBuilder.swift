@@ -98,7 +98,7 @@ extension AutoConfigurator {
             set(.id, .high, "Made from the site's address (\(id))\(id != base ? "; a number was added because \(base) is already used" : "").")
             set(.displayName, .high, "Made from the host name \(hostName)\(isLocal && parts.firstSegment != nil ? " plus its first folder" : ""). Rename it to anything you like.")
 
-            config.baseURL = URL(string: parts.base) ?? URL(string: parts.origin)!
+            if let u = URL(string: parts.base) ?? URL(string: parts.origin) { config.baseURL = u }
             set(.baseURL, .high, parts.base == parts.origin
                 ? "The scheme and host of your search address."
                 : "The scheme, host and first folder (/\(parts.firstSegment ?? "")) of your search address.")
@@ -407,8 +407,10 @@ extension AutoConfigurator {
         /// Absolute addresses don't need it. Relative ones are tried against the API folder and the
         /// site root; the first that actually loads wins.
         mutating func chooseMediaBase(adapter: GenericAdapter) async {
-            let folder = URL(string: parts.base + "/")!
-            let root = URL(string: parts.origin + "/")!
+            guard let folder = URL(string: parts.base + "/"), let root = URL(string: parts.origin + "/") else {
+                set(.mediaBaseURL, .low, "Couldn't build a base address from the search address.")
+                return
+            }
             guard thumbIsRelative, let value = firstThumbValue, !value.isEmpty else {
                 config.mediaBaseURL = root
                 set(.mediaBaseURL, .high, "Result addresses are complete (start with http), so this is only a fallback.")

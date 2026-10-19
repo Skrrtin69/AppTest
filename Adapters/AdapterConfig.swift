@@ -99,7 +99,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         videoExtensions = try c.decodeIfPresent([String].self, forKey: .videoExtensions) ?? ["mp4", "webm", "mov", "m4v"]
         gifExtensions = try c.decodeIfPresent([String].self, forKey: .gifExtensions) ?? ["gif"]
         authStyle = try c.decodeIfPresent(AuthStyle.self, forKey: .authStyle) ?? .none
-        authParamName = try c.decodeIfPresent(String.self, forKey: .authParamName)
+        authParamName = Self.sanitizeParamName(try c.decodeIfPresent(String.self, forKey: .authParamName))
         paginationStyle = try c.decodeIfPresent(PaginationStyle.self, forKey: .paginationStyle) ?? .pageNumber
         hasNextPagePath = try c.decodeIfPresent(String.self, forKey: .hasNextPagePath)
         cursorPath = try c.decodeIfPresent(String.self, forKey: .cursorPath)
@@ -164,6 +164,15 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         c.authCheckPath = "auth/check"
         c.sortOptions = ["newest", "oldest", "random"]
         return c
+    }
+
+    /// Cleans a user-typed key/header name: drops leading "&", "?" and trailing "=", ":" and
+    /// spaces, so "&api_key=" becomes "api_key". Returns nil when nothing usable is left.
+    static func sanitizeParamName(_ raw: String?) -> String? {
+        guard let raw = raw else { return nil }
+        let junk = CharacterSet(charactersIn: "&?=: ").union(.whitespacesAndNewlines)
+        let cleaned = raw.trimmingCharacters(in: junk)
+        return cleaned.isEmpty ? nil : cleaned
     }
 
     /// Any field's value as compact JSON text (e.g. `"file_url"`, `2`, `["gif"]`, `null`).

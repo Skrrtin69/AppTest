@@ -70,7 +70,24 @@ enum Presenter {
     }
 }
 
+enum Keyboard {
+    /// Hides the keyboard whichever field has focus.
+    static func dismiss() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
 extension View {
+    /// Adds a "Done" button above the keyboard that just hides it (forms never lose data).
+    func keyboardDoneButton() -> some View {
+        toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { Keyboard.dismiss() }.font(.body.weight(.semibold))
+            }
+        }
+    }
+
     /// Applies the AMOLED/system background behind scrolling content.
     func themedBackground() -> some View {
         modifier(ThemedBackground())

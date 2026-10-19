@@ -162,6 +162,7 @@ struct AccountView: View {
                 Text(statusText).accessibilityIdentifier("acct-status")
             }
         }
+        .keyboardDoneButton()
         .navigationTitle("Account")
         .onAppear {
             guard !loaded else { return }

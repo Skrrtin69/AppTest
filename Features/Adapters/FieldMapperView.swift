@@ -12,6 +12,7 @@ struct FieldMapperView: View {
     @State private var filter = ""
     @State private var fetching = false
     @State private var analyzed = false
+    @State private var emptyNotice: String?
 
     /// `initialJSON` opens the mapper already analyzed (used by Auto-Configure's
     /// "Open Field Mapper" when it couldn't find the list itself).
@@ -71,6 +72,10 @@ struct FieldMapperView: View {
                 .disabled(fetching)
                 .accessibilityIdentifier("getSampleMenu")
 
+                if let n = emptyNotice {
+                    Label(n, systemImage: "tray").font(.footnote).foregroundColor(.orange)
+                        .accessibilityIdentifier("emptyNotice")
+                }
                 if let e = parseError {
                     Text(e).font(.footnote).foregroundColor(.red).accessibilityIdentifier("parseError")
                 }
@@ -101,6 +106,7 @@ struct FieldMapperView: View {
             }
             .padding()
         }
+        .keyboardDoneButton()
         .navigationTitle("Field Mapper")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { if !input.isEmpty && !analyzed { analyze() } }
@@ -114,6 +120,10 @@ struct FieldMapperView: View {
             let json = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
             rows = DottedPath.flatten(json)
             analyzed = true
+            emptyNotice = nil
+            if AutoConfigurator.findResultArray(json) == nil, let p = AutoConfigurator.findEmptyList(json) {
+                emptyNotice = "0 results: the list \(p.isEmpty ? "(the whole answer)" : "'\(p)'") is empty. Try a search that has results to see each result's fields."
+            }
             Haptics.success()
         } catch {
             rows = []

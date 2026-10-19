@@ -171,6 +171,7 @@ struct SettingsView: View {
                 }
             }
             .themedBackground()
+            .keyboardDoneButton()
             .navigationTitle("Settings")
             .sheet(isPresented: $showPasscodeSetup) { PasscodeSetupView() }
             .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
@@ -259,6 +260,7 @@ struct BlacklistView: View {
                     .onDelete { settings.blacklist.remove(atOffsets: $0) }
             }
         }
+        .keyboardDoneButton()
         .navigationTitle("Tag Blacklist")
         .toolbar { EditButton() }
     }

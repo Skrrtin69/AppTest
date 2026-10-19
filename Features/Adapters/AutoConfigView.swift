@@ -27,7 +27,12 @@ struct AutoConfigView: View {
     @State private var proposal: AutoConfigProposal?
     @State private var testTrigger = 0
     @State private var showEditor = false
-    @State private var mapperJSON: String?
+    /// Stored (not rebuilt on each render): a fresh Identifiable item per render made SwiftUI
+    /// dismiss and re-present the sheet forever.
+    @State private var mapperRequest: MapperRequest?
+    @FocusState private var focused: Field?
+
+    enum Field: Hashable { case url, tag, headers, keyName, credentials }
 
     var isFillForm: Bool { if case .fillForm = mode { return true } else { return false } }
 
@@ -70,12 +75,13 @@ struct AutoConfigView: View {
                 .interactiveDismissDisabled(true)
             }
         }
-        .sheet(item: Binding(get: { mapperJSON.map { MapperRequest(json: $0) } }, set: { if $0 == nil { mapperJSON = nil } })) { req in
+        .sheet(item: $mapperRequest) { req in
             NavigationView {
                 FieldMapperView(initialJSON: req.json)
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { mapperJSON = nil } } }
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { mapperRequest = nil } } }
             }
         }
+        .keyboardDoneButton()
     }
 
     struct MapperRequest: Identifiable { let id = UUID(); let json: String }
@@ -89,10 +95,13 @@ struct AutoConfigView: View {
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
+                .focused($focused, equals: .url)
                 .accessibilityIdentifier("autoURL")
             TextField("Sample tag (a word that has results)", text: $sampleTag)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
+                .focused($focused, equals: .tag)
+                .submitLabel(.done)
                 .accessibilityIdentifier("autoTag")
             Menu {
                 let o = MockServer.shared.baseURL.absoluteString
@@ -113,6 +122,7 @@ struct AutoConfigView: View {
                     Text("Extra headers (one per line, Name = value)").font(.caption).foregroundColor(.secondary)
                     TextEditor(text: $headersText)
                         .font(.caption.monospaced()).frame(minHeight: 50)
+                        .focused($focused, equals: .headers)
                         .textInputAutocapitalization(.never).disableAutocorrection(true)
                         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.3)))
                 }
@@ -121,6 +131,7 @@ struct AutoConfigView: View {
                 if authStyle == .apiKeyQuery || authStyle == .apiKeyHeader {
                     TextField(authStyle == .apiKeyQuery ? "Key name in the address (e.g. api_key)" : "Header name (e.g. X-Api-Key)", text: $authParamName)
                         .textInputAutocapitalization(.never).disableAutocorrection(true)
+                        .focused($focused, equals: .keyName)
                         .accessibilityIdentifier("autoAuthParam")
                 }
                 if let s = authStyle, s != .none {
@@ -140,7 +151,7 @@ struct AutoConfigView: View {
         Section {
             switch f {
             case .noList(let raw), .noMedia(let raw):
-                ErrorCard(title: f.title, message: f.message, next: f.nextAction, actionTitle: "Open Field Mapper") { mapperJSON = raw }
+                ErrorCard(title: f.title, message: f.message, next: f.nextAction, actionTitle: "Open Field Mapper") { mapperRequest = MapperRequest(json: raw) }
             case .needsLogin:
                 ErrorCard(title: f.title, message: f.message, next: f.nextAction, actionTitle: "Show login options") { showAdvanced = true }
             default:
@@ -221,8 +232,9 @@ struct AutoConfigView: View {
                 .disabled(proposal == nil)
                 .accessibilityIdentifier("autoEdit")
             Spacer(minLength: 0)
-            Button("Cancel") { dismiss() }
-                .accessibilityIdentifier("autoCancel")
+            // No Cancel here: Back already leaves, and a Cancel next to the keyboard wiped forms.
+            Button("Done") { focused = nil; Keyboard.dismiss() }
+                .accessibilityIdentifier("autoDone")
         }
         .font(.subheadline)
         .padding(.horizontal, 12).padding(.vertical, 10)
@@ -232,6 +244,8 @@ struct AutoConfigView: View {
     // MARK: Actions
 
     func analyze(_ proxy: ScrollViewProxy) async {
+        focused = nil
+        Keyboard.dismiss()
         running = true
         failure = nil
         proposal = nil

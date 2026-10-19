@@ -38,6 +38,23 @@ final class MockServer {
         return nil
     }
 
+    /// For callers that may run right after launch or resume: makes sure the listener is up,
+    /// retrying a few times with a short delay instead of letting requests hang on a dead port.
+    @discardableResult
+    func ensureReady() async -> Bool {
+        for attempt in 0..<4 {
+            if isRunning { return true }
+            if await start() != nil { return true }
+            try? await Task.sleep(nanoseconds: UInt64(250_000_000 * (attempt + 1)))
+        }
+        return isRunning
+    }
+
+    /// True for URLs that point at this server.
+    func serves(_ url: URL) -> Bool {
+        (url.host == "127.0.0.1" || url.host == "localhost") && url.port.map { UInt16($0) } == port
+    }
+
     private final class Once: @unchecked Sendable {
         private var done = false
         private let lock = NSLock()

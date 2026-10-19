@@ -113,6 +113,7 @@ struct NewCollectionSheet: View {
             Form {
                 TextField("Collection name", text: $name).accessibilityIdentifier("collectionNameField")
             }
+            .keyboardDoneButton()
             .navigationTitle("New Collection")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -61,7 +61,7 @@ struct WebVideoView: UIViewRepresentable {
             src = "/proxy?url=" + encode(url.absoluteString) + (siteID.map { "&site=" + encode($0) } ?? "")
         }
         let type = url.pathExtension.lowercased() == "webm" ? "video/webm" : ""
-        return URL(string: "\(server)/player/video.html?src=\(encode(src))&type=\(encode(type))")!
+        return URL(string: "\(server)/player/video.html?src=\(encode(src))&type=\(encode(type))") ?? url
     }
 
     static func encode(_ s: String) -> String {

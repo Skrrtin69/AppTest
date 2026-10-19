@@ -115,6 +115,7 @@ struct AdapterEditorView: View {
                 }
             }
         }
+        .keyboardDoneButton()
         .navigationTitle(originalID == nil ? "Add Adapter" : c.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -301,6 +302,7 @@ struct AdapterEditorView: View {
         if let r = Double(rateText), r > 0 { out.rateLimitPerSecond = r } else { issues.append("Requests per second must be a number above 0.") }
         if let t = Double(timeoutText), t > 0 { out.timeoutSeconds = t } else { issues.append("Timeout must be a number above 0.") }
         if let f = Int(firstPageText) { out.firstPageIndex = f } else { issues.append("First page number must be a whole number.") }
+        out.authParamName = AdapterConfig.sanitizeParamName(out.authParamName)
         if proxyPortText.nonEmpty == nil { out.proxyPort = nil } else if let p = Int(proxyPortText) { out.proxyPort = p } else { issues.append("Proxy port must be a whole number.") }
         out.videoExtensions = Self.parseLines(videoExtText)
         out.gifExtensions = Self.parseLines(gifExtText)

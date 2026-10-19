@@ -50,10 +50,16 @@ final class GenericAdapter: SiteAdapter {
             full = Self.join(config.baseURL.absoluteString, p)
         }
         guard var comps = URLComponents(string: full) else { throw AppError.invalidURL(full) }
-        if config.authStyle == .apiKeyQuery, let token = session?.token, let name = config.authParamName?.nonEmpty {
-            var items = comps.percentEncodedQueryItems ?? []
-            items.append(URLQueryItem(name: name, value: Self.encode(token)))
-            comps.percentEncodedQueryItems = items
+        if config.authStyle == .apiKeyQuery, let token = session?.token,
+           let name = AdapterConfig.sanitizeParamName(config.authParamName) {
+            // Built as text from encoded parts: assigning percentEncodedQueryItems traps on
+            // characters like "&" in a user-typed key name.
+            let pair = Self.encode(name) + "=" + Self.encode(token)
+            if let q = comps.percentEncodedQuery, !q.isEmpty {
+                comps.percentEncodedQuery = q + "&" + pair
+            } else {
+                comps.percentEncodedQuery = pair
+            }
         }
         guard let url = comps.url else { throw AppError.invalidURL(full) }
         return url
@@ -76,7 +82,7 @@ final class GenericAdapter: SiteAdapter {
         guard let token = session?.token else { return [:] }
         switch config.authStyle {
         case .basic: return ["Authorization": "Basic \(token)"]
-        case .apiKeyHeader: return [config.authParamName?.nonEmpty ?? "Authorization": token]
+        case .apiKeyHeader: return [AdapterConfig.sanitizeParamName(config.authParamName) ?? "Authorization": token]
         default: return [:]
         }
     }

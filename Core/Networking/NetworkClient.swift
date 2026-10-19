@@ -65,6 +65,10 @@ final class NetworkClient {
             let d = try Data(contentsOf: url)
             return (d, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }
+        // The built-in demo server may still be starting (launch) or restarting (resume).
+        if let url = request.url, MockServer.shared.serves(url) {
+            await MockServer.shared.ensureReady()
+        }
         var attempt = 0
         while true {
             if rateLimited { await limiter.acquire() }
