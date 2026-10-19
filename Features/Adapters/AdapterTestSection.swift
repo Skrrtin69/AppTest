@@ -10,7 +10,7 @@ struct AdapterTestSection: View {
     var trigger: Int = 0
     var initialTag: String = ""
 
-    @State private var tag = "
+    @State private var tag = ""
     @State private var running = false
     @State private var results: [Post] = []
     @State private var error: String?
