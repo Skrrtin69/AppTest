@@ -132,6 +132,10 @@ enum MockRoutes {
             return .json(["data": ["suggestions": list]])
         }
         if sub == "/search" {
+            if let words = req.query["q"]?.lowercased(), words.contains("offline") {
+                // Demo of one site failing inside a merged search (Site A ignores "-offline").
+                return .json(["detail": "Demo Site B is offline for this search."], status: 400)
+            }
             if let words = req.query["q"]?.lowercased(), words.contains("slowdown") {
                 return .json(["errors": [["status": "429", "detail": "Rate limit exceeded: 3 searches per second."]]], status: 429)
             }

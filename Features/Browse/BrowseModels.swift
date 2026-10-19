@@ -31,7 +31,90 @@ final class SearchTabModel: ObservableObject, Identifiable {
         return q.isEmpty ? "All" : q
     }
 
-    var siteName: String { AdapterRegistry.shared.displayName(for: siteID) }
+    var siteName: String { isMerged ? "All Sites" : AdapterRegistry.shared.displayName(for: siteID) }
+
+    // MARK: Merged search
+
+    /// Pseudo site ID for a tab that searches every enabled site at once.
+    static let mergedID = "__all_sites__"
+    var isMerged: Bool { siteID == Self.mergedID }
+
+    /// Each site's own pagination inside a merged tab.
+    struct SiteCursor {
+        var page = 1
+        var cursor: String?
+        var hasNext = true
+        var error: String?
+    }
+    private var siteStates: [String: SiteCursor] = [:]
+    /// Sites that failed in a merged tab (site name → message), for the banner.
+    @Published private(set) var siteErrors: [String: String] = [:]
+    @Published var errorBannerDismissed = false
+    private var seenMedia = Set<String>()
+
+    /// Fetches the next page from every site that still has more, in parallel, and merges
+    /// them. A failing site is reported in the banner; the others keep going.
+    private func loadMerged(replace: Bool) async {
+        let gen = generation
+        if replace { siteStates = [:] }
+        let ids = AdapterRegistry.shared.enabledConfigs.map { $0.id }
+        for id in ids where siteStates[id] == nil { siteStates[id] = SiteCursor() }
+        let active = ids.filter { siteStates[$0]?.hasNext == true && siteStates[$0]?.error == nil }
+        guard !active.isEmpty else { hasNext = false; return }
+        isLoading = true
+        defer { if gen == generation { isLoading = false } }
+
+        let tags = self.tags
+        var jobs: [(String, GenericAdapter, SiteCursor)] = []
+        for id in active { if let a = AdapterRegistry.shared.adapter(for: id), let st = siteStates[id] { jobs.append((id, a, st)) } }
+        let results: [String: Result<SearchResult, Error>] = await withTaskGroup(of: (String, Result<SearchResult, Error>).self) { group in
+            for (id, adapter, st) in jobs {
+                group.addTask {
+                    do {
+                        try await AuthManager.shared.ensureSession(for: adapter)
+                        let r = try await adapter.search(tags: tags, options: SearchOptions(cursor: st.cursor), page: st.page)
+                        return (id, .success(r))
+                    } catch {
+                        return (id, .failure(error))
+                    }
+                }
+            }
+            var out: [String: Result<SearchResult, Error>] = [:]
+            for await (id, r) in group { out[id] = r }
+            return out
+        }
+        guard gen == generation else { return }
+
+        var perSite: [[Post]] = []
+        var errors = replace ? [:] : siteErrors
+        for (id, _, _) in jobs {
+            guard let r = results[id] else { continue }
+            switch r {
+            case .success(let res):
+                siteStates[id]?.page += 1
+                siteStates[id]?.cursor = res.nextCursor
+                siteStates[id]?.hasNext = res.hasNextPage && !res.posts.isEmpty
+                perSite.append(res.posts)
+            case .failure(let e):
+                if Self.isCancellation(e) { continue }
+                siteStates[id]?.error = e.localizedDescription
+                errors[AdapterRegistry.shared.displayName(for: id)] = e.localizedDescription
+            }
+        }
+        // Interleave so every site shows up near the top, then drop duplicates by
+        // post key or by identical media address (the same file mirrored on two sites).
+        var merged: [Post] = []
+        let longest = perSite.map { $0.count }.max() ?? 0
+        for i in 0..<longest { for list in perSite where i < list.count { merged.append(list[i]) } }
+        if replace { seen = []; seenMedia = [] }
+        let fresh = merged.filter { seen.insert($0.key).inserted && seenMedia.insert($0.mediaURL.absoluteString).inserted }
+        if replace { posts = fresh } else { posts.append(contentsOf: fresh) }
+        siteErrors = errors
+        if !errors.isEmpty && replace { errorBannerDismissed = false }
+        hasNext = siteStates.values.contains { $0.hasNext && $0.error == nil }
+        error = (posts.isEmpty && !errors.isEmpty && errors.count == jobs.count)
+            ? errors.map { "\($0.key): \($0.value)" }.sorted().joined(separator: "\n") : nil
+    }
 
     /// Space-separated tags; a leading "-" excludes a tag and is passed through unchanged.
     /// Space-separated tags; "quoted phrases" are one tag; "-" excludes a tag.
@@ -55,7 +138,10 @@ final class SearchTabModel: ObservableObject, Identifiable {
         isLoading = false
         hasSearched = true
         selected = []
-        if recordHistory, query.nonEmpty != nil {
+        siteStates = [:]
+        siteErrors = [:]
+        seenMedia = []
+        if recordHistory, query.nonEmpty != nil, !isMerged {
             LibraryStore.shared.recordSearch(query, siteID: siteID)
         }
         await loadMore()
@@ -63,6 +149,7 @@ final class SearchTabModel: ObservableObject, Identifiable {
 
     func loadMore() async {
         guard !isLoading, hasNext else { return }
+        if isMerged { await loadMerged(replace: false); return }
         guard let adapter = AdapterRegistry.shared.adapter(for: siteID) else {
             error = "The site \"\(siteID)\" isn't in your adapters list anymore. Pick another site."
             hasNext = false
@@ -92,6 +179,12 @@ final class SearchTabModel: ObservableObject, Identifiable {
     /// Pull-to-refresh: fetches page 1 first and swaps it in, keeping the current grid on
     /// screen meanwhile (clearing it would tear down the scroll view running the refresh).
     func refresh() async {
+        if isMerged {
+            generation += 1
+            hasSearched = true
+            await loadMerged(replace: true)
+            return
+        }
         guard let adapter = AdapterRegistry.shared.adapter(for: siteID) else { return }
         generation += 1
         let gen = generation
@@ -194,7 +287,7 @@ final class BrowseModel: ObservableObject {
         }
         // Tabs pointing at a removed or switched-off site move to the first enabled one.
         let enabledIDs = Set(enabled.map { $0.id })
-        for t in tabs where !enabledIDs.contains(t.siteID) {
+        for t in tabs where !t.isMerged && !enabledIDs.contains(t.siteID) {
             t.siteID = first.id
             Task { await t.search(recordHistory: false) }
         }

@@ -5,6 +5,8 @@ struct PostGrid<Footer: View>: View {
     let posts: [Post]
     var selecting: Bool = false
     var selected: Set<String> = []
+    /// Merged search: label each thumbnail with the site it came from.
+    var showSource: Bool = false
     var onTap: (Int) -> Void
     var onLongPressSelect: ((Post) -> Void)? = nil
     var onAppearIndex: ((Int) -> Void)? = nil
@@ -21,7 +23,7 @@ struct PostGrid<Footer: View>: View {
         LazyVGrid(columns: columns, spacing: 3) {
             ForEach(Array(posts.enumerated()), id: \.element.key) { index, post in
                 GridCell(post: post, aspect: settings.thumbAspect, selecting: selecting,
-                         isSelected: selected.contains(post.key))
+                         isSelected: selected.contains(post.key), showSource: showSource)
                     .contentShape(Rectangle())
                     .onTapGesture { onTap(index) }
                     .contextMenu {
@@ -42,6 +44,7 @@ struct GridCell: View {
     let aspect: ThumbAspect
     var selecting: Bool = false
     var isSelected: Bool = false
+    var showSource: Bool = false
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var store = LibraryStore.shared
     @State private var loadedRatio: CGFloat?
@@ -74,6 +77,9 @@ struct GridCell: View {
                         .padding(4)
                 }
             }
+            .overlay(alignment: .bottomTrailing) {
+                if showSource { SourceBadge(siteID: post.siteID).padding(3) }
+            }
             .overlay(alignment: .bottomLeading) {
                 if store.favoriteKeys.contains(post.key) {
                     Image(systemName: "heart.fill").font(.caption2)
@@ -94,8 +100,35 @@ struct GridCell: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(post.mediaType.label) \(post.id)\(isSelected ? ", selected" : "")")
+            .accessibilityLabel("\(post.mediaType.label) \(post.id)\(showSource ? " from \(AdapterRegistry.shared.displayName(for: post.siteID))" : "")\(isSelected ? ", selected" : "")")
             .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// Tiny colored label naming a post's site (merged search).
+struct SourceBadge: View {
+    let siteID: String
+    var body: some View {
+        let name = AdapterRegistry.shared.displayName(for: siteID)
+        Text(Self.short(name))
+            .font(.system(size: 9, weight: .bold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 4).padding(.vertical, 2)
+            .background(Capsule().fill(Self.color(for: siteID)))
+            .accessibilityHidden(true)
+    }
+
+    /// "Demo Site A" → "DSA"; single words keep their first 4 letters.
+    static func short(_ name: String) -> String {
+        let words = name.split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "." })
+        if words.count >= 2 { return String(words.prefix(3).compactMap { $0.first }).uppercased() }
+        return String(name.prefix(4)).uppercased()
+    }
+
+    /// Stable color per site.
+    static func color(for id: String) -> Color {
+        let hash = id.unicodeScalars.reduce(UInt32(5381)) { ($0 &* 33) &+ $1.value }
+        return Color(hue: Double(hash % 360) / 360, saturation: 0.65, brightness: 0.75)
     }
 }
 

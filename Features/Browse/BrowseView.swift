@@ -158,6 +158,17 @@ struct BrowseView: View {
 
     var siteMenu: some View {
         Menu {
+            Button {
+                guard let t = model.current else { return }
+                t.siteID = SearchTabModel.mergedID
+                t.sort = nil
+                t.rating = nil
+                model.objectWillChange.send()
+                Task { await t.search(recordHistory: false) }
+            } label: {
+                if model.current?.isMerged == true { Label("All Sites (merged)", systemImage: "checkmark") } else { Label("All Sites (merged)", systemImage: "square.stack.3d.down.right") }
+            }
+            Divider()
             ForEach(registry.enabledConfigs) { c in
                 Button {
                     guard let t = model.current else { return }
@@ -284,6 +295,9 @@ struct SearchTabView: View {
     var body: some View {
         let visible = tab.visiblePosts(blacklist: settings.blacklistSet)
         VStack(spacing: 0) {
+            if !tab.siteErrors.isEmpty && !tab.errorBannerDismissed && !visible.isEmpty {
+                PartialFailureBanner(errors: tab.siteErrors) { tab.errorBannerDismissed = true }
+            }
             if visible.isEmpty && !tab.isLoading {
                 if let err = tab.error {
                     EmptyStateView(icon: "wifi.exclamationmark", title: "Couldn't load", message: err,
@@ -298,7 +312,7 @@ struct SearchTabView: View {
                 }
             } else {
                 ScrollView {
-                    PostGrid(posts: visible, selecting: tab.selecting, selected: tab.selected,
+                    PostGrid(posts: visible, selecting: tab.selecting, selected: tab.selected, showSource: tab.isMerged,
                              onTap: { i in
                                  if tab.selecting { tab.toggleSelect(visible[i]) } else { Haptics.tap(); onOpen(visible, i) }
                              },
@@ -359,6 +373,31 @@ struct SearchTabView: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(.thinMaterial)
+    }
+}
+
+/// Subtle notice that some sites of a merged search failed while the rest loaded.
+struct PartialFailureBanner: View {
+    let errors: [String: String]
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.circle").foregroundColor(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Showing results from the other sites").font(.caption.weight(.semibold))
+                ForEach(errors.keys.sorted(), id: \.self) { k in
+                    Text("\(k): \(errors[k] ?? "")").font(.caption2).foregroundColor(.secondary).lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
+            Button(action: onDismiss) { Image(systemName: "xmark").font(.caption.weight(.bold)) }
+                .accessibilityLabel("Dismiss notice")
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.12))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("partialFailureBanner")
     }
 }
 
