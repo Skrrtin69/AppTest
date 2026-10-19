@@ -60,16 +60,35 @@ struct VerticalReader: View {
                     ForEach(posts.indices, id: \.self) { i in
                         VerticalItem(post: posts[i])
                             .id(i)
-                            .onAppear { index = i }
+                            .background(GeometryReader { g in
+                                Color.clear.preference(key: RowTops.self, value: [i: g.frame(in: .named("vertical")).minY])
+                            })
                             .onTapGesture {
                                 if posts[i].mediaType == .video { onOpenPaged(i) } else { onTap() }
                             }
                     }
                 }
             }
+            .coordinateSpace(name: "vertical")
+            // The counter follows the row at the top third of the screen, not rows that are
+            // merely preloaded below it.
+            .onPreferenceChange(RowTops.self) { tops in
+                let line = UIScreen.main.bounds.height / 3
+                if let current = tops.filter({ $0.value <= line }).max(by: { $0.value < $1.value })?.key, current != index {
+                    index = current
+                }
+            }
             .onAppear { proxy.scrollTo(startIndex, anchor: .top) }
         }
         .accessibilityIdentifier("verticalReader")
+    }
+}
+
+/// Each row's top edge in the reader, keyed by post index.
+struct RowTops: PreferenceKey {
+    static var defaultValue: [Int: CGFloat] = [:]
+    static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
+        value.merge(nextValue()) { $1 }
     }
 }
 
