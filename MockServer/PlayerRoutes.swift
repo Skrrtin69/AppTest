@@ -119,6 +119,7 @@ enum PlayerRoutes {
     if(isWebm && can===''){useOgv();}else{useNative();}
     window.mdPlay=function(){if(player)player.play();};
     window.mdPause=function(){if(player)player.pause();};
+    window.mdSpeed=function(r){ if(player){ try{ player.playbackRate=r; }catch(e){} } };
     </script></body></html>
     """
 }

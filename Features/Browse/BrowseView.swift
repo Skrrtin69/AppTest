@@ -434,7 +434,7 @@ struct SearchTabView: View {
                     Button("Retry") { Task { await tab.retry() } }
                 }
             } else if !tab.hasNext && !tab.posts.isEmpty {
-                Text("End of results · \(tab.posts.count) posts").font(.caption).foregroundColor(.secondary)
+                Text("End of results · \(tab.posts.count) post\(tab.posts.count == 1 ? "" : "s")").font(.caption).foregroundColor(.secondary)
                     .accessibilityIdentifier("endOfResults")
             }
         }

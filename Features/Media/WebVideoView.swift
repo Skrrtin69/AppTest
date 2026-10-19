@@ -8,6 +8,7 @@ struct WebVideoView: UIViewRepresentable {
     let url: URL
     let isActive: Bool
     var siteID: String? = nil
+    var speed: Double = 1
     /// Reports which engine ended up playing (or the error), for the on-screen label.
     var onStatus: ((String) -> Void)? = nil
 
@@ -37,6 +38,7 @@ struct WebVideoView: UIViewRepresentable {
             wv.load(URLRequest(url: Self.playerURL(for: url, siteID: siteID)))
         }
         wv.evaluateJavaScript(isActive ? "window.mdPlay && mdPlay()" : "window.mdPause && mdPause()", completionHandler: nil)
+        wv.evaluateJavaScript("window.mdSpeed && mdSpeed(\(speed))", completionHandler: nil)
     }
 
     static func dismantleUIView(_ wv: WKWebView, coordinator: Coordinator) {

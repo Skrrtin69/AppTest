@@ -35,10 +35,10 @@ struct PostGrid<Footer: View>: View {
                             onTap(index)
                         }
                     }
-                    .contextMenu {
+                    .modifier(PeekContextMenu(post: post) {
                         PostMenuItems(post: post, onSelect: onLongPressSelect.map { f in { f(post) } },
                                       onAddToCollection: { onAddToCollection([post]) })
-                    }
+                    })
                     .onAppear { onAppearIndex?(index) }
                     .accessibilityIdentifier("cell-\(post.id)")
             }
@@ -176,6 +176,9 @@ struct PostMenuItems: View {
             store.isFavorite(post) ? Label("Unfavorite", systemImage: "heart.slash") : Label("Favorite", systemImage: "heart")
         }
         Button { onAddToCollection() } label: { Label("Add to Collection…", systemImage: "folder.badge.plus") }
+        if post.mediaType != .video {
+            Button { Task { await ImageClipboard.copy(post) } } label: { Label("Copy Image", systemImage: "photo.on.rectangle") }
+        }
         Button {
             UIPasteboard.general.string = post.mediaURL.absoluteString
             ToastCenter.shared.show("URL copied")

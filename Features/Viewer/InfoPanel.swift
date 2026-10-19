@@ -6,6 +6,15 @@ struct InfoPanel: View {
     let pixelSize: CGSize?
     let onTag: (String) -> Void
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var settings = AppSettings.shared
+
+    func quickBlacklist(_ tag: String) {
+        let t = tag.lowercased()
+        guard !settings.blacklistSet.contains(t) else { return }
+        settings.blacklist.append(t)
+        Haptics.success()
+        ToastCenter.shared.show("Blacklisted \"\(t)\". Remove it in Settings › Tag Blacklist.", style: .success)
+    }
 
     var body: some View {
         NavigationView {
@@ -16,17 +25,22 @@ struct InfoPanel: View {
                     row("Type", post.mediaType.label)
                     row("Dimensions", pixelSize.map { "\(Int($0.width)) × \(Int($0.height))" } ?? "Unknown until loaded")
                 }
-                Section("Tags (tap to search)") {
+                Section("Tags (tap to search, hold to blacklist)") {
                     if post.tags.isEmpty { Text("No tags").foregroundColor(.secondary) }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 6)], alignment: .leading, spacing: 6) {
                         ForEach(post.tags, id: \.self) { tag in
-                            Button { onTag(tag) } label: {
-                                Text(tag).font(.footnote).lineLimit(1)
-                                    .padding(.horizontal, 10).padding(.vertical, 5)
-                                    .background(Capsule().fill(Color.accentColor.opacity(0.18)))
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Tag \(tag)")
+                            let hidden = settings.blacklistSet.contains(tag.lowercased())
+                            Text(tag).font(.footnote).lineLimit(1)
+                                .strikethrough(hidden)
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(Capsule().fill(hidden ? Color.red.opacity(0.2) : Color.accentColor.opacity(0.18)))
+                                .onTapGesture { onTag(tag) }
+                                // Long-press: blacklist instantly.
+                                .onLongPressGesture(minimumDuration: 0.5) { quickBlacklist(tag) }
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("Tag \(tag)\(hidden ? ", blacklisted" : "")")
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityAction(named: "Blacklist") { quickBlacklist(tag) }
                         }
                     }
                     .padding(.vertical, 4)

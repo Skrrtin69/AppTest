@@ -41,11 +41,28 @@ actor PlaybackRouter {
 }
 
 /// Picks the player for `url` and shows a small label saying which one is in use.
+/// 1× → 1.5× → 2× → 1×, shared by both players.
+struct SpeedButton: View {
+    @ObservedObject private var settings = AppSettings.shared
+    var label: String {
+        settings.playbackSpeed == 1 ? "1×" : (settings.playbackSpeed == 1.5 ? "1.5×" : "2×")
+    }
+    var body: some View {
+        Button { settings.cycleSpeed(); Haptics.tap() } label: {
+            Text(label).font(.caption.weight(.bold).monospacedDigit()).foregroundColor(.white)
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Capsule().fill(Color.black.opacity(0.5)))
+        }
+        .accessibilityLabel("Playback speed \(label)")
+    }
+}
+
 struct MediaVideoView: View {
     let url: URL
     let isActive: Bool
     var showControls: Bool = true
     var siteID: String? = nil
+    @ObservedObject private var settings = AppSettings.shared
 
     @State private var path: PlaybackPath?
     @State private var engine: String?
@@ -63,7 +80,10 @@ struct MediaVideoView: View {
                     }
                 }
             case .some(.web):
-                WebVideoView(url: url, isActive: isActive, siteID: siteID) { engine = $0 }
+                WebVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed) { engine = $0 }
+                    .overlay(alignment: .bottomTrailing) {
+                        if showControls { SpeedButton().padding(.trailing, 70).padding(.bottom, 145) }
+                    }
             }
             if let p = path, showControls {
                 Text(p == .web ? "\(p.label) · \(engine ?? "loading…")" : p.label)
@@ -101,7 +121,7 @@ final class VideoController: ObservableObject {
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.player.seek(to: .zero)
-                if self?.isPlaying == true { self?.player.play() }
+                if self?.isPlaying == true { self?.play() }
             }
         }
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] t in
@@ -126,7 +146,15 @@ final class VideoController: ObservableObject {
         statusObservation = nil
     }
 
-    func play() { player.play(); isPlaying = true }
+    /// Plays at the speed chosen in the viewer (1×, 1.5×, 2×).
+    func play() {
+        player.rate = Float(AppSettings.shared.playbackSpeed)
+        isPlaying = true
+    }
+
+    func applySpeed() {
+        if isPlaying { player.rate = Float(AppSettings.shared.playbackSpeed) }
+    }
     func pause() { player.pause(); isPlaying = false }
     func toggle() { isPlaying ? pause() : play() }
 
@@ -167,6 +195,7 @@ struct NativeVideoView: View {
 
 private struct NativeVideoContent: View {
     @ObservedObject var controller: VideoController
+    @ObservedObject private var settings = AppSettings.shared
     let isActive: Bool
     let showControls: Bool
     let onFailure: () -> Void
@@ -196,6 +225,7 @@ private struct NativeVideoContent: View {
                            onEditingChanged: { editing in controller.isScrubbing = editing })
                     .accessibilityIdentifier("videoScrubber")
                     Text(Self.fmt(controller.duration)).font(.caption.monospacedDigit()).foregroundColor(.white)
+                    SpeedButton()
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 .background(Color.black.opacity(0.45))
@@ -208,6 +238,7 @@ private struct NativeVideoContent: View {
         }
         .onDisappear { controller.pause() }
         .onChange(of: controller.failed) { f in if f { onFailure() } }
+        .onChange(of: settings.playbackSpeed) { _ in controller.applySpeed() }
     }
 
     static func fmt(_ s: Double) -> String {

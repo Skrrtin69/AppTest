@@ -40,10 +40,11 @@ final class AppSettings: ObservableObject {
         static let backgroundDownloads = "backgroundDownloads", biometrics = "biometrics", lockGrace = "lockGrace"
         static let updateURL = "updateURL", animateGridGIFs = "animateGridGIFs", autoplayVideos = "autoplayVideos"
         static let blurThumbnails = "blurThumbnails", dimViewed = "dimViewed"
+        static let viewerAspect = "viewerAspect", playbackSpeed = "playbackSpeed", verticalReading = "verticalReading"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
-                          blurThumbnails, dimViewed]
+                          blurThumbnails, dimViewed, viewerAspect, playbackSpeed, verticalReading]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -76,6 +77,15 @@ final class AppSettings: ObservableObject {
     @Published var blurThumbnails: Bool = false { didSet { d.set(blurThumbnails, forKey: K.blurThumbnails) } }
     /// Thumbnails of posts already opened are dimmed.
     @Published var dimViewed: Bool = true { didSet { d.set(dimViewed, forKey: K.dimViewed) } }
+    @Published var viewerAspect: ViewerAspect = .fit { didSet { d.set(viewerAspect.rawValue, forKey: K.viewerAspect) } }
+    /// Video speed for both players: 1, 1.5 or 2.
+    @Published var playbackSpeed: Double = 1 { didSet { d.set(playbackSpeed, forKey: K.playbackSpeed) } }
+    /// Viewer shows posts stacked vertically (comic/webtoon style) instead of paging.
+    @Published var verticalReading: Bool = false { didSet { d.set(verticalReading, forKey: K.verticalReading) } }
+
+    func cycleSpeed() {
+        playbackSpeed = playbackSpeed >= 2 ? 1 : (playbackSpeed >= 1.5 ? 2 : 1.5)
+    }
 
     private init() { load() }
 
@@ -102,6 +112,9 @@ final class AppSettings: ObservableObject {
         autoplayVideos = d.object(forKey: K.autoplayVideos) as? Bool ?? true
         blurThumbnails = d.object(forKey: K.blurThumbnails) as? Bool ?? false
         dimViewed = d.object(forKey: K.dimViewed) as? Bool ?? true
+        viewerAspect = ViewerAspect(rawValue: d.string(forKey: K.viewerAspect) ?? "") ?? .fit
+        playbackSpeed = d.object(forKey: K.playbackSpeed) as? Double ?? 1
+        verticalReading = d.object(forKey: K.verticalReading) as? Bool ?? false
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }
