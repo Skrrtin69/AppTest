@@ -8,6 +8,8 @@ import CoreImage.CIFilterBuiltins
 /// saved to Files.
 struct MediaEditorView: View {
     let post: Post
+    /// Edit this picture instead of loading the post's file (e.g. a grabbed video frame).
+    var initialImage: UIImage? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var source: UIImage?
     @State private var preview: UIImage?
@@ -101,6 +103,7 @@ struct MediaEditorView: View {
     }
 
     func loadSource() async {
+        if let i = initialImage { source = i; renderPreview(); return }
         do {
             let client = AdapterRegistry.shared.adapter(for: post.siteID)?.client
             let img = try await ImagePipeline.shared.image(for: post.mediaURL, maxPixel: 4096, animate: false, client: client)
@@ -160,6 +163,48 @@ struct MediaEditorView: View {
             ToastCenter.shared.show("Saved to Photos", style: .success)
         case .files:
             Presenter.exportData(data, filename: name)
+        }
+    }
+}
+
+/// A frame grabbed from a video: share, save or edit it.
+struct FrameGrabView: View {
+    let image: UIImage
+    let time: Double
+    @Environment(\.dismiss) private var dismiss
+    @State private var editing = false
+
+    var stand_in: Post {
+        Post(id: "frame-\(Int(time * 1000))", siteID: "video", thumbnailURL: URL(fileURLWithPath: "/"),
+             mediaURL: URL(fileURLWithPath: "/"), mediaType: .image, tags: [], sourceURL: nil, metadata: [:])
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 380)
+                    .accessibilityIdentifier("grabbedFrame")
+                Text("\(image.cgImage?.width ?? 0) × \(image.cgImage?.height ?? 0)").font(.footnote).foregroundColor(.secondary)
+                HStack(spacing: 12) {
+                    Button { Presenter.share([image]) } label: { Label("Share", systemImage: "square.and.arrow.up") }
+                    Button {
+                        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                        ToastCenter.shared.show("Saved to Photos", style: .success)
+                    } label: { Label("Photos", systemImage: "photo") }
+                    Button {
+                        if let d = image.pngData() { Presenter.exportData(d, filename: "frame-\(Int(time * 1000)).png") }
+                    } label: { Label("Files", systemImage: "folder") }
+                }
+                .buttonStyle(.bordered)
+                Button { editing = true } label: { Label("Edit", systemImage: "slider.horizontal.below.rectangle") }
+                    .buttonStyle(.borderedProminent)
+                Spacer()
+            }
+            .padding()
+            .navigationTitle(String(format: "Frame at %d:%02d", Int(time) / 60, Int(time) % 60))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .sheet(isPresented: $editing) { MediaEditorView(post: stand_in, initialImage: image) }
         }
     }
 }

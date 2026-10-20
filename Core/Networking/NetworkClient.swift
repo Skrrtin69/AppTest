@@ -74,11 +74,13 @@ final class NetworkClient {
         var attempt = 0
         while true {
             if rateLimited { await limiter.acquire() }
+            let started = Date()
             do {
                 let (data, response) = try await session.data(for: request)
                 guard let http = response as? HTTPURLResponse else {
                     throw AppError.badResponse("Not an HTTP response")
                 }
+                DebugLog.log("HTTP", "\(http.statusCode) · \(Int(Date().timeIntervalSince(started) * 1000)) ms · \(data.count) B · \(DebugLog.redact(request.url))")
                 if (500...599).contains(http.statusCode), attempt < Self.maxRetries {
                     attempt += 1
                     try await backoff(attempt)
@@ -91,6 +93,7 @@ final class NetworkClient {
                 }
                 return (data, http)
             } catch let e as URLError where Self.isRetryable(e) && attempt < Self.maxRetries {
+                DebugLog.log("HTTP", "retry \(attempt + 1): \(e.localizedDescription) · \(DebugLog.redact(request.url))")
                 attempt += 1
                 try await backoff(attempt)
             }

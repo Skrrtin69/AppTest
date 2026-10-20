@@ -13,6 +13,7 @@ struct FavoritesView: View {
     @State private var newCollection = ""
     @State private var showNewCollection = false
     @State private var editingSmart: SmartCollection?
+    @State private var showDupes = false
     @ObservedObject private var smart = SmartCollectionStore.shared
 
     @State private var siteFilter: String?
@@ -83,6 +84,12 @@ struct FavoritesView: View {
             .navigationTitle(mode.rawValue)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    if mode == .favorites && favoritePosts.count > 1 {
+                        Button { showDupes = true } label: { Image(systemName: "square.on.square.dashed") }
+                            .accessibilityLabel("Find look-alike favorites")
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if mode == .favorites {
                         Button(selecting ? "Done" : "Select") { selecting.toggle(); selected = [] }
@@ -97,6 +104,7 @@ struct FavoritesView: View {
             .sheet(item: $collectionBatch) { CollectionPickerSheet(posts: $0.posts) }
             .sheet(isPresented: $showNewCollection) { NewCollectionSheet() }
             .sheet(item: $editingSmart) { SmartCollectionEditor(collection: $0) }
+            .sheet(isPresented: $showDupes) { DuplicatesSheet(posts: favoritePosts) }
         }
         .navigationViewStyle(.stack)
     }

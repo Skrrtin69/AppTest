@@ -641,6 +641,7 @@ struct EmptyStateView: View {
 struct SearchHistorySheet: View {
     let onRun: (String, String) -> Void
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var watch = SearchWatch.shared
     @ObservedObject private var store = LibraryStore.shared
     @ObservedObject private var registry = AdapterRegistry.shared
 
@@ -649,11 +650,33 @@ struct SearchHistorySheet: View {
             List {
                 Section("Saved searches") {
                     if store.savedSearches.isEmpty { Text("Tap the bookmark icon next to the search field to save a search.").foregroundColor(.secondary).font(.footnote) }
+                    else { Text("Swipe a saved search right (or hold it) to be told about new posts.").foregroundColor(.secondary).font(.footnote) }
                     ForEach(store.savedSearches) { s in
-                        Button { onRun(s.query, s.siteID) } label: {
-                            VStack(alignment: .leading) {
-                                Text(s.name)
-                                Text("\(s.query.nonEmpty ?? "(all)") · \(registry.displayName(for: s.siteID))").font(.caption).foregroundColor(.secondary)
+                        Button { watch.markSeen(s.id); onRun(s.query, s.siteID) } label: {
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    HStack(spacing: 6) {
+                                        Text(s.name)
+                                        if watch.isWatching(s.id) { Image(systemName: "bell.fill").font(.caption2).foregroundColor(.accentColor) }
+                                    }
+                                    Text("\(s.query.nonEmpty ?? "(all)") · \(registry.displayName(for: s.siteID))").font(.caption).foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                if watch.newCount(s.id) > 0 {
+                                    Text("\(watch.newCount(s.id)) new").font(.caption.weight(.bold)).foregroundColor(.white)
+                                        .padding(.horizontal, 7).padding(.vertical, 3).background(Capsule().fill(Color.accentColor))
+                                }
+                            }
+                        }
+                        .swipeActions(edge: .leading) {
+                            Button { watch.toggle(s) } label: {
+                                Label(watch.isWatching(s.id) ? "Stop Watching" : "Watch", systemImage: watch.isWatching(s.id) ? "bell.slash" : "bell")
+                            }
+                            .tint(.accentColor)
+                        }
+                        .contextMenu {
+                            Button { watch.toggle(s) } label: {
+                                Label(watch.isWatching(s.id) ? "Stop Watching" : "Watch for New Posts", systemImage: watch.isWatching(s.id) ? "bell.slash" : "bell")
                             }
                         }
                     }

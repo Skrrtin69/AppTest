@@ -179,6 +179,21 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         objectWillChange.send()
     }
 
+    /// The frame on screen right now, full size.
+    func grabFrame() async -> UIImage? {
+        guard let asset = player.currentItem?.asset else { return nil }
+        let gen = AVAssetImageGenerator(asset: asset)
+        gen.appliesPreferredTrackTransform = true
+        gen.requestedTimeToleranceBefore = .zero
+        gen.requestedTimeToleranceAfter = .zero
+        let t = player.currentTime()
+        return await withCheckedContinuation { cont in
+            gen.generateCGImagesAsynchronously(forTimes: [NSValue(time: t)]) { _, cg, _, _, _ in
+                cont.resume(returning: cg.map { UIImage(cgImage: $0) })
+            }
+        }
+    }
+
     func togglePiP() {
         guard let c = pip else { return }
         if c.isPictureInPictureActive { c.stopPictureInPicture() } else { if !isPlaying { play() }; c.startPictureInPicture() }
@@ -297,6 +312,16 @@ private struct NativeVideoContent: View {
                     .accessibilityIdentifier("videoScrubber")
                     Text(Self.fmt(controller.duration)).font(.caption.monospacedDigit()).foregroundColor(.white)
                     SpeedButton()
+                    Button {
+                        Task {
+                            if let img = await controller.grabFrame() {
+                                Presenter.present(UIHostingController(rootView: FrameGrabView(image: img, time: controller.current)))
+                            } else {
+                                ToastCenter.shared.show("Couldn't grab this frame.", style: .error)
+                            }
+                        }
+                    } label: { Image(systemName: "camera").foregroundColor(.white) }
+                    .accessibilityLabel("Grab frame")
                     if controller.pipPossible {
                         Button { controller.togglePiP() } label: {
                             Image(systemName: controller.pipActive ? "pip.exit" : "pip.enter").foregroundColor(.white)

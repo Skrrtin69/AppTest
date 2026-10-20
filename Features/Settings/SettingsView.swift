@@ -9,6 +9,8 @@ struct SettingsView: View {
     @State private var siteCacheSizes: [String: Int] = [:]
     @State private var showPasscodeSetup = false
     @State private var showDecoySetup = false
+    @State private var versionTaps = 0
+    @State private var showDebug = false
     @State private var confirm: ConfirmAction?
 
     enum ConfirmAction: String, Identifiable {
@@ -72,6 +74,7 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("viewerToolbarSettings")
                     Toggle("Swipe the site name to switch sites", isOn: $settings.swipeSites)
+                    Toggle("Two pages side by side in landscape", isOn: $settings.twoPageLandscape)
                     Picker("Double tap a picture", selection: $settings.doubleTapAction) {
                         Text("Zoom").tag("zoom"); Text("Favorite").tag("favorite"); Text("Info").tag("info")
                         Text("Next post").tag("next"); Text("Read Later").tag("readLater"); Text("Nothing").tag("none")
@@ -310,6 +313,13 @@ struct SettingsView: View {
 
                 Section("About") {
                     HStack { Text("Version"); Spacer(); Text("\(AppInfo.version) (\(AppInfo.build))").foregroundColor(.secondary) }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            versionTaps += 1
+                            if versionTaps >= 5 { versionTaps = 0; showDebug = true }
+                        }
+                        .background(NavigationLink(destination: DebugConsoleView(), isActive: $showDebug) { EmptyView() }.opacity(0))
+                        .accessibilityIdentifier("versionRow")
                     HStack {
                         Text("Built-in demo server")
                         Spacer()

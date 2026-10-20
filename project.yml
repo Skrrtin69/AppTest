@@ -58,6 +58,8 @@ targets:
           - processing
           # Picture in Picture keeps playing outside the app.
           - audio
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.skrrtin69.mediadeck.watch
         CFBundleURLTypes:
           - CFBundleURLName: com.skrrtin69.mediadeck
             CFBundleURLSchemes: [mediadeck]

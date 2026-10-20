@@ -146,6 +146,7 @@ struct InfoPanel: View {
                         label: { Label("Copy Media URL", systemImage: "link") }
                 }
                 ExifSection(post: post)
+                if post.mediaType == .image { TextInPictureSection(post: post) }
                 if !post.metadata.isEmpty {
                     Section("Metadata") {
                         ForEach(post.metadata.keys.sorted(), id: \.self) { k in row(k, post.metadata[k] ?? "") }

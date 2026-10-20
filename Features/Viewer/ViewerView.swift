@@ -45,21 +45,29 @@ struct ViewerView: View {
                 } else {
                     // Right-to-left: the pages are laid out in reverse, so the next post is on
                     // the left. (Mirroring the layout instead would also mirror the zoom views.)
-                    TabView(selection: pagerSelection) {
-                        ForEach(posts.indices, id: \.self) { slot in
-                            let i = postIndex(atSlot: slot)
-                            ViewerPage(post: posts[i], isActive: i == index, isNear: abs(i - index) <= 2,
-                                       aspect: settings.viewerAspect, showControls: chrome,
-                                       onFinished: { if i == index { advance() } },
-                                       onZoom: { zoomed = $0 },
-                                       onTap: handleTap,
-                                       onDoubleTap: handleDoubleTap,
-                                       onSize: { sizes[posts[i].key] = $0 })
+                    if spreads {
+                        // Landscape: two posts side by side, like an open book.
+                        TabView(selection: spreadSelection) {
+                            ForEach(0..<spreadCount, id: \.self) { slot in
+                                let sp = settings.readingRTL ? spreadCount - 1 - slot : slot
+                                let pair = [sp * 2, sp * 2 + 1].filter { posts.indices.contains($0) }
+                                HStack(spacing: 2) {
+                                    ForEach(settings.readingRTL ? pair.reversed() : pair, id: \.self) { i in page(i) }
+                                }
                                 .tag(slot)
+                            }
                         }
+                        .tabViewStyle(.page(indexDisplayMode: .never))
+                        .id("spreads-\(settings.readingRTL)")
+                    } else {
+                        TabView(selection: pagerSelection) {
+                            ForEach(posts.indices, id: \.self) { slot in
+                                page(postIndex(atSlot: slot)).tag(slot)
+                            }
+                        }
+                        .tabViewStyle(.page(indexDisplayMode: .never))
+                        .id(settings.readingRTL)
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .id(settings.readingRTL)
                     .simultaneousGesture(verticalDrag)
                 }
             }
@@ -121,6 +129,27 @@ struct ViewerView: View {
         .sheet(item: $reverseFor) { ReverseSearchSheet(post: $0.posts[0]) }
         .sheet(item: $quickHide) { QuickHideSheet(post: $0.posts[0]) }
         .sheet(item: $editing) { MediaEditorView(post: $0.posts[0]) }
+    }
+
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    /// Two-page spreads: on, sideways, and more than one post.
+    var spreads: Bool { settings.twoPageLandscape && verticalSizeClass == .compact && posts.count > 1 }
+    var spreadCount: Int { (posts.count + 1) / 2 }
+
+    var spreadSelection: Binding<Int> {
+        Binding(get: { settings.readingRTL ? spreadCount - 1 - index / 2 : index / 2 },
+                set: { slot in index = (settings.readingRTL ? spreadCount - 1 - slot : slot) * 2 })
+    }
+
+    func page(_ i: Int) -> some View {
+        ViewerPage(post: posts[i], isActive: i == index, isNear: abs(i - index) <= 2,
+                   aspect: settings.viewerAspect, showControls: chrome,
+                   onFinished: { if i == index { advance() } },
+                   onZoom: { zoomed = $0 },
+                   onTap: handleTap,
+                   onDoubleTap: handleDoubleTap,
+                   onSize: { sizes[posts[i].key] = $0 })
     }
 
     /// Pager position ↔ post index (reversed in right-to-left mode).
@@ -367,7 +396,8 @@ struct ViewerView: View {
             return
         }
         let forward = (x > 0.7) != settings.readingRTL
-        let target = index + (forward ? 1 : -1)
+        let step = spreads ? 2 : 1
+        let target = (spreads ? index / 2 * 2 : index) + (forward ? step : -step)
         guard posts.indices.contains(target) else {
             ToastCenter.shared.show(forward ? "Last post" : "First post")
             return

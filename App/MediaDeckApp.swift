@@ -23,6 +23,7 @@ struct MediaDeckApp: App {
                 if boot.ready {
                     ClipboardWatcher.shared.check()
                     ShareInbox.process()
+                    SearchWatch.shared.checkIfDue()
                 }
             case .inactive:
                 break
@@ -34,6 +35,14 @@ struct MediaDeckApp: App {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        // Background refresh for watched saved searches must be registered before launch ends.
+        SearchWatch.register()
+        SearchWatch.schedule()
+        return true
+    }
+
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         OrientationLock.mask
     }

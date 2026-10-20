@@ -57,7 +57,7 @@ final class AppSettings: ObservableObject {
         static let batterySaver = "batterySaver", cacheExpiryDays = "cacheExpiryDays", hiddenViewerButtons = "hiddenViewerButtons"
         static let swipeSites = "swipeSites", detectClipboardLinks = "detectClipboardLinks", dataSaver = "dataSaver",
                          wifiOnlyMedia = "wifiOnlyMedia", mixWithOthers = "mixWithOthers",
-                         smartThumbnails = "smartThumbnails",
+                         smartThumbnails = "smartThumbnails", twoPageLandscape = "twoPageLandscape",
                          doubleTapAction = "doubleTapAction", swipeUpAction = "swipeUpAction", swipeDownAction = "swipeDownAction"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
@@ -66,7 +66,7 @@ final class AppSettings: ObservableObject {
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
                           readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
                           detectClipboardLinks, dataSaver, wifiOnlyMedia, mixWithOthers,
-                          smartThumbnails, doubleTapAction, swipeUpAction, swipeDownAction]
+                          smartThumbnails, twoPageLandscape, doubleTapAction, swipeUpAction, swipeDownAction]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -146,6 +146,8 @@ final class AppSettings: ObservableObject {
 
     /// Square thumbnails are cropped around the interesting part of the picture.
     @Published var smartThumbnails: Bool = true { didSet { d.set(smartThumbnails, forKey: K.smartThumbnails) } }
+    /// Two posts side by side when the phone is sideways (like an open book).
+    @Published var twoPageLandscape: Bool = true { didSet { d.set(twoPageLandscape, forKey: K.twoPageLandscape) } }
     /// Viewer gestures: what a double tap / swipe up / swipe down does.
     @Published var doubleTapAction: String = "zoom" { didSet { d.set(doubleTapAction, forKey: K.doubleTapAction) } }
     @Published var swipeUpAction: String = "hide" { didSet { d.set(swipeUpAction, forKey: K.swipeUpAction) } }
@@ -239,6 +241,7 @@ final class AppSettings: ObservableObject {
         wifiOnlyMedia = d.object(forKey: K.wifiOnlyMedia) as? Bool ?? false
         mixWithOthers = d.object(forKey: K.mixWithOthers) as? Bool ?? false
         smartThumbnails = d.object(forKey: K.smartThumbnails) as? Bool ?? true
+        twoPageLandscape = d.object(forKey: K.twoPageLandscape) as? Bool ?? true
         doubleTapAction = d.string(forKey: K.doubleTapAction) ?? "zoom"
         swipeUpAction = d.string(forKey: K.swipeUpAction) ?? "hide"
         swipeDownAction = d.string(forKey: K.swipeDownAction) ?? "close"
