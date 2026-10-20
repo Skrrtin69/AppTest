@@ -429,6 +429,8 @@ struct SearchTabView: View {
     @ObservedObject var tab: SearchTabModel
     @ObservedObject var settings = AppSettings.shared
     @State private var accountFor: AccountRequest?
+    /// Scrolled far enough down to offer the floating "back to top" button.
+    @State private var showTopButton = false
     let onOpen: ([Post], Int) -> Void
     let onAddToCollection: ([Post]) -> Void
 
@@ -459,6 +461,9 @@ struct SearchTabView: View {
                 ScrollViewReader { proxy in
                 ScrollView {
                     Color.clear.frame(height: 0).id("gridTop")
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: GridTopOffset.self, value: g.frame(in: .named("grid")).minY)
+                        })
                     PostGrid(posts: visible, selecting: tab.selecting, selected: tab.selected, showSource: tab.isMerged,
                              onTap: { i in
                                  if tab.selecting { tab.toggleSelect(visible[i]) } else { Haptics.tap(); onOpen(visible, i) }
@@ -469,8 +474,28 @@ struct SearchTabView: View {
                         footer
                     }
                 }
+                .coordinateSpace(name: "grid")
+                .onPreferenceChange(GridTopOffset.self) { y in
+                    // More than two screens down.
+                    let far = y < -UIScreen.main.bounds.height * 2
+                    if far != showTopButton { withAnimation(.easeInOut(duration: 0.2)) { showTopButton = far } }
+                }
                 .refreshable { await tab.refresh() }
                 .onChange(of: tab.scrollToTopToken) { _ in withAnimation { proxy.scrollTo("gridTop", anchor: .top) } }
+                .overlay(alignment: .bottomTrailing) {
+                    if showTopButton && !tab.selecting {
+                        Button { Haptics.tap(); tab.scrollToTopToken += 1 } label: {
+                            Image(systemName: "arrow.up").font(.headline.weight(.bold))
+                                .foregroundColor(.white)
+                                .frame(width: 46, height: 46)
+                                .background(Circle().fill(Color.accentColor).shadow(radius: 4))
+                        }
+                        .padding(16)
+                        .transition(.scale.combined(with: .opacity))
+                        .accessibilityLabel("Scroll to top")
+                        .accessibilityIdentifier("scrollToTopButton")
+                    }
+                }
                 }
             }
             if tab.selecting { selectionBar }
@@ -659,4 +684,10 @@ struct SearchHistorySheet: View {
             }
         }
     }
+}
+
+/// The grid's top edge in its scroll view (negative once scrolled down).
+struct GridTopOffset: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }

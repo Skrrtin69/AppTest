@@ -26,6 +26,7 @@ targets:
       - path: Features
       - path: Adapters
       - path: MockServer
+      - path: Shared
       - path: Resources
         excludes:
           - "Player/**"
@@ -55,6 +56,11 @@ targets:
         UIBackgroundModes:
           - fetch
           - processing
+          # Picture in Picture keeps playing outside the app.
+          - audio
+        CFBundleURLTypes:
+          - CFBundleURLName: com.skrrtin69.mediadeck
+            CFBundleURLSchemes: [mediadeck]
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         NSAppTransportSecurity:
@@ -75,3 +81,61 @@ targets:
         DEBUG_INFORMATION_FORMAT: dwarf
         # Charts exists only on iOS 16+; weak-link it so iOS 15 can still launch.
         OTHER_LDFLAGS: ["$(inherited)", "-weak_framework", "Charts"]
+    dependencies:
+      - target: MediaDeckWidget
+      - target: MediaDeckShare
+
+  # Home-screen widget: a random favorite (reads thumbnails the app saves in the app group).
+  MediaDeckWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: Shared
+    info:
+      path: Support/Widget-Info.plist
+      properties:
+        CFBundleDisplayName: MediaDeck
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.skrrtin69.mediadeck.widget
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        DEBUG_INFORMATION_FORMAT: dwarf
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+
+  # Share sheet: send a link or picture to MediaDeck.
+  MediaDeckShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Share
+      - path: Shared
+    info:
+      path: Support/Share-Info.plist
+      properties:
+        CFBundleDisplayName: MediaDeck
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsImageWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.skrrtin69.mediadeck.share
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        DEBUG_INFORMATION_FORMAT: dwarf

@@ -139,6 +139,7 @@ struct InfoPanel: View {
                     Button { UIPasteboard.general.string = post.mediaURL.absoluteString; ToastCenter.shared.show("Media URL copied") }
                         label: { Label("Copy Media URL", systemImage: "link") }
                 }
+                ExifSection(post: post)
                 if !post.metadata.isEmpty {
                     Section("Metadata") {
                         ForEach(post.metadata.keys.sorted(), id: \.self) { k in row(k, post.metadata[k] ?? "") }

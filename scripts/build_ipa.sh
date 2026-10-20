@@ -29,6 +29,13 @@ APP=build/dd/Build/Products/Release-iphoneos/MediaDeck.app
 test -d "$APP"
 
 # Fakesign with entitlements (TrollStore also accepts this; it re-signs on install).
+# Extensions first (each with its own entitlements), then the app itself.
+for EXT in "$APP"/PlugIns/*.appex; do
+  [ -d "$EXT" ] || continue
+  NAME=$(basename "$EXT" .appex)
+  ldid -SSupport/$NAME.entitlements "$EXT/$NAME"
+  echo "Signed extension $NAME"
+done
 ldid -SSupport/MediaDeck.entitlements "$APP/MediaDeck"
 
 rm -rf build/Payload build/MediaDeck.ipa

@@ -20,7 +20,12 @@ struct MediaDeckApp: App {
             case .active:
                 LockManager.shared.willEnterForeground()
                 Task { await boot.resume() }
-                if boot.ready { ClipboardWatcher.shared.check() }
+                if boot.ready {
+                    ClipboardWatcher.shared.check()
+        ShareInbox.process()
+        WidgetFeedWriter.scheduleUpdate()
+                    ShareInbox.process()
+                }
             case .inactive:
                 break
             @unknown default:
@@ -55,7 +60,7 @@ final class BootModel: ObservableObject {
         Theme.apply(AppSettings.shared.theme)
         OverlayWindow.install()
         // Video sound plays even with the silent switch on, like other media apps.
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        AudioSessionConfig.apply()
         if await MockServer.shared.start() == nil {
             serverProblem = "The built-in demo server couldn't start, so the demo sites won't load. Your own adapters still work."
             ToastCenter.shared.show(serverProblem!, style: .error)
@@ -126,6 +131,9 @@ struct RootView: View {
         }
         .preferredColorScheme(settings.theme.colorScheme)
         .onChange(of: settings.theme) { Theme.apply($0) }
+        .onChange(of: settings.mixWithOthers) { _ in AudioSessionConfig.apply() }
+        .onOpenURL { url in Task { @MainActor in ShareInbox.handle(url) } }
+        .sheet(item: $router.sharedImage) { SharedImageSheet(shared: $0) }
     }
 }
 
@@ -173,5 +181,14 @@ enum Theme {
                 w.tintColor = tint
             }
         }
+    }
+}
+
+/// Video sound plays even with the silent switch on, like other media apps. With "Play
+/// alongside other audio" on, it mixes with music or podcasts instead of stopping them.
+enum AudioSessionConfig {
+    static func apply() {
+        let options: AVAudioSession.CategoryOptions = AppSettings.shared.mixWithOthers ? [.mixWithOthers] : []
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: options)
     }
 }

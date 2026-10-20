@@ -54,7 +54,10 @@ enum MockMedia {
             default: scale = 280 / max(full.width, full.height)
             }
             let size = CGSize(width: (full.width * scale).rounded(), height: (full.height * scale).rounded())
-            return drawPattern(item: item, size: size, videoBadge: folder == "vthumb")
+            let png = drawPattern(item: item, size: size, videoBadge: folder == "vthumb")
+            // Every third full-size picture carries made-up camera details (EXIF demo).
+            if folder == "img", item.kind == "png", n % 3 == 0, let p = png { return withDemoEXIF(p, n: n) ?? png }
+            return png
         default:
             return nil
         }
@@ -161,6 +164,40 @@ enum MockMedia {
             }
         }
         return image.pngData()
+    }
+
+    /// Re-encodes a picture as JPEG with synthetic EXIF/TIFF data (and, for some, a made-up
+    /// location) so the Info panel's photo details can be shown.
+    static func withDemoEXIF(_ data: Data, n: Int) -> Data? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil),
+              let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return nil }
+        let out = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(out, "public.jpeg" as CFString, 1, nil) else { return nil }
+        var props: [CFString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: 0.9,
+            kCGImagePropertyTIFFDictionary: [
+                kCGImagePropertyTIFFMake: "MediaDeck",
+                kCGImagePropertyTIFFModel: "Demo Camera \(n % 4 + 1)",
+                kCGImagePropertyTIFFSoftware: "MediaDeck demo server",
+                kCGImagePropertyTIFFArtist: "demo_uploader_\(n % 4)",
+            ],
+            kCGImagePropertyExifDictionary: [
+                kCGImagePropertyExifExposureTime: 1.0 / Double([60, 125, 250, 500][n % 4]),
+                kCGImagePropertyExifFNumber: [1.8, 2.8, 4.0, 5.6][n % 4],
+                kCGImagePropertyExifISOSpeedRatings: [[100, 200, 400, 800][n % 4]],
+                kCGImagePropertyExifFocalLength: [24.0, 35.0, 50.0, 85.0][n % 4],
+                kCGImagePropertyExifLensModel: "Demo Lens \([24, 35, 50, 85][n % 4]) mm",
+                kCGImagePropertyExifDateTimeOriginal: String(format: "2026:0%d:1%d 12:%02d:00", n % 9 + 1, n % 10, n % 60),
+            ],
+        ]
+        if n % 6 == 0 {
+            props[kCGImagePropertyGPSDictionary] = [
+                kCGImagePropertyGPSLatitude: 12.3456, kCGImagePropertyGPSLatitudeRef: "N",
+                kCGImagePropertyGPSLongitude: 65.4321, kCGImagePropertyGPSLongitudeRef: "E",
+            ]
+        }
+        CGImageDestinationAddImage(dest, img, props as CFDictionary)
+        return CGImageDestinationFinalize(dest) ? out as Data : nil
     }
 
     /// Looping animated GIF: variant 1 = orbiting dot, variant 2 = color-cycling bars.

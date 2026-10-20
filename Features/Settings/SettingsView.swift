@@ -46,6 +46,8 @@ struct SettingsView: View {
                     }
                     Toggle("Animate GIFs in grids", isOn: $settings.animateGridGIFs)
                     Toggle("Autoplay videos in viewer", isOn: $settings.autoplayVideos)
+                    Toggle("Play alongside other audio", isOn: $settings.mixWithOthers)
+                        .accessibilityIdentifier("mixWithOthers")
                     Toggle("Prefer lighter images in the viewer", isOn: $settings.preferLighter)
                     Toggle("Blur thumbnails until tapped", isOn: $settings.blurThumbnails)
                     Toggle("Dim posts I've already opened", isOn: $settings.dimViewed)

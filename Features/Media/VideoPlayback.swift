@@ -114,8 +114,12 @@ struct MediaVideoView: View {
 // MARK: - Native (AVPlayer + AVPlayerLayer)
 
 @MainActor
-final class VideoController: ObservableObject {
+final class VideoController: NSObject, ObservableObject, AVPictureInPictureControllerDelegate {
     let player: AVPlayer
+    @Published var pipActive = false
+    private var pip: AVPictureInPictureController?
+    /// Videos playing in Picture in Picture are kept alive here after the viewer closes.
+    static var floating: VideoController?
     @Published var isPlaying = false
     @Published var current: Double = 0
     @Published var duration: Double = 0
@@ -133,6 +137,7 @@ final class VideoController: ObservableObject {
     init(url: URL) {
         let item = AVPlayerItem(asset: AVURLAsset.withSiteHeaders(url))
         player = AVPlayer(playerItem: item)
+        super.init()
         player.isMuted = false
         // Loop by default.
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
@@ -159,6 +164,39 @@ final class VideoController: ObservableObject {
             }
         }
     }
+
+    var pipPossible: Bool { pip != nil && AVPictureInPictureController.isPictureInPictureSupported() }
+
+    /// Called once the video's layer exists.
+    func attach(layer: AVPlayerLayer) {
+        guard pip == nil, AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        let c = AVPictureInPictureController(playerLayer: layer)
+        c?.delegate = self
+        // Going to the Home Screen while a video plays continues it in a floating window.
+        c?.canStartPictureInPictureAutomaticallyFromInline = true
+        pip = c
+        objectWillChange.send()
+    }
+
+    func togglePiP() {
+        guard let c = pip else { return }
+        if c.isPictureInPictureActive { c.stopPictureInPicture() } else { if !isPlaying { play() }; c.startPictureInPicture() }
+    }
+
+    nonisolated func pictureInPictureControllerDidStartPictureInPicture(_ c: AVPictureInPictureController) {
+        Task { @MainActor in self.pipActive = true; VideoController.floating = self }
+    }
+
+    nonisolated func pictureInPictureControllerDidStopPictureInPicture(_ c: AVPictureInPictureController) {
+        Task { @MainActor in
+            self.pipActive = false
+            // If the viewer was closed meanwhile, the floating video is finished now.
+            if VideoController.floating === self { VideoController.floating = nil; if self.viewGone { self.teardown() } }
+        }
+    }
+
+    /// The viewer page went away while Picture in Picture was running.
+    var viewGone = false
 
     /// Called when the view goes away; removes observers so the player can be released.
     func teardown() {
@@ -214,7 +252,12 @@ struct NativeVideoView: View {
             }
         }
         .onDisappear {
-            holder.controller?.teardown()
+            // A video in Picture in Picture keeps playing after the viewer closes.
+            if let c = holder.controller, c.pipActive {
+                c.viewGone = true
+            } else {
+                holder.controller?.teardown()
+            }
             holder.controller = nil
         }
     }
@@ -229,7 +272,7 @@ private struct NativeVideoContent: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            PlayerLayerView(player: controller.player)
+            PlayerLayerView(player: controller.player, onLayer: { controller.attach(layer: $0) })
                 .contentShape(Rectangle())
                 .onTapGesture { controller.toggle() }
                 .accessibilityIdentifier("videoSurface")
@@ -253,6 +296,12 @@ private struct NativeVideoContent: View {
                     .accessibilityIdentifier("videoScrubber")
                     Text(Self.fmt(controller.duration)).font(.caption.monospacedDigit()).foregroundColor(.white)
                     SpeedButton()
+                    if controller.pipPossible {
+                        Button { controller.togglePiP() } label: {
+                            Image(systemName: controller.pipActive ? "pip.exit" : "pip.enter").foregroundColor(.white)
+                        }
+                        .accessibilityLabel(controller.pipActive ? "Stop Picture in Picture" : "Picture in Picture")
+                    }
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 .background(Color.black.opacity(0.45))
@@ -262,9 +311,9 @@ private struct NativeVideoContent: View {
         .onAppear { if isActive && AppSettings.shared.videosAutoplay { controller.play() } }
         .onChange(of: isActive) { active in
             controller.isActivePage = active
-            if active { if AppSettings.shared.videosAutoplay { controller.play() } } else { controller.pause() }
+            if active { if AppSettings.shared.videosAutoplay { controller.play() } } else if !controller.pipActive { controller.pause() }
         }
-        .onDisappear { controller.pause() }
+        .onDisappear { if !controller.pipActive { controller.pause() } }
         .onChange(of: controller.failed) { f in if f { onFailure() } }
         .onChange(of: settings.playbackSpeed) { _ in controller.applySpeed() }
     }
@@ -280,6 +329,8 @@ private struct NativeVideoContent: View {
 struct PlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
     var gravity: AVLayerVideoGravity = .resizeAspect
+    /// Gets the layer once (for Picture in Picture).
+    var onLayer: ((AVPlayerLayer) -> Void)? = nil
 
     final class LayerView: UIView {
         override class var layerClass: AnyClass { AVPlayerLayer.self }
@@ -291,6 +342,7 @@ struct PlayerLayerView: UIViewRepresentable {
         v.backgroundColor = .black
         v.playerLayer.player = player
         v.playerLayer.videoGravity = gravity
+        if let cb = onLayer { DispatchQueue.main.async { cb(v.playerLayer) } }
         return v
     }
 

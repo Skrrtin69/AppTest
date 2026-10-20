@@ -83,6 +83,7 @@ final class LibraryStore: ObservableObject {
     private func commit() {
         stack.save()
         reload()
+        Task { @MainActor in WidgetFeedWriter.scheduleUpdate() }
     }
 
     // MARK: Favorites

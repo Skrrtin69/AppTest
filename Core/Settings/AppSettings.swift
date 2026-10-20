@@ -50,14 +50,14 @@ final class AppSettings: ObservableObject {
         static let readingRTL = "readingRTL", tapZones = "tapZones", rotationLock = "rotationLock"
         static let batterySaver = "batterySaver", cacheExpiryDays = "cacheExpiryDays", hiddenViewerButtons = "hiddenViewerButtons"
         static let swipeSites = "swipeSites", detectClipboardLinks = "detectClipboardLinks", dataSaver = "dataSaver",
-                         wifiOnlyMedia = "wifiOnlyMedia"
+                         wifiOnlyMedia = "wifiOnlyMedia", mixWithOthers = "mixWithOthers"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
                           blurThumbnails, dimViewed, viewerAspect, playbackSpeed, verticalReading,
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
                           readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
-                          detectClipboardLinks, dataSaver, wifiOnlyMedia]
+                          detectClipboardLinks, dataSaver, wifiOnlyMedia, mixWithOthers]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -131,6 +131,9 @@ final class AppSettings: ObservableObject {
 
     /// On mobile data, full-size pictures and videos wait for a tap (thumbnails still load).
     @Published var wifiOnlyMedia: Bool = false { didSet { d.set(wifiOnlyMedia, forKey: K.wifiOnlyMedia) } }
+
+    /// Video sound mixes with other apps' audio instead of interrupting it.
+    @Published var mixWithOthers: Bool = false { didSet { d.set(mixWithOthers, forKey: K.mixWithOthers) } }
 
     var mediaWaitsForWiFi: Bool { wifiOnlyMedia && NetworkStatus.shared.onMeteredData }
 
@@ -218,6 +221,7 @@ final class AppSettings: ObservableObject {
         detectClipboardLinks = d.object(forKey: K.detectClipboardLinks) as? Bool ?? true
         dataSaver = d.string(forKey: K.dataSaver) ?? "off"
         wifiOnlyMedia = d.object(forKey: K.wifiOnlyMedia) as? Bool ?? false
+        mixWithOthers = d.object(forKey: K.mixWithOthers) as? Bool ?? false
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }
