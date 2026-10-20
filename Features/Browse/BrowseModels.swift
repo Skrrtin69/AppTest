@@ -59,8 +59,10 @@ final class SearchTabModel: ObservableObject, Identifiable {
     /// A query that's only digits is treated as a post ID when the site has a post address.
     var idQuery: String? {
         let t = query.trimmingCharacters(in: .whitespaces)
+        // Works with or without a post address: without one, the post is found by an
+        // "id:N" search (see GenericAdapter.fetchPost).
         guard !t.isEmpty, t.allSatisfy(\.isNumber), !isMerged,
-              AdapterRegistry.shared.config(for: siteID)?.postPath.nonEmpty != nil else { return nil }
+              AdapterRegistry.shared.config(for: siteID) != nil else { return nil }
         return t
     }
 
