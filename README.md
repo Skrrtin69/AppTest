@@ -238,6 +238,8 @@ See `DECISIONS.md` for design choices and `BLOCKERS.md` for open issues.
 
 Settings → Sites & Adapters → **Auto-configure from URL** (or the **Auto-configure from URL** button inside the adapter form, which fills that form in place).
 
+**Just the site's address works too.** If you paste only a site's address (for example `https://example.org`, with no path), Auto-Configure tries three common API address shapes in order: `/index.php?page=dapi&s=post&q=index&json=1&tags={tags}&pid={page}`, `/posts.json?tags={tags}&page={page}` and `/api/v1/posts?tags={tags}&page={page}`. It uses the first one that answers with JSON and puts that address in the field. A webpage or an error (such as 404) moves on to the next shape. If none works, you see: "Couldn't automatically resolve the API address. Please paste the full JSON API URL manually."
+
 1. Paste the site's search address with `{tags}` and `{page}` (or `{cursor}`) placeholders, and type a sample tag that has results. **Try a demo address** fills in demo examples.
 2. Tap **Analyze**. MediaDeck downloads page 1, finds the list of results, looks at the first three, and proposes every field.
 3. Each field shows a dot (green = sure, yellow = likely, red = check this) and one sentence saying exactly why it was chosen.
