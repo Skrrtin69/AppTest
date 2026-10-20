@@ -315,11 +315,6 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
             switch state {
             case .playing:
                 markReady()
-                if pauseOnStart {
-                    pauseOnStart = false
-                    player.pause()
-                    player.audio?.isMuted = mutedBeforePeek
-                }
             case .error:
                 // Errors from the stream being closed for the background don't count.
                 guard !suspended else { return }
@@ -344,6 +339,12 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
         let now = Double(player.time.intValue) / 1000
         DispatchQueue.main.async { [self] in
             markReady()
+            // Reopened while paused: the first time update means a frame is on screen.
+            if pauseOnStart {
+                pauseOnStart = false
+                player.pause()
+                player.audio?.isMuted = mutedBeforePeek
+            }
             position = p
             duration = length
             isPlaying = player.isPlaying
