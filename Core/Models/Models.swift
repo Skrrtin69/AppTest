@@ -38,6 +38,8 @@ struct SearchResult {
     let hasNextPage: Bool
     let currentPage: Int
     let nextCursor: String?
+    /// Signs the site is limiting what guests see (see GuestLimits), for a banner.
+    var notes: [String] = []
 }
 
 struct Post: Codable, Hashable, Identifiable {

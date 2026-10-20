@@ -232,10 +232,8 @@ final class DownloadManager: NSObject, ObservableObject {
             task = session.downloadTask(withResumeData: rd)
         } else {
             var req = URLRequest(url: item.remoteURL)
-            if let a = AdapterRegistry.shared.config(for: item.post.siteID) {
-                req.setValue(a.userAgent?.nonEmpty ?? NetworkClient.defaultUserAgent, forHTTPHeaderField: "User-Agent")
-                for (k, v) in a.headers { req.setValue(v, forHTTPHeaderField: k) }
-            }
+            let client = AdapterRegistry.shared.adapter(for: item.post.siteID)?.client ?? NetworkClient.forMedia(item.remoteURL)
+            for (k, v) in client.mediaHeaders { req.setValue(v, forHTTPHeaderField: k) }
             task = session.downloadTask(with: req)
         }
         task.taskDescription = item.id

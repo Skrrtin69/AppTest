@@ -39,32 +39,59 @@ Status per item is tracked in commits and in BLOCKERS.md.
 - Landscape support, square-thumbnail toggle, hide adapters without deleting, grid spacing slider (0–12 pt).
 - Dismissible banners (X button and swipe up).
 
-## Phase 7: Account Sync & Adapter Intelligence
-- **API auto-discovery:** paste a root URL; probe common paths, read HTML hints and headers to find the JSON endpoint.
-- **Guest-limits detection:** notice when a site restricts features without login, and prompt to log in.
-- **Native settings and blacklist import:** after login, fetch native settings; review a native blacklist in a checklist before merging.
-- **Conditional capabilities:** detect supported features (voting, related tags, wikis, aliases) and only show those controls.
-- **Quick registration:** in-app WKWebView to register an account.
+## Critical Fixes (added mid-Phase 7)
+- **Hotlink bypass:** every thumbnail/media request carries the adapter's headers (Referer, User-Agent…).
+- **Protocol sanitization:** `//` and `http://` media URLs are upgraded to https (non-local hosts, falling back to http if https fails).
 
-## Phase 8: Power User UI
-- **Tag colors and formats:** color-code tag categories; prefer lighter formats (JPG/WebP) via a setting.
-- **Utilities:** copy hash/MD5; undo toast for deletions; viewer background cycle (black/white/checkerboard); auto-hide system UI in fullscreen; copy URL/ID from the grid.
-- **Siri/Shortcuts:** trigger searches through AppIntents.
+## Phase 7: Zero-Config Auth & Capability Prober
+- API auto-discovery from a root URL.
+- Capability Report: public vs login required, guest limits (max tags, preview only), locked features.
+- Zero-config auth prober: just ask for the key; try Bearer, X-Api-Key and ?api_key=; reveal a User ID field when the error asks for one.
+- Theme-aware guided key retrieval in a WKWebView (theme CSS injection, key/user-ID scraping, auto-fill).
+- Live tag-separator probe (_, space, -).
+- Native settings and blacklist import with a review checklist.
+- Conditional capabilities (voting, related tags, wikis, aliases).
+
+## Phase 8: Custom Themes, Unified Favorites & Power User UI
+- Custom themes via ColorPicker, applied to SwiftUI and WebView CSS.
+- Dual-save favorites (local plus account sync), a unified grid with site filter chips and search, cloud/phone icons, sync prompt on login.
+- Tag category colors; prefer lighter formats; copy hash/MD5; undo toast for deletions; viewer background cycling; auto-hide system UI; copy URL/ID from the grid.
+- Siri/Shortcuts via AppIntents.
 
 ## Phase 9: Continuous Playback & Autoplay
-- **End-of-media behavior:** Loop Current vs Auto-Advance toggle in the viewer toolbar.
-- Videos advance on completion, GIFs after one cycle, images on a timer; loop back to the start at the end of a feed.
+- Loop Current vs Auto-Advance: videos advance on completion, GIFs after one cycle, images on a timer; loop at the end of a feed.
 
 ## Phase 10: Long-Form & Gallery Reading
-- Multi-page galleries (posts with arrays of images).
-- Memory-efficient tall images (ImageIO downsampling).
-- Vertical stacking for seamless reading; "1 / 24" page indicator.
+- Multi-page galleries, ImageIO-downsampled tall images, vertical stacking, "1 / 24" page indicator.
 
 ## Phase 11: Reader Ergonomics & Customization
-- RTL reading mode (inverted swipes and counters).
-- Tap-to-turn zones.
-- Orientation lock, Battery Saver mode, cache expiration (7/14/30 days/Never).
-- Customizable viewer toolbar; quick site switching by swiping.
+- RTL mode; tap-to-turn zones; orientation lock; Battery Saver; cache expiration; customizable viewer toolbar; swipe to switch sites.
+
+## Phase 12: Ultimate Workflow QoL
+- Clipboard link detection.
+- Reverse image search: configurable native and inline-web engines.
+- Dominant-color background; data saver (low-res first); swipe-to-blacklist; mute uploader.
+
+## Phase 13: Premium Privacy, Management, and Shortcuts
+- Decoy vault; storage breakdown chart; long-press tag actions; Wi-Fi-only media; database backup/restore; iPad split screen.
+
+## Phase 14: iOS System Integration
+- Share Extension; Picture-in-Picture; Random Favorite widget; audio mixing; EXIF viewer; floating scroll-to-top button.
+
+## Phase 15: Advanced Data, Layouts, and Workflows
+- iCloud sync; masonry grid; Read Later queue; visual query builder; download swipe actions; tag translation.
+
+## Phase 16: Advanced Frameworks & Customization
+- Vision smart thumbnails; smart collections; global autocomplete; gesture remapping; media editor (trim/crop); external display.
+
+## Phase 17: Machine Learning, Background Tasks, and Advanced Reading
+- OCR; feature-print near-duplicate detection; double-page landscape; saved-search watch notifications; video frame grabber; debug console.
+
+## Phase 18: Sharing, AI Filtering, and System Shortcuts
+- Adapter QR share/scan; on-device content blur; text-to-speech; Live Activities; deep links; image upscaling.
+
+## Phase 19: Edge-Case Media & Format Handling
+- ZIP frame animations (`zipExtensions`); HTML interception; HLS (.m3u8); animated WebP/APNG; case-insensitive extensions; zero-byte detection.
 
 ## Testing Matrix
 Against the mock server:

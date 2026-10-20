@@ -49,7 +49,7 @@ enum PlayerRoutes {
         var r = URLRequest(url: url)
         if let range = req.headers["range"] { r.setValue(range, forHTTPHeaderField: "Range") }
         let client = req.query["site"].flatMap { AdapterRegistry.shared.adapter(for: $0)?.client } ?? NetworkClient.shared
-        for (k, v) in client.config.headers { r.setValue(v, forHTTPHeaderField: k) }
+        for (k, v) in client.mediaHeaders { r.setValue(v, forHTTPHeaderField: k) }
         do {
             let (data, resp) = try await client.session.data(for: r)
             guard let http = resp as? HTTPURLResponse else { return .json(["error": "bad response"], status: 502) }

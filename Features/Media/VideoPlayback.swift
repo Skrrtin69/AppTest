@@ -14,7 +14,7 @@ actor PlaybackRouter {
 
     func route(for url: URL) async -> PlaybackPath {
         if let c = cache[url] { return c }
-        let asset = AVURLAsset(url: url)
+        let asset = AVURLAsset.withSiteHeaders(url)
         // Race the playability check against a timeout so a slow server can't hang the viewer.
         let playable: Bool = await withTaskGroup(of: Bool?.self) { group in
             group.addTask {
@@ -41,6 +41,16 @@ actor PlaybackRouter {
 }
 
 /// Picks the player for `url` and shows a small label saying which one is in use.
+extension AVURLAsset {
+    /// AVPlayer ignores URLSession settings, so the adapter's headers (Referer, User-Agent…)
+    /// are passed through the asset's HTTP header option.
+    static func withSiteHeaders(_ url: URL) -> AVURLAsset {
+        guard !url.isFileURL else { return AVURLAsset(url: url) }
+        let headers = NetworkClient.forMedia(url).mediaHeaders
+        return AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+    }
+}
+
 /// 1× → 1.5× → 2× → 1×, shared by both players.
 struct SpeedButton: View {
     @ObservedObject private var settings = AppSettings.shared
@@ -114,7 +124,7 @@ final class VideoController: ObservableObject {
     var isScrubbing = false
 
     init(url: URL) {
-        let item = AVPlayerItem(url: url)
+        let item = AVPlayerItem(asset: AVURLAsset.withSiteHeaders(url))
         player = AVPlayer(playerItem: item)
         player.isMuted = false
         // Loop by default.

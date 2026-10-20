@@ -65,6 +65,20 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
     /// Tag that asks the site for random order, for sites without a "random" sort choice.
     var randomTag: String?
 
+    // ---- Phase 7: account & capabilities (all optional; UI only appears when set) ----
+    /// Related tags for {tag}.
+    var relatedTagsPath: String?
+    /// Description ("wiki") of {tag}.
+    var wikiPath: String?
+    /// Other names of {tag}.
+    var tagAliasesPath: String?
+    /// Sends an up-vote for post {id} (POST). Never probed automatically: it changes data.
+    var votePath: String?
+    /// The logged-in user's own settings (blacklist, default sort/rating).
+    var accountSettingsPath: String?
+    /// Web page for creating an account.
+    var registerURL: String?
+
     enum CodingKeys: String, CodingKey, CaseIterable {
         case id, displayName, baseURL, searchPath, postPath, mediaBaseURL, requiresAuth, rateLimitPerSecond
         case searchResultsPath, postIDPath, thumbnailURLPath, mediaURLPath, mediaTypePath, tagsPath, tagsNameKey, sourceURLPath
@@ -72,6 +86,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         case sampleURLPath, postResultPath, metadataPaths, authCheckPath, tagSeparator, firstPageIndex
         case sortOptions, ratingOptions, userAgent, proxyHost, proxyPort, timeoutSeconds, headers
         case alternateMediaURLPaths, tagSpaceReplacement, autocompletePath, autocompleteResultsPath, autocompleteNameKey, randomTag
+        case relatedTagsPath, wikiPath, tagAliasesPath, votePath, accountSettingsPath, registerURL
     }
 
     init(id: String, displayName: String, baseURL: URL, searchPath: String, postPath: String,
@@ -139,6 +154,12 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         autocompleteResultsPath = try c.decodeIfPresent(String.self, forKey: .autocompleteResultsPath)
         autocompleteNameKey = try c.decodeIfPresent(String.self, forKey: .autocompleteNameKey)
         randomTag = try c.decodeIfPresent(String.self, forKey: .randomTag)
+        relatedTagsPath = try c.decodeIfPresent(String.self, forKey: .relatedTagsPath)
+        wikiPath = try c.decodeIfPresent(String.self, forKey: .wikiPath)
+        tagAliasesPath = try c.decodeIfPresent(String.self, forKey: .tagAliasesPath)
+        votePath = try c.decodeIfPresent(String.self, forKey: .votePath)
+        accountSettingsPath = try c.decodeIfPresent(String.self, forKey: .accountSettingsPath)
+        registerURL = try c.decodeIfPresent(String.self, forKey: .registerURL)
     }
 
     /// Writes every key, including empty ones as null, so an exported file shows all fields.
@@ -168,6 +189,12 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         try c.encode(autocompleteResultsPath, forKey: .autocompleteResultsPath)
         try c.encode(autocompleteNameKey, forKey: .autocompleteNameKey)
         try c.encode(randomTag, forKey: .randomTag)
+        try c.encode(relatedTagsPath, forKey: .relatedTagsPath)
+        try c.encode(wikiPath, forKey: .wikiPath)
+        try c.encode(tagAliasesPath, forKey: .tagAliasesPath)
+        try c.encode(votePath, forKey: .votePath)
+        try c.encode(accountSettingsPath, forKey: .accountSettingsPath)
+        try c.encode(registerURL, forKey: .registerURL)
     }
 
     /// Starting point for the "Add adapter" form.

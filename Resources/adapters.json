@@ -123,5 +123,71 @@
     "autocompletePath": "suggest?q={query}",
     "autocompleteResultsPath": "data.suggestions",
     "autocompleteNameKey": "label"
+  },
+  {
+    "id": "demo-hotlink",
+    "displayName": "Demo Hotlink",
+    "baseURL": "http://127.0.0.1:8765/h",
+    "searchPath": "posts.json?tags={tags}&page={page}&sort={sort}&rating={rating}",
+    "postPath": "post/{id}.json",
+    "mediaBaseURL": "http://127.0.0.1:8765/h/",
+    "requiresAuth": false,
+    "rateLimitPerSecond": 5,
+    "searchResultsPath": "posts",
+    "postIDPath": "id",
+    "thumbnailURLPath": "preview_url",
+    "mediaURLPath": "file_url",
+    "mediaTypePath": "file_ext",
+    "tagsPath": "tags",
+    "tagsNameKey": null,
+    "sourceURLPath": "source",
+    "videoExtensions": [
+      "mp4",
+      "webm",
+      "mov",
+      "m4v"
+    ],
+    "gifExtensions": [
+      "gif"
+    ],
+    "authStyle": "none",
+    "authParamName": null,
+    "paginationStyle": "pageNumber",
+    "hasNextPagePath": "has_more",
+    "cursorPath": null,
+    "sampleURLPath": "sample_url",
+    "postResultPath": null,
+    "metadataPaths": {
+      "width": "width",
+      "height": "height",
+      "score": "score",
+      "rating": "rating",
+      "created": "created_at"
+    },
+    "authCheckPath": null,
+    "tagSeparator": "+",
+    "firstPageIndex": 1,
+    "sortOptions": [
+      "newest",
+      "oldest",
+      "score",
+      "random"
+    ],
+    "ratingOptions": [
+      "general",
+      "sensitive"
+    ],
+    "userAgent": null,
+    "proxyHost": null,
+    "proxyPort": null,
+    "timeoutSeconds": 20,
+    "headers": {},
+    "alternateMediaURLPaths": [
+      "file_url_mp4"
+    ],
+    "tagSpaceReplacement": "_",
+    "autocompletePath": null,
+    "autocompleteResultsPath": "",
+    "autocompleteNameKey": "name"
   }
 ]

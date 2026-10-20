@@ -222,6 +222,12 @@ struct AdapterEditorView: View {
         case .autocompleteResultsPath: plain(opt(\.autocompleteResultsPath), "(the answer itself)", id: "field-autocompleteResultsPath")
         case .autocompleteNameKey: plain(opt(\.autocompleteNameKey), "name", id: "field-autocompleteNameKey")
         case .randomTag: plain(opt(\.randomTag), "order:random", id: "field-randomTag")
+        case .relatedTagsPath: plain(opt(\.relatedTagsPath), "tags/related.json?tag={tag}", id: "field-relatedTagsPath")
+        case .wikiPath: plain(opt(\.wikiPath), "wiki/{tag}.json", id: "field-wikiPath")
+        case .tagAliasesPath: plain(opt(\.tagAliasesPath), "aliases.json?tag={tag}", id: "field-tagAliasesPath")
+        case .votePath: plain(opt(\.votePath), "posts/{id}/vote", id: "field-votePath")
+        case .accountSettingsPath: plain(opt(\.accountSettingsPath), "account.json", id: "field-accountSettingsPath")
+        case .registerURL: plain(opt(\.registerURL), "register", id: "field-registerURL")
         }
     }
 

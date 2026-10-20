@@ -19,6 +19,19 @@ enum MockRoutes {
 
     static func respond(to req: HTTPRequest, port: UInt16) -> HTTPResponse {
         let p = req.path
+        let origin0 = "http://127.0.0.1:\(port)"
+        // Demo "hotlink-protected" site: its media only loads with a Referer from the site;
+        // otherwise it answers 200 with an HTML page, like real hotlink protection does.
+        if p.hasPrefix("/h/") {
+            if let r = p.range(of: "/media/") {
+                guard (req.headers["referer"] ?? "").hasPrefix(origin0 + "/h") else {
+                    return .text("<!doctype html><html><head><title>Hotlinking is not allowed</title></head><body><h1>Hotlinking is not allowed</h1></body></html>",
+                                 type: "text/html; charset=utf-8")
+                }
+                return MockMedia.serve(String(p[r.upperBound...]))
+            }
+            return siteA(String(p.dropFirst(2)), req: req, origin: origin0 + "/h")
+        }
         if let r = p.range(of: "/media/") {
             return MockMedia.serve(String(p[r.upperBound...]))
         }

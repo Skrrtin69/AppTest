@@ -57,9 +57,9 @@ struct WebVideoView: UIViewRepresentable {
             let path = url.standardizedFileURL.path
             let rel = path.hasPrefix(root) ? String(path.dropFirst(root.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/")) : url.lastPathComponent
             src = "/local/" + rel.split(separator: "/").map { encode(String($0)) }.joined(separator: "/")
-        } else if url.host == "127.0.0.1" || url.host == "localhost" {
-            src = url.absoluteString
         } else {
+            // Always through the proxy: it adds the site's headers (Referer, User-Agent…),
+            // which WebKit's own requests can't carry, and avoids CORS limits.
             src = "/proxy?url=" + encode(url.absoluteString) + (siteID.map { "&site=" + encode($0) } ?? "")
         }
         let type = url.pathExtension.lowercased() == "webm" ? "video/webm" : ""

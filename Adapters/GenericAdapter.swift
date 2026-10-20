@@ -70,7 +70,7 @@ final class GenericAdapter: SiteAdapter {
         try buildURL(path: config.postPath, vars: ["id": Self.encode(id)])
     }
 
-    private func buildURL(path: String, vars: [String: String]) throws -> URL {
+    func buildURL(path: String, vars: [String: String]) throws -> URL {
         var p = path
         for (k, v) in vars { p = p.replacingOccurrences(of: "{\(k)}", with: v) }
         let full: String
@@ -108,7 +108,7 @@ final class GenericAdapter: SiteAdapter {
         return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s
     }
 
-    private var authHeaders: [String: String] {
+    var authHeaders: [String: String] {
         guard let token = session?.token else { return [:] }
         switch config.authStyle {
         case .basic: return ["Authorization": "Basic \(token)"]
@@ -159,7 +159,9 @@ final class GenericAdapter: SiteAdapter {
         } else {
             hasNext = !items.isEmpty
         }
-        return SearchResult(posts: posts, hasNextPage: hasNext, currentPage: page, nextCursor: nextCursor)
+        var result = SearchResult(posts: posts, hasNextPage: hasNext, currentPage: page, nextCursor: nextCursor)
+        if session == nil { result.notes = GuestLimits.check(json: json, items: items, adapter: self, listPath: config.searchResultsPath) }
+        return result
     }
 
     func fetchPost(id: String) async throws -> Post {
@@ -241,7 +243,7 @@ final class GenericAdapter: SiteAdapter {
         let t = s.trimmingCharacters(in: .whitespaces)
         if t.isEmpty { return nil }
         if t.hasPrefix("//") { return URL(string: "https:" + t) }
-        if let u = URL(string: t), u.scheme != nil { return u }
+        if let u = URL(string: t), u.scheme != nil { return MediaURL.upgraded(u) }
         let joined = Self.join(config.mediaBaseURL.absoluteString, t)
         return URL(string: joined) ?? URL(string: joined.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? joined)
     }
