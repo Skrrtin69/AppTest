@@ -38,7 +38,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     /// keeps the configuration SwiftUI would use anyway.
     func application(_ application: UIApplication, configurationForConnecting session: UISceneSession,
                      options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-        if session.role == .windowExternalDisplayNonInteractive {
+        let external: Bool
+        if #available(iOS 16.0, *) {
+            external = session.role == .windowExternalDisplayNonInteractive
+        } else {
+            external = session.role == UISceneSession.Role(rawValue: "UIWindowSceneSessionRoleExternalDisplay")
+        }
+        if external {
             let c = UISceneConfiguration(name: "External Display", sessionRole: session.role)
             c.delegateClass = ExternalSceneDelegate.self
             return c
