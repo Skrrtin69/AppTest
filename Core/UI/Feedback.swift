@@ -81,8 +81,13 @@ struct ToastOverlay: View {
         VStack {
             if let t = center.current {
                 HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: icon(t.style))
-                    Text(t.message).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+                    // Tapping the text closes the message. (On the whole row, this gesture
+                    // would swallow taps meant for the Undo / Open button.)
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: icon(t.style))
+                        Text(t.message).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+                    }
+                    .onTapGesture { center.current = nil }
                     Spacer(minLength: 0)
                     if let title = t.actionTitle, let action = t.action {
                         Button(title) { action(); center.current = nil }
@@ -105,9 +110,6 @@ struct ToastOverlay: View {
                 })
                 .onDisappear { PassthroughWindow.toastFrame = nil }
                 .transition(.move(edge: .top).combined(with: .opacity))
-                // Tapping a plain message closes it; one with a button (Undo, Open) keeps the
-                // tap for its button, otherwise this gesture would swallow it.
-                .onTapGesture { if t.action == nil { center.current = nil } }
                 // Swipe up to dismiss.
                 .gesture(DragGesture(minimumDistance: 8)
                     .onChanged { dragY = $0.translation.height }
