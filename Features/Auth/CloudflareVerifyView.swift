@@ -18,6 +18,14 @@ struct CloudflareVerifyView: View {
         var before: Set<String>?
     }
 
+    /// Remembers the passes present once the first page has loaded.
+    fileprivate func takeBaseline() {
+        guard model.before == nil else { return }
+        cookies { mine in
+            if model.before == nil { model.before = Set(mine.filter { $0.name == "cf_clearance" }.map(\.value)) }
+        }
+    }
+
     /// Just the scheme and host (and port): https://example.com/. API addresses aren't
     /// pages, so opening one shows the site's 404 instead of the check.
     static func siteRoot(of address: String) -> URL? {
@@ -29,7 +37,7 @@ struct CloudflareVerifyView: View {
 
     var body: some View {
         NavigationView {
-            CloudflareWebView(url: root, model: model)
+            CloudflareWebView(url: root, model: model, onFirstLoad: { takeBaseline() })
                 .ignoresSafeArea(edges: .bottom)
                 .navigationTitle("Security check")
                 .navigationBarTitleDisplayMode(.inline)
@@ -64,9 +72,11 @@ struct CloudflareVerifyView: View {
     /// or right away when `force` (Done). Error pages (404…) never close it.
     private func finish(force: Bool) {
         guard !model.done, let wv = model.webView else { return }
+        // The baseline is taken once the first page has loaded (the cookie store can read
+        // as empty before that), so an old pass isn't mistaken for a new one.
+        guard force || model.before != nil else { return }
         cookies { mine in
             let passes = Set(mine.filter { $0.name == "cf_clearance" }.map(\.value))
-            if model.before == nil { model.before = passes; if !force { return } }
             guard !model.done, force || !passes.subtracting(model.before ?? []).isEmpty else { return }
             model.done = true
             model.timer?.invalidate()
@@ -86,14 +96,39 @@ struct CloudflareVerifyView: View {
 private struct CloudflareWebView: UIViewRepresentable {
     let url: URL
     let model: CloudflareVerifyView.Model
+    let onFirstLoad: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onFirstLoad: onFirstLoad) }
 
     func makeUIView(context: Context) -> WKWebView {
         let wv = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
         wv.accessibilityIdentifier = "cloudflareWebView"
+        wv.navigationDelegate = context.coordinator
         model.webView = wv
         wv.load(URLRequest(url: url))
         return wv
     }
 
     func updateUIView(_ wv: WKWebView, context: Context) {}
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        let onFirstLoad: () -> Void
+        private var loaded = false
+        init(onFirstLoad: @escaping () -> Void) { self.onFirstLoad = onFirstLoad }
+
+        // Error pages (404…) load like any page: nothing here ever closes the sheet.
+        func webView(_ wv: WKWebView, didFinish navigation: WKNavigation!) {
+            guard !loaded else { return }
+            loaded = true
+            onFirstLoad()
+        }
+
+        func webView(_ wv: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            if !loaded { loaded = true; onFirstLoad() }
+        }
+
+        func webView(_ wv: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            if !loaded { loaded = true; onFirstLoad() }
+        }
+    }
 }
