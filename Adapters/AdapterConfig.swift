@@ -1,6 +1,6 @@
 import Foundation
 
-enum AuthStyle: String, Codable, CaseIterable { case none, basic, apiKeyQuery, apiKeyHeader }
+enum AuthStyle: String, Codable, CaseIterable { case none, basic, apiKeyQuery, apiKeyHeader, bearer }
 enum PaginationStyle: String, Codable, CaseIterable { case pageNumber, cursor }
 
 /// One entry in adapters.json. Every site-specific behavior lives here.
@@ -78,6 +78,11 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
     var accountSettingsPath: String?
     /// Web page for creating an account.
     var registerURL: String?
+    /// Some sites want a user ID next to the API key (e.g. user_id): this is that address
+    /// parameter's name. The ID itself is the account's username field.
+    var authUserParamName: String?
+    /// Page where a logged-in user can see their API key (for guided key retrieval).
+    var apiKeyPageURL: String?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case id, displayName, baseURL, searchPath, postPath, mediaBaseURL, requiresAuth, rateLimitPerSecond
@@ -87,6 +92,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         case sortOptions, ratingOptions, userAgent, proxyHost, proxyPort, timeoutSeconds, headers
         case alternateMediaURLPaths, tagSpaceReplacement, autocompletePath, autocompleteResultsPath, autocompleteNameKey, randomTag
         case relatedTagsPath, wikiPath, tagAliasesPath, votePath, accountSettingsPath, registerURL
+        case authUserParamName, apiKeyPageURL
     }
 
     init(id: String, displayName: String, baseURL: URL, searchPath: String, postPath: String,
@@ -160,6 +166,8 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         votePath = try c.decodeIfPresent(String.self, forKey: .votePath)
         accountSettingsPath = try c.decodeIfPresent(String.self, forKey: .accountSettingsPath)
         registerURL = try c.decodeIfPresent(String.self, forKey: .registerURL)
+        authUserParamName = Self.sanitizeParamName(try c.decodeIfPresent(String.self, forKey: .authUserParamName))
+        apiKeyPageURL = try c.decodeIfPresent(String.self, forKey: .apiKeyPageURL)
     }
 
     /// Writes every key, including empty ones as null, so an exported file shows all fields.
@@ -195,6 +203,8 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         try c.encode(votePath, forKey: .votePath)
         try c.encode(accountSettingsPath, forKey: .accountSettingsPath)
         try c.encode(registerURL, forKey: .registerURL)
+        try c.encode(authUserParamName, forKey: .authUserParamName)
+        try c.encode(apiKeyPageURL, forKey: .apiKeyPageURL)
     }
 
     /// Starting point for the "Add adapter" form.

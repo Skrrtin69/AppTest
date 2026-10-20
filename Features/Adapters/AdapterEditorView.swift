@@ -228,6 +228,8 @@ struct AdapterEditorView: View {
         case .votePath: plain(opt(\.votePath), "posts/{id}/vote", id: "field-votePath")
         case .accountSettingsPath: plain(opt(\.accountSettingsPath), "account.json", id: "field-accountSettingsPath")
         case .registerURL: plain(opt(\.registerURL), "register", id: "field-registerURL")
+        case .authUserParamName: plain(opt(\.authUserParamName), "user_id", id: "field-authUserParamName")
+        case .apiKeyPageURL: plain(opt(\.apiKeyPageURL), "account/api", id: "field-apiKeyPageURL")
         }
     }
 

@@ -37,7 +37,9 @@ enum MockRoutes {
         }
         let origin = "http://127.0.0.1:\(port)"
         switch true {
-        case p == "/" || p == "/health":
+        case p == "/":
+            return MockExtras.rootPage(port: port)
+        case p == "/health":
             return .text("MediaDeck demo server OK")
         case p.hasPrefix("/a/secure/"):
             guard isAuthorized(req) else {
@@ -45,9 +47,19 @@ enum MockRoutes {
                 r.headers["WWW-Authenticate"] = "Basic realm=\"demo\""
                 return r
             }
-            return siteA(String(p.dropFirst("/a/secure".count)), req: req, origin: origin)
+            let sub = String(p.dropFirst("/a/secure".count))
+            return MockExtras.siteAExtra(sub, req: req, origin: origin, member: true) ?? siteA(sub, req: req, origin: origin)
+        case p.hasPrefix("/a/members/"):
+            // Works without a login, but guests get fewer files (guest-limit demo).
+            let sub = String(p.dropFirst("/a/members".count))
+            let member = isAuthorized(req)
+            return MockExtras.siteAExtra(sub, req: req, origin: origin, member: member)
+                ?? siteA(sub, req: req, origin: origin, guestLimited: !member)
         case p.hasPrefix("/a/"):
-            return siteA(String(p.dropFirst(2)), req: req, origin: origin)
+            let sub = String(p.dropFirst(2))
+            return MockExtras.siteAExtra(sub, req: req, origin: origin, member: false) ?? siteA(sub, req: req, origin: origin)
+        case p.hasPrefix("/k"):
+            return MockExtras.siteK(String(p.dropFirst(2)), req: req, origin: origin)
         case p.hasPrefix("/b/"):
             return siteB(String(p.dropFirst(2)), req: req, origin: origin)
         case p.hasPrefix("/c/"):
@@ -73,7 +85,7 @@ enum MockRoutes {
 
     // MARK: Site A
 
-    static func siteA(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
+    static func siteA(_ sub: String, req: HTTPRequest, origin: String, guestLimited: Bool = false) -> HTTPResponse {
         if sub == "/auth/check" { return .json(["ok": true, "user": demoUser]) }
         if sub == "/tags/autocomplete.json" {
             return .json(MockCatalog.suggestions(req.query["q"] ?? "").map { ["name": $0.tag, "count": $0.count] })
@@ -84,6 +96,21 @@ enum MockRoutes {
             let page = max(1, Int(req.query["page"] ?? "1") ?? 1)
             let start = (page - 1) * MockCatalog.pageSize
             let slice = start < all.count ? Array(all[start..<min(all.count, start + MockCatalog.pageSize)]) : []
+            if guestLimited {
+                // Guests don't get files for "sensitive" posts.
+                let hidden = slice.filter { $0.rating == "sensitive" }.count
+                return .json([
+                    "posts": slice.map { i -> [String: Any] in
+                        var d = siteAPost(i, origin: origin)
+                        if i.rating == "sensitive" { d["file_url"] = NSNull(); d["sample_url"] = NSNull() }
+                        return d
+                    },
+                    "page": page,
+                    "has_more": start + MockCatalog.pageSize < all.count,
+                    "notice": "Some files are only shown to members. Log in to see them.",
+                    "hidden_count": hidden,
+                ])
+            }
             return .json([
                 "posts": slice.map { siteAPost($0, origin: origin) },
                 "page": page,

@@ -34,7 +34,7 @@ enum FieldGuide {
         Section("Pages", "How to get the next page of results.",
          [.paginationStyle, .hasNextPagePath, .cursorPath]),
         Section("Login", "Only needed if the site wants an account or key. Your actual username/password/key is saved separately and securely under Account.",
-         [.authStyle, .authParamName, .authCheckPath, .accountSettingsPath, .registerURL]),
+         [.authStyle, .authParamName, .authUserParamName, .authCheckPath, .accountSettingsPath, .apiKeyPageURL, .registerURL]),
         Section("Extra features", "Optional. Each button or panel only appears in the app when its address is filled in.",
          [.relatedTagsPath, .wikiPath, .tagAliasesPath, .votePath]),
         Section("Network", "Optional fine-tuning.",
@@ -85,6 +85,8 @@ enum FieldGuide {
         e(.alternateMediaURLPaths, "Other media versions", "Optional. One per line: paths to other versions of the same media inside one result (for example an MP4 next to a WebM). If any is an MP4, it's used, so videos play natively with sound.", "file_url_mp4")
         e(.tagSpaceReplacement, "Space inside a tag", "Optional. Many sites write multi-word tags with _ (blue_sky). Type a multi-word tag in \"quotes\" in the search bar and its spaces become this.", "_")
         e(.randomTag, "Random tag", "Optional. For the dice button: a tag that makes the site return random results (used only when no Sort choice contains 'random').", "order:random")
+        e(.authUserParamName, "User ID name", "Optional. If the site wants your user ID next to the API key, the address parameter's name (like user_id). Your ID goes in the Account screen's Username field.", "user_id")
+        e(.apiKeyPageURL, "API key page", "Optional. Full address (or a path added to the base address) of the page that shows your API key once logged in. Used by 'Log in to get my key'.", "account/api")
         e(.relatedTagsPath, "Related tags address", "Optional. Added to the base address; {tag} is replaced by a tag. When set, the Info panel shows tags that often appear with it.", "tags/related.json?tag={tag}")
         e(.wikiPath, "Tag description address", "Optional. Added to the base address; {tag} is replaced by a tag. When set, holding a tag in the Info panel shows its description.", "wiki/{tag}.json")
         e(.tagAliasesPath, "Tag aliases address", "Optional. Added to the base address; {tag} is replaced by a tag. Shows the tag's other names in its description.", "aliases.json?tag={tag}")

@@ -80,11 +80,18 @@ final class GenericAdapter: SiteAdapter {
             full = Self.join(config.baseURL.absoluteString, p)
         }
         guard var comps = URLComponents(string: full) else { throw AppError.invalidURL(full) }
+        // Built as text from encoded parts: assigning percentEncodedQueryItems traps on
+        // characters like "&" in a user-typed key name.
+        var extra: [String] = []
         if config.authStyle == .apiKeyQuery, let token = session?.token,
            let name = AdapterConfig.sanitizeParamName(config.authParamName) {
-            // Built as text from encoded parts: assigning percentEncodedQueryItems traps on
-            // characters like "&" in a user-typed key name.
-            let pair = Self.encode(name) + "=" + Self.encode(token)
+            extra.append(Self.encode(name) + "=" + Self.encode(token))
+        }
+        if let userParam = config.authUserParamName, let uid = session?.userID?.nonEmpty {
+            extra.append(Self.encode(userParam) + "=" + Self.encode(uid))
+        }
+        if !extra.isEmpty {
+            let pair = extra.joined(separator: "&")
             if let q = comps.percentEncodedQuery, !q.isEmpty {
                 comps.percentEncodedQuery = q + "&" + pair
             } else {
@@ -113,6 +120,7 @@ final class GenericAdapter: SiteAdapter {
         switch config.authStyle {
         case .basic: return ["Authorization": "Basic \(token)"]
         case .apiKeyHeader: return [AdapterConfig.sanitizeParamName(config.authParamName) ?? "Authorization": token]
+        case .bearer: return ["Authorization": "Bearer \(token)"]
         default: return [:]
         }
     }
@@ -271,13 +279,14 @@ final class GenericAdapter: SiteAdapter {
         case .basic:
             let raw = "\(credentials.username):\(credentials.password ?? "")"
             token = Data(raw.utf8).base64EncodedString()
-        case .apiKeyQuery, .apiKeyHeader:
+        case .apiKeyQuery, .apiKeyHeader, .bearer:
             guard let key = credentials.apiKey?.nonEmpty ?? credentials.password?.nonEmpty else {
                 throw AppError.authFailed("This adapter logs in with an API key, but none is saved.")
             }
             token = key
         }
-        let candidate = AuthSession(siteID: id, token: token, expiresAt: Date().addingTimeInterval(3600))
+        var candidate = AuthSession(siteID: id, token: token, expiresAt: Date().addingTimeInterval(3600))
+        if config.authUserParamName != nil { candidate.userID = credentials.username.nonEmpty }
         guard await validateSession(candidate) else {
             throw AppError.authFailed("The server rejected the saved username/password/key.")
         }

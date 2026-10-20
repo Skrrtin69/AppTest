@@ -11,6 +11,7 @@ struct AuthStylePicker: View {
         case .basic: return "Username and password"
         case .apiKeyQuery: return "API key in the address"
         case .apiKeyHeader: return "API key in a header"
+        case .bearer: return "API key as a bearer token"
         }
     }
 
@@ -20,6 +21,7 @@ struct AuthStylePicker: View {
         case .basic: return "Your username and password are sent with every request (HTTP Basic login)."
         case .apiKeyQuery: return "A key is added to the web address, like ?api_key=… Fill in the key's name below."
         case .apiKeyHeader: return "A key is sent invisibly as a header, like X-Api-Key: … Fill in the header's name below."
+        case .bearer: return "A key is sent as Authorization: Bearer … (common for newer APIs)."
         }
     }
 

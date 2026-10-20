@@ -104,6 +104,8 @@ struct AuthSession: Codable {
     let siteID: String
     let token: String
     let expiresAt: Date?
+    /// Sent as `authUserParamName` next to the key, for sites that want both.
+    var userID: String? = nil
 }
 
 // MARK: - Errors with plain-English messages
