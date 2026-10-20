@@ -93,7 +93,7 @@ enum PlayerRoutes {
       OGVLoader.base='/player/ogv';
       try{ player=new OGVPlayer({simd:false,threading:false}); }catch(e){fail('decoder failed to start: '+e);return;}
       player.muted=false;
-      player.addEventListener('ended',function(){player.currentTime=0;player.play();});
+      player.addEventListener('ended',function(){ if(window.mdLoopOn){player.currentTime=0;player.play();} else {post('ended');} });
       player.addEventListener('error',function(){fail('decoder error');});
       player.addEventListener('playing',function(){post('engine: ogv.js (WebAssembly)');});
       player.addEventListener('loadedmetadata',function(){post('metadata '+player.videoWidth+'x'+player.videoHeight);});
@@ -108,6 +108,7 @@ enum PlayerRoutes {
       v.setAttribute('playsinline',''); v.playsInline=true; v.autoplay=true; v.loop=true; v.muted=false; v.controls=true;
       v.addEventListener('error',useOgv);
       v.addEventListener('playing',function(){post('engine: WebKit <video>');});
+      v.addEventListener('ended',function(){post('ended');});
       v.src=src; stage.appendChild(v); player=v;
       snd.style.display='block'; setSoundIcon();
       // If iOS refuses autoplay with sound, start muted and let the speaker button unmute.
@@ -119,6 +120,8 @@ enum PlayerRoutes {
     if(isWebm && can===''){useOgv();}else{useNative();}
     window.mdPlay=function(){if(player)player.play();};
     window.mdPause=function(){if(player)player.pause();};
+    window.mdLoopOn=true;
+    window.mdSetLoop=function(on){ window.mdLoopOn=on; if(player && !usingOgv){ player.loop=on; } };
     window.mdSpeed=function(r){ if(player){ try{ player.playbackRate=r; }catch(e){} } };
     </script></body></html>
     """

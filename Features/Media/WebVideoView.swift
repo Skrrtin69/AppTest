@@ -9,6 +9,9 @@ struct WebVideoView: UIViewRepresentable {
     let isActive: Bool
     var siteID: String? = nil
     var speed: Double = 1
+    /// false = auto-advance: report the end instead of looping.
+    var loop: Bool = true
+    var onFinished: (() -> Void)? = nil
     /// Reports which engine ended up playing (or the error), for the on-screen label.
     var onStatus: ((String) -> Void)? = nil
 
@@ -38,7 +41,8 @@ struct WebVideoView: UIViewRepresentable {
             wv.load(URLRequest(url: Self.playerURL(for: url, siteID: siteID)))
         }
         wv.evaluateJavaScript(isActive ? "window.mdPlay && mdPlay()" : "window.mdPause && mdPause()", completionHandler: nil)
-        wv.evaluateJavaScript("window.mdSpeed && mdSpeed(\(speed))", completionHandler: nil)
+        wv.evaluateJavaScript("window.mdSpeed && mdSpeed(\(speed)); window.mdSetLoop && mdSetLoop(\(loop))", completionHandler: nil)
+        context.coordinator.onFinished = isActive ? onFinished : nil
     }
 
     static func dismantleUIView(_ wv: WKWebView, coordinator: Coordinator) {
@@ -99,9 +103,11 @@ struct WebVideoView: UIViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler {
         var loadedURL: URL?
         var onStatus: ((String) -> Void)?
+        var onFinished: (() -> Void)?
         func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
             let text = "\(message.body)"
             NSLog("[WebVideo] %@", text)
+            if text == "ended" { DispatchQueue.main.async { self.onFinished?() } }
             if text.hasPrefix("engine:") || text.hasPrefix("error:") {
                 let status = text.replacingOccurrences(of: "engine: ", with: "")
                 DispatchQueue.main.async { self.onStatus?(status) }

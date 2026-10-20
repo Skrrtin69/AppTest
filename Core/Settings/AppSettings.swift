@@ -46,12 +46,12 @@ final class AppSettings: ObservableObject {
         static let blurThumbnails = "blurThumbnails", dimViewed = "dimViewed"
         static let viewerAspect = "viewerAspect", playbackSpeed = "playbackSpeed", verticalReading = "verticalReading"
         static let warnOnCellular = "warnOnCellular", maxDownloadMB = "maxDownloadMB", gridSpacing = "gridSpacing"
-        static let preferLighter = "preferLighter", viewerBackground = "viewerBackground"
+        static let preferLighter = "preferLighter", viewerBackground = "viewerBackground", autoAdvance = "autoAdvance"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
                           blurThumbnails, dimViewed, viewerAspect, playbackSpeed, verticalReading,
-                          warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground]
+                          warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -99,6 +99,9 @@ final class AppSettings: ObservableObject {
     @Published var preferLighter: Bool = false { didSet { d.set(preferLighter, forKey: K.preferLighter) } }
     /// Viewer backdrop: "black", "white" or "checker".
     @Published var viewerBackground: String = "black" { didSet { d.set(viewerBackground, forKey: K.viewerBackground) } }
+    /// End of media: false = loop the current post, true = move on (videos when finished,
+    /// GIFs after one cycle, images after the slideshow interval).
+    @Published var autoAdvance: Bool = false { didSet { d.set(autoAdvance, forKey: K.autoAdvance) } }
 
     func cycleViewerBackground() {
         viewerBackground = viewerBackground == "black" ? "white" : (viewerBackground == "white" ? "checker" : "black")
@@ -144,6 +147,7 @@ final class AppSettings: ObservableObject {
         gridSpacing = min(12, max(0, d.object(forKey: K.gridSpacing) as? Double ?? 3))
         preferLighter = d.object(forKey: K.preferLighter) as? Bool ?? false
         viewerBackground = d.string(forKey: K.viewerBackground) ?? "black"
+        autoAdvance = d.object(forKey: K.autoAdvance) as? Bool ?? false
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }

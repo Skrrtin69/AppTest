@@ -43,6 +43,7 @@ struct ViewerView: View {
                         ForEach(posts.indices, id: \.self) { i in
                             ViewerPage(post: posts[i], isActive: i == index, isNear: abs(i - index) <= 2,
                                        aspect: settings.viewerAspect, showControls: chrome,
+                                       onFinished: { if i == index { advance() } },
                                        onZoom: { zoomed = $0 },
                                        onTap: { withAnimation { chrome.toggle() } },
                                        onSize: { sizes[posts[i].key] = $0 })
@@ -102,6 +103,12 @@ struct ViewerView: View {
             }
         }
         .sheet(item: $collectionBatch) { CollectionPickerSheet(posts: $0.posts) }
+    }
+
+    /// Next post; after the last one, back to the first.
+    func advance() {
+        guard !posts.isEmpty else { return }
+        withAnimation { index = (index + 1) % posts.count }
     }
 
     // MARK: Gestures
@@ -176,6 +183,12 @@ struct ViewerView: View {
                     .overlay(Capsule().stroke(Color.white.opacity(0.6)))
             }
             .accessibilityLabel("Slideshow interval \(Int(settings.slideshowInterval)) seconds")
+            Button { settings.autoAdvance.toggle(); Haptics.tap()
+                ToastCenter.shared.show(settings.autoAdvance ? "Auto-advance: videos and GIFs move on when done, pictures after \(Int(settings.slideshowInterval)) s" : "Loop: each post repeats")
+            } label: {
+                Image(systemName: settings.autoAdvance ? "forward.end.alt.fill" : "repeat.1").font(.title3)
+            }
+            .accessibilityLabel(settings.autoAdvance ? "End of media: auto-advance" : "End of media: loop")
             Button { slideshow.toggle(); Haptics.tap() } label: {
                 Image(systemName: slideshow ? "pause.circle.fill" : "play.circle").font(.title3)
             }
@@ -266,6 +279,7 @@ struct ViewerPage: View {
     let isNear: Bool
     var aspect: ViewerAspect = .fit
     var showControls: Bool = true
+    var onFinished: () -> Void = {}
     var onZoom: (Bool) -> Void
     var onTap: () -> Void
     var onSize: (CGSize) -> Void
@@ -275,9 +289,11 @@ struct ViewerPage: View {
             if !isNear {
                 Color.black
             } else if post.mediaType == .video {
-                MediaVideoView(url: post.mediaURL, isActive: isActive, showControls: showControls, siteID: post.siteID)
+                MediaVideoView(url: post.mediaURL, isActive: isActive, showControls: showControls, siteID: post.siteID,
+                               onFinished: onFinished)
             } else {
-                FullImagePage(post: post, aspect: aspect, onZoom: onZoom, onTap: onTap, onSize: onSize)
+                FullImagePage(post: post, aspect: aspect, isActive: isActive, onFinished: onFinished,
+                              onZoom: onZoom, onTap: onTap, onSize: onSize)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -288,6 +304,9 @@ struct ViewerPage: View {
 struct FullImagePage: View {
     let post: Post
     var aspect: ViewerAspect = .fit
+    var isActive: Bool = false
+    var onFinished: () -> Void = {}
+    @ObservedObject private var settings = AppSettings.shared
     var onZoom: (Bool) -> Void
     var onTap: () -> Void
     var onSize: (CGSize) -> Void
@@ -315,6 +334,13 @@ struct FullImagePage: View {
         }
         .contentShape(Rectangle())
         .task(id: post.mediaURL) { await load(force: false) }
+        // Auto-advance: a GIF moves on after one full cycle, a still picture after the interval.
+        .task(id: "\(isActive)-\(settings.autoAdvance)-\(model.image != nil)") {
+            guard isActive, settings.autoAdvance, let img = model.image else { return }
+            let seconds = img.images != nil ? max(img.duration, 0.5) : settings.slideshowInterval
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            if !Task.isCancelled && isActive && settings.autoAdvance { onFinished() }
+        }
     }
 
     func load(force: Bool) async {

@@ -72,6 +72,7 @@ struct MediaVideoView: View {
     let isActive: Bool
     var showControls: Bool = true
     var siteID: String? = nil
+    var onFinished: (() -> Void)? = nil
     @ObservedObject private var settings = AppSettings.shared
 
     @State private var path: PlaybackPath?
@@ -83,14 +84,15 @@ struct MediaVideoView: View {
             case .none:
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             case .some(.native):
-                NativeVideoView(url: url, isActive: isActive, showControls: showControls) {
+                NativeVideoView(url: url, isActive: isActive, showControls: showControls, onFinished: onFinished) {
                     Task {
                         await PlaybackRouter.shared.markFailed(url)
                         path = .web
                     }
                 }
             case .some(.web):
-                WebVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed) { engine = $0 }
+                WebVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
+                             loop: !settings.autoAdvance, onFinished: onFinished) { engine = $0 }
                     .overlay(alignment: .bottomTrailing) {
                         if showControls { SpeedButton().padding(.trailing, 70).padding(.bottom, 145) }
                     }
@@ -123,6 +125,9 @@ final class VideoController: ObservableObject {
     private var statusObservation: NSKeyValueObservation?
     var isScrubbing = false
 
+    /// Called when the video ends while auto-advance is on.
+    var onFinished: (() -> Void)?
+
     init(url: URL) {
         let item = AVPlayerItem(asset: AVURLAsset.withSiteHeaders(url))
         player = AVPlayer(playerItem: item)
@@ -130,8 +135,13 @@ final class VideoController: ObservableObject {
         // Loop by default.
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
             Task { @MainActor in
-                self?.player.seek(to: .zero)
-                if self?.isPlaying == true { self?.play() }
+                guard let self = self else { return }
+                if AppSettings.shared.autoAdvance, let done = self.onFinished {
+                    done()          // auto-advance: the viewer moves to the next post
+                } else {
+                    self.player.seek(to: .zero)
+                    if self.isPlaying { self.play() }
+                }
             }
         }
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] t in
@@ -177,6 +187,7 @@ struct NativeVideoView: View {
     let url: URL
     let isActive: Bool
     var showControls: Bool = true
+    var onFinished: (() -> Void)? = nil
     var onFailure: () -> Void
 
     @StateObject private var holder = ControllerHolder()
@@ -195,6 +206,7 @@ struct NativeVideoView: View {
         }
         .onAppear {
             if holder.controller == nil { holder.controller = VideoController(url: url) }
+            holder.controller?.onFinished = { if isActive { onFinished?() } }
         }
         .onDisappear {
             holder.controller?.teardown()
