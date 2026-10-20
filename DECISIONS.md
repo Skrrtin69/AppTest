@@ -131,3 +131,10 @@ Choices made while building MediaDeck, and why.
 - **Local suggestions** are weighted: favorites ×3, Read Later and history ×2, open results ×1, and translated names ×5 (suggesting the site's tag).
 - **Gesture remapping:** double tap goes through the zoom view's own recognizer, so single taps still wait for it as before. Swipe up/down reuse the viewer's drag gesture.
 - **External display was removed.** A separate scene for a TV needs `application(_:configurationForConnecting:)`, and implementing it (returning either the session's configuration or a fresh default for the app window) left the app's own SwiftUI window black on launch. Without it, iOS simply mirrors the phone to the TV.
+
+## Phase 17
+- **All Vision work** (text, feature prints, saliency) runs on dedicated serial utility queues with `preferBackgroundProcessing`, and results are cached per address. Text recognition runs only when asked, to save battery.
+- **Look-alike matching is relative:** feature-print distances use different scales across iOS versions, so pairs closer than a fraction of the median distance (0.5 / 0.33 / 0.18) are grouped with union-find. The numbers are logged in the debug console for tuning.
+- **Watching saved searches** uses `BGAppRefreshTask` (iOS decides when; it can't be forced) plus a check on opening. State lives in UserDefaults per saved-search ID. The first check only records what's there, so nothing counts as "new" right away. Notifications are only sent while the app is in the background; in the app a message is shown instead.
+- **Debug log masking:** query values whose names contain key, token, pass, secret, auth, session, user_id or sig are replaced before a line is stored.
+- **Messages moved to the bottom of the screen.** At the top, a message's Undo sat exactly where sheets have Done, so a quick Done tap undid the action (found while testing look-alikes).

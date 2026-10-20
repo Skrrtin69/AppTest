@@ -84,7 +84,7 @@ Status per item is tracked in commits and in BLOCKERS.md.
 ## Phase 16: Advanced Frameworks & Customization ✅ (external display: see BLOCKERS)
 - Vision smart thumbnails; smart collections; global autocomplete; gesture remapping; media editor (trim/crop); external display.
 
-## Phase 17: Machine Learning, Background Tasks, and Advanced Reading
+## Phase 17: Machine Learning, Background Tasks, and Advanced Reading ✅
 - OCR; feature-print near-duplicate detection; double-page landscape; saved-search watch notifications; video frame grabber; debug console.
 
 ## Phase 18: Sharing, AI Filtering, and System Shortcuts

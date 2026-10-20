@@ -54,6 +54,9 @@ final class SearchWatch: ObservableObject {
     @discardableResult
     func check(only id: String? = nil) async -> Int {
         guard !LockManager.shared.decoyActive else { return 0 }
+        // Forget watches of saved searches that were deleted.
+        let ids = Set(LibraryStore.shared.savedSearches.map(\.id))
+        states = states.filter { ids.contains($0.key) }
         var total = 0
         var announce: [String] = []
         for s in LibraryStore.shared.savedSearches where states[s.id]?.enabled == true && (id == nil || id == s.id) {

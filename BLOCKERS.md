@@ -36,3 +36,6 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 ## 7. Phase 16: separate picture on an external display
 - Giving a connected TV its own scene requires the app delegate to supply scene configurations. In this SwiftUI app, that turned the phone's own window black on launch (two approaches tried, both reverted).
 - iOS mirrors the phone to an external screen instead. A future attempt would need a UIKit scene manifest for the app window.
+
+## 8. Not verifiable by automation (Phase 17)
+- **Background refresh timing:** iOS decides when background refresh runs. The same check was verified by running it from the debug console (9 new posts found on the demo "rotating" search, with the "9 new" badge shown).

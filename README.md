@@ -247,7 +247,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ---
 
-## What's new (Phases 1–16)
+## What's new (Phases 1–17)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -339,6 +339,15 @@ Failures are explained in plain English with one next step: bad address, unreach
 - **Suggestions everywhere:** while typing, suggestions come from the site (every site in an All Sites tab) plus tags already on your phone: favorites, Read Later, open results, history and your translations.
 - **Gestures** (Settings › Reading): choose what a double tap (Zoom, Favorite, Info, Next post, Read Later, Nothing), a swipe up (Hide posts like this, Info, Favorite, Download, Read Later, Nothing) and a swipe down (Close / Nothing) do.
 - **Edit Picture** (viewer ⋯): rotate, flip, crop to 1:1 / 4:5 / 16:9, plus brightness, contrast and saturation. Share the result, or save it to Photos or Files. The original is never changed.
+
+**On-device intelligence and background work (Phase 17)**
+- **Find Text in Picture** (Info panel): reads the text in a picture on the phone; select or copy it.
+- **Look-alike favorites** (Favorites › the two-squares button): finds favorites that look alike, with Loose / Normal / Strict matching, and lets you unfavorite extras.
+- **Two pages side by side** when the phone is sideways (Settings › Reading). It follows right-to-left mode, and edge taps turn a whole spread.
+- **Watch saved searches:** swipe a saved search right (or hold it) › Watch. MediaDeck checks for new posts when iOS gives it background time and whenever you open the app (at most every 15 minutes). The saved search then shows **N new**, and you get a notification if the app was in the background.
+- **Grab a video frame:** the camera button in the video controls saves the current frame (Share, Photos, Files, or Edit).
+- **Debug console:** Settings › About › tap Version 5 times. It shows a live log, including every request with status, time and size; keys, tokens and passwords in addresses appear as •••. It can also run the saved-search check now.
+- The demo search **rotating** (Demo Site A) changes its results every minute, for trying Watch.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 
