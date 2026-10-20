@@ -92,7 +92,7 @@ struct ReadLaterGrid: View {
             EmptyStateView(icon: "bookmark", title: "Nothing saved for later",
                            message: "Long-press a thumbnail and choose Read Later, or use ⋯ in the viewer.")
         } else {
-            ScrollView {
+            VStack(spacing: 4) {
                 HStack {
                     Text("\(posts.count) saved · \(posts.filter { viewed.isViewed($0.key) }.count) viewed")
                         .font(.footnote).foregroundColor(.secondary)
@@ -105,7 +105,9 @@ struct ReadLaterGrid: View {
                     .accessibilityIdentifier("clearViewedLater")
                 }
                 .padding(.horizontal, 12)
-                PostGrid(posts: posts, onTap: { onOpen(posts, $0) }, onAddToCollection: onAddToCollection) { EmptyView() }
+                ScrollView {
+                    PostGrid(posts: posts, onTap: { onOpen(posts, $0) }, onAddToCollection: onAddToCollection) { EmptyView() }
+                }
             }
         }
     }
