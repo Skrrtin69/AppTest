@@ -22,7 +22,6 @@ struct VLCVideoView: View {
     var onStatus: ((String) -> Void)? = nil
 
     @StateObject private var model = VLCPlayerModel()
-    @Environment(\.scenePhase) private var scenePhase
 
     static var available: Bool {
         #if canImport(MobileVLCKit)
@@ -38,21 +37,6 @@ struct VLCVideoView: View {
         VLCSurface(model: model, url: Self.sourceURL(url, siteID: siteID),
                    controls: VLCControls(model: model, showControls: showControls, onTap: onTap))
         .onAppear { sync() }
-        // iOS closes the local server's connections while the app is away, so VLC's stream
-        // would be dead on return: stop it in the background and reopen it at the same time.
-        .onChange(of: scenePhase) { phase in
-            switch phase {
-            case .inactive: model.pauseForInactive()
-            case .background: model.suspend()
-            case .active:
-                Task {
-                    await MockServer.shared.ensureReady()
-                    // Rebuilt: the server may be on a different port after the app was away.
-                    model.resume(from: Self.sourceURL(url, siteID: siteID))
-                }
-            @unknown default: break
-            }
-        }
         .onChange(of: isActive) { _ in sync() }
         .onChange(of: speed) { _ in sync() }
         .onChange(of: loop) { _ in sync() }
@@ -60,6 +44,9 @@ struct VLCVideoView: View {
     }
 
     private func sync() {
+        // Rebuilt on return from the background: the server may be on a different port.
+        let (u, site) = (url, siteID)
+        model.reopenURL = { Self.sourceURL(u, siteID: site) }
         model.loop = loop
         model.onFinished = isActive ? onFinished : nil
         model.onReady = onReady
@@ -170,9 +157,34 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     private var opened: Date?
     /// Background handling: where to pick up, whether it was playing, and whether the
     /// stream was closed.
+    var reopenURL: (() -> URL)?
     private var resumeAtMs: Int32 = 0
     private var wasPlaying = false
     private var suspended = false
+
+    // iOS closes the local server's connections while the app is away, so VLC's stream
+    // would be dead on return: stop it in the background and reopen it at the same time.
+    // (App notifications, not scenePhase: the viewer is presented outside the SwiftUI scene,
+    // where scenePhase never changes.)
+    override init() {
+        super.init()
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.pauseForInactive()
+        }
+        nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.suspend()
+        }
+        nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await MockServer.shared.ensureReady()
+                guard let self = self, let url = self.reopenURL?() else { return }
+                self.resume(from: url)
+            }
+        }
+    }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
 
     #if canImport(MobileVLCKit)
     private let player = VLCMediaPlayer()
