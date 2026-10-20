@@ -33,7 +33,7 @@ enum SmartCrop {
     /// A square crop of `image` around its most eye-catching area.
     static func square(_ image: UIImage, key: String) async -> UIImage {
         if let c = images.object(forKey: key as NSString) { return c }
-        guard image.images == nil, let cg = image.cgImage else { return image }
+        guard image.images == nil, let cg = image.cgImage else { NSLog("[SmartCrop] no CGImage"); return image }
         let focus = await focusPoint(cg, key: key)
         let w = CGFloat(cg.width), h = CGFloat(cg.height)
         let side = min(w, h)
@@ -50,13 +50,15 @@ enum SmartCrop {
     static func focusPoint(_ cg: CGImage, key: String) async -> CGPoint {
         lock.lock(); let known = focusPoints[key]; lock.unlock()
         if let p = known, p.count == 2 { return CGPoint(x: p[0], y: p[1]) }
+        NSLog("[SmartCrop] start %@", key)
         let vision = Task.detached(priority: .utility) { () -> CGPoint? in
+            NSLog("[SmartCrop] vision begin %dx%d", cg.width, cg.height)
             let request = VNGenerateAttentionBasedSaliencyImageRequest()
             // Low-priority (preferBackgroundProcessing) requests never finished on the test
             // device while the app was in use, so the request runs normally on a utility task.
             request.preferBackgroundProcessing = false
             let handler = VNImageRequestHandler(cgImage: cg, options: [:])
-            do { try handler.perform([request]) } catch {
+            do { try handler.perform([request]); NSLog("[SmartCrop] vision done") } catch {
                 NSLog("[SmartCrop] Vision failed: %@", error.localizedDescription)
                 return nil
             }
