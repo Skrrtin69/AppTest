@@ -178,7 +178,8 @@ struct StorageView: View {
             downloads[item.post.siteID, default: 0] += onDisk ?? Int(item.bytesTotal)
         }
         for (site, bytes) in downloads where bytes > 0 {
-            out.append(Slice(label: registry.displayName(for: site), kind: "Downloads", bytes: bytes))
+            // Own row per site, so it doesn't stack onto the same site's cache bar.
+            out.append(Slice(label: registry.displayName(for: site) + " downloads", kind: "Downloads", bytes: bytes))
         }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let db = Self.folderSize(support)

@@ -81,11 +81,20 @@ struct InfoPanel: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 6)], alignment: .leading, spacing: 6) {
                         ForEach(post.tags, id: \.self) { tag in
                             let hidden = settings.blacklistSet.contains(tag.lowercased())
-                            Text(tag).strikethrough(hidden).font(.footnote).lineLimit(1)
-                                .padding(.horizontal, 10).padding(.vertical, 5)
-                                .background(Capsule().fill(hidden ? Color.red.opacity(0.2) : TagColors.color(for: post.tagCategories?[tag]).opacity(0.22)))
-                                .onTapGesture { onTag(tag) }
-                                .contextMenu { tagMenu(tag, hidden: hidden) }
+                            // A menu with a primary action: tap searches, long-press shows the
+                            // actions. (A .contextMenu here would cover the whole List row, so
+                            // every tag would get the first tag's menu.)
+                            Menu {
+                                tagMenu(tag, hidden: hidden)
+                            } label: {
+                                Text(tag).strikethrough(hidden).font(.footnote).lineLimit(1)
+                                    .foregroundColor(.primary)
+                                    .padding(.horizontal, 10).padding(.vertical, 5)
+                                    .background(Capsule().fill(hidden ? Color.red.opacity(0.2) : TagColors.color(for: post.tagCategories?[tag]).opacity(0.22)))
+                            } primaryAction: {
+                                onTag(tag)
+                            }
+                            .buttonStyle(.borderless)
                                 .accessibilityElement(children: .ignore)
                                 .accessibilityLabel("Tag \(tag)\(hidden ? ", blacklisted" : "")")
                                 .accessibilityAddTraits(.isButton)
