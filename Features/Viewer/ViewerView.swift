@@ -57,6 +57,21 @@ struct ViewerView: View {
                 LevelHUD(icon: h.icon, level: h.level).transition(.opacity)
             }
 
+            // e.g. "Source deleted. Showing cached preview."
+            if let notice = current?.metadata["notice"] {
+                VStack {
+                    Label(notice, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Capsule().fill(Color.orange.opacity(0.9)))
+                        .foregroundColor(.black)
+                        .padding(.top, chrome ? 150 : 60)
+                        .accessibilityIdentifier("viewerNotice")
+                    Spacer()
+                }
+                .allowsHitTesting(false)
+            }
+
             if chrome {
                 VStack(spacing: 0) {
                     topBar

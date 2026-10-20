@@ -9,6 +9,7 @@ enum OverlayWindow {
     private static var window: PassthroughWindow?
     private static var cancellable: AnyCancellable?
 
+    @MainActor
     static func install() {
         guard window == nil,
               let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }

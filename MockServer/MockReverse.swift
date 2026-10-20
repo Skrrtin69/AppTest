@@ -30,9 +30,13 @@ enum MockReverse {
         let results: [[String: Any]] = sims.enumerated().map { k, sim in
             let n = (abs(seed) + k * 7) % MockCatalog.count + 1
             let item = MockCatalog.items[n - 1]
+            // The last match points at a post that no longer exists (dead-link demo).
+            let link = k == sims.count - 1 ? "\(origin)/a/view/999" : "\(origin)/a/view/\(n)"
             return [
                 "header": ["similarity": String(format: "%.1f", sim), "thumbnail": "\(origin)/media/\(item.thumbFile)"],
-                "data": ["title": "Demo post #\(n)", "urls": ["\(origin)/a/view/\(n)"]],
+                "data": ["title": "Demo post #\(n)", "urls": [link],
+                         "creator": [item.tags.first { MockCatalog.colors.contains($0) } ?? "gray"],
+                         "material": item.tags.first { MockCatalog.patterns.contains($0) } ?? "grid"],
             ]
         }
         return .json(["header": ["status": 0, "results_returned": results.count], "results": results])

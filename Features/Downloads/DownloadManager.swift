@@ -505,7 +505,7 @@ extension DownloadManager {
     /// Adds a file that came from elsewhere (Wi-Fi transfer) to the Library as a finished item.
     @discardableResult
     func importLocalFile(_ source: URL, name: String) throws -> DownloadItem {
-        let safe = name.components(separatedBy: CharacterSet(charactersIn: "/\:*?\"<>|")).joined(separator: "_").nonEmpty ?? "file"
+        let safe = name.components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|")).joined(separator: "_").nonEmpty ?? "file"
         var rel = "Imported/\(safe)"
         var n = 2
         while FileManager.default.fileExists(atPath: Self.root.appendingPathComponent(rel).path) {
@@ -546,8 +546,7 @@ extension DownloadManager {
                 .replacingOccurrences(of: "{date}", with: date)
                 .replacingOccurrences(of: "{name}", with: old.deletingPathExtension().lastPathComponent)
                 .replacingOccurrences(of: "{ext}", with: ext)
-            name = name.components(separatedBy: CharacterSet(charactersIn: "/\:*?\"<>|
-")).joined(separator: "_")
+            name = name.components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|\n")).joined(separator: "_")
                 .trimmingCharacters(in: .whitespaces)
             if (name as NSString).pathExtension.isEmpty, !ext.isEmpty { name += ".\(ext)" }
             guard !name.isEmpty, name != old.lastPathComponent else { continue }

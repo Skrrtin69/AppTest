@@ -58,6 +58,14 @@ enum Presenter {
         }
     }
 
+    /// Closes every sheet and full-screen viewer, back to the tabs.
+    static func dismissAll() {
+        let root = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).first { $0.isKeyWindow && !($0 is PassthroughWindow) }?.rootViewController
+            ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first?.rootViewController
+        if root?.presentedViewController != nil { root?.dismiss(animated: true) }
+    }
+
     /// Offers an existing file (e.g. a freshly built archive) to be saved to Files.
     static func exportFile(_ url: URL) { exportToFiles([url]) }
 

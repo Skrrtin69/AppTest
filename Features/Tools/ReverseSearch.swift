@@ -43,6 +43,9 @@ struct ReverseMatch: Identifiable {
     let thumbnail: URL?
     let source: URL?
     let title: String?
+    /// Artist names and the series/work, when the engine's answer has them.
+    var creators: [String] = []
+    var material: String? = nil
 }
 
 /// Engines are kept in Documents/reverse_search.json, so they can be edited like adapters.json.
@@ -173,7 +176,8 @@ enum ReverseSearch {
             let thumb = link(engine.thumbnailPath) ?? MatchGuess.thumbnail(node)
             let source = link(engine.sourceURLPath) ?? MatchGuess.source(node, excluding: thumb)
             let title = engine.titlePath?.nonEmpty.flatMap { DottedPath.string($0, in: node) } ?? MatchGuess.title(node)
-            return ReverseMatch(similarity: sim, thumbnail: thumb, source: source, title: title)
+            return ReverseMatch(similarity: sim, thumbnail: thumb, source: source, title: title,
+                                creators: MatchGuess.creators(node), material: MatchGuess.material(node))
         }
         .sorted { ($0.similarity ?? 0) > ($1.similarity ?? 0) }
     }
@@ -354,6 +358,25 @@ enum MatchGuess {
         return (named ?? all.first(where: { !$0.0.contains("thumb") })).flatMap { httpURL($0.1) }
     }
 
+    /// data.creator (text or list), else member/author/artist names.
+    static func creators(_ node: Any) -> [String] {
+        let p = pairs(node)
+        var out: [String] = []
+        for k in ["creator", "creators", "member_name", "author_name", "author", "artist"] {
+            for (key, v) in p where key == k {
+                if let s = text(v)?.trimmingCharacters(in: .whitespaces), !s.isEmpty, httpURL(s) == nil,
+                   !out.contains(where: { $0.lowercased() == s.lowercased() }) { out.append(s) }
+            }
+            if !out.isEmpty { break }
+        }
+        return Array(out.prefix(4))
+    }
+
+    /// data.material: the series or work the picture is from.
+    static func material(_ node: Any) -> String? {
+        pairs(node).first { $0.0 == "material" }.flatMap { text($0.1) }?.trimmingCharacters(in: .whitespaces).nonEmpty
+    }
+
     static func title(_ node: Any) -> String? {
         let p = pairs(node)
         for k in ["title", "material", "source", "creator", "author", "member_name", "artist", "name"] {
@@ -375,6 +398,8 @@ struct ReverseSearchSheet: View {
     @State private var running = false
     @State private var viewer: ViewerRequest?
     @State private var opening = false
+    /// Hide matches below this similarity.
+    @State private var minSimilarity = 0.0
 
     var enabled: [ReverseEngine] { store.engines.filter(\.enabled) }
 
@@ -410,9 +435,18 @@ struct ReverseSearchSheet: View {
         }
     }
 
-    func matchSection(_ m: [ReverseMatch]) -> some View {
-        Section {
-            if m.isEmpty { Text("No matches.").foregroundColor(.secondary) }
+    func matchSection(_ all: [ReverseMatch]) -> some View {
+        let m = all.filter { ($0.similarity ?? 100) >= minSimilarity }
+        return Section {
+            if !all.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("At least \(Int(minSimilarity))% similar · showing \(m.count) of \(all.count)").font(.caption).foregroundColor(.secondary)
+                    Slider(value: $minSimilarity, in: 0...100, step: 5)
+                        .accessibilityLabel("Minimum similarity")
+                        .accessibilityIdentifier("similaritySlider")
+                }
+            }
+            if m.isEmpty { Text(all.isEmpty ? "No matches." : "No matches this similar.").foregroundColor(.secondary) }
             ForEach(m) { match in
                 MatchRow(match: match, onOpen: { picked in Task { await openMatch(picked) } })
             }
@@ -443,29 +477,77 @@ struct ReverseSearchSheet: View {
 enum MatchOpener {
     /// The real post when the match links to a post on one of your sites; otherwise the
     /// match's preview picture (which often survives when the page itself is gone).
+    static let deadNotice = "Source deleted. Showing cached preview."
+
     static func post(for m: ReverseMatch) async -> Post? {
+        var dead = false
         if let s = m.source, let site = LinkRouter.site(for: s), let id = LinkRouter.target(of: s).postID,
            let adapter = AdapterRegistry.shared.adapter(for: site.id) {
             do { return try await adapter.fetchPost(id: id) }
-            catch { DebugLog.log("Reverse", "open \(site.id):\(id) failed: \(error.localizedDescription)") }
+            catch {
+                DebugLog.log("Reverse", "open \(site.id):\(id) failed: \(error.localizedDescription)")
+                dead = true
+            }
+        } else if let s = m.source {
+            dead = await isGone(s)
         }
         guard let t = m.thumbnail else { return nil }
         var meta: [String: String] = [:]
+        if dead { meta["notice"] = deadNotice }
         if let sim = m.similarity { meta["similarity"] = String(format: "%.1f%%", sim) }
         if let title = m.title?.nonEmpty { meta["title"] = title }
         return Post(id: "match-\(abs(t.absoluteString.hashValue) % 1_000_000)", siteID: "", thumbnailURL: t, mediaURL: t,
                     mediaType: .image, tags: [], sourceURL: m.source, metadata: meta)
+    }
+
+    /// The source page answers 404/410, or not at all within a few seconds.
+    static func isGone(_ url: URL) async -> Bool {
+        var r = URLRequest(url: url, timeoutInterval: 6)
+        r.httpMethod = "HEAD"
+        do {
+            let (_, resp) = try await URLSession.shared.data(for: r)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 200
+            return code == 404 || code == 410
+        } catch let e as URLError where e.code == .timedOut || e.code == .cannotFindHost {
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Saves the match to the Library: the full post when it's on one of your sites,
+    /// otherwise the preview picture (all the engine has).
+    static func save(_ m: ReverseMatch) async {
+        if let s = m.source, let site = LinkRouter.site(for: s), let id = LinkRouter.target(of: s).postID,
+           let a = AdapterRegistry.shared.adapter(for: site.id), let p = try? await a.fetchPost(id: id) {
+            await DownloadManager.shared.enqueue([p])
+            return
+        }
+        guard let t = m.thumbnail else { ToastCenter.shared.show("This match has no picture to save.", style: .error); return }
+        let p = Post(id: "match-\(abs(t.absoluteString.hashValue) % 1_000_000)", siteID: "", thumbnailURL: t, mediaURL: t,
+                     mediaType: .image, tags: m.creators.map { $0.lowercased() }, sourceURL: m.source, metadata: [:])
+        await DownloadManager.shared.enqueue([p])
+        ToastCenter.shared.show("Only the preview picture is available for this match; it was saved.")
+    }
+
+    /// Searches an artist or series name on the site open in Browse (spaces become the
+    /// site's tag separator).
+    static func searchNatively(_ name: String) {
+        let site = BrowseModel.shared.current?.siteID ?? AdapterRegistry.shared.enabledConfigs.first?.id ?? ""
+        Presenter.dismissAll()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            AppRouter.shared.search(tag: TagQuery.display(name.lowercased()), siteID: site)
+        }
     }
 }
 
 struct MatchRow: View {
     let match: ReverseMatch
     var onOpen: (ReverseMatch) -> Void = { _ in }
+    @State private var saving = false
 
     var body: some View {
-        Button {
-            onOpen(match)
-        } label: {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 Group {
                     if let t = match.thumbnail {
@@ -484,6 +566,25 @@ struct MatchRow: View {
                     Text(match.source?.host ?? "No link").font(.caption).foregroundColor(.secondary)
                 }
                 Spacer()
+                // Save the best version to the Library.
+                Button {
+                    Task { saving = true; await MatchOpener.save(match); saving = false }
+                } label: {
+                    if saving { ProgressView() } else { Image(systemName: "arrow.down.circle").font(.title3) }
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Save to Library")
+                .accessibilityIdentifier("saveMatch")
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { onOpen(match) }
+            if !match.creators.isEmpty || match.material != nil {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(match.creators, id: \.self) { c in chip(c, icon: "person") }
+                        if let m = match.material { chip(m, icon: "books.vertical") }
+                    }
+                }
             }
         }
         .contextMenu {
@@ -493,7 +594,17 @@ struct MatchRow: View {
                 Button { UIApplication.shared.open(s) } label: { Label("Open in Browser", systemImage: "safari") }
             }
         }
-        .accessibilityElement(children: .combine)
+    }
+
+    /// Tapping an artist or series searches it on the site open in Browse.
+    func chip(_ text: String, icon: String) -> some View {
+        Button { MatchOpener.searchNatively(text) } label: {
+            Label(text, systemImage: icon).font(.caption).lineLimit(1)
+                .padding(.horizontal, 9).padding(.vertical, 4)
+                .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+        }
+        .buttonStyle(.borderless)
+        .accessibilityIdentifier("matchChip")
     }
 }
 
