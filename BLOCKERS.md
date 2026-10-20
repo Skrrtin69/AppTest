@@ -98,3 +98,18 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
   - Tag Info on "red" showed "Tag: red, Posts: 7, Category: Color".
   - The demo adapter was deleted afterwards.
 - **Owner's Danbooru adapter:** Tag Info said "black_hair" isn't listed. The adapter's `autocompletePath` is `tags.json?q={query}`, which that site ignores (it returns its newest tags). Change it to `tags.json?search[name_matches]={query}*&search[order]=count` in the adapter's editor, or run Auto-Configure again, which now rejects the old address. The owner's adapter was not changed.
+
+## 19. Gestures, web video, Cloudflare: device results
+- **Passed on the phone:**
+  - **Cloudflare demo (`/cf`):** Analyze showed "This site is protected by Cloudflare. Tap to verify." (no Requires Authentication). Tapping it opened the check, and "Verify you are human" set the cookie. The app said "Verified. Trying the site again…" and the analysis succeeded.
+  - **Key-header demo (`/hk`):** Test Connection with the key gave "Connected (Authorization: Key)". The test adapter was deleted afterwards.
+  - **Volume swipe:** two downward swipes of 84 pt (10% of the screen) took the volume from 0.175 to 0.100 to 0.000. The first upward test was thrown off by an accidental button press. The volume was put back to 0.249.
+  - **Side buttons right after a swipe:** volume up gave 0.311, then down gave 0.249, so the side buttons work again.
+  - **Off switch:** with Enable Volume/Brightness Swipes off, an edge swipe left the volume unchanged. The switch was turned back on.
+- **Not checked on the phone:**
+  - Start videos muted (the switch exists and the players read it);
+  - the web player's spinner and Retry, and the pre-warm;
+  - 2 MB range streaming (needs a WebM from a real site);
+  - the older suggestion addresses, the gallery-style endpoints and the automatic `*` for name_matches.
+
+  The two new switches are in Settings › Appearance, next to "Autoplay videos in viewer".

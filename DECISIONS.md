@@ -182,3 +182,11 @@ Choices made while building MediaDeck, and why.
 - **Lookup through suggestions:** counts come from the suggestions address that adapters already have, not from a separate tag-lookup address. Tag Info searches suggestions for the tag itself and keeps only an exact match (case- and space/underscore-insensitive).
 - **Count keys:** a count is read from `tagCountPath`, or the first of the usual keys that holds a number (numbers written as text, with or without thousands separators, count too).
 - **Rejecting false suggestion addresses:** Auto-Configure rejected nothing before, and the owner's Danbooru adapter got `tags.json?q={query}`. That site ignores `q` and returns its newest tags, so suggestions were unrelated and Tag Info found nothing. Now at least one of the first 20 suggestions must contain the typed text. `tags.json?search[name_matches]={query}*&search[order]=count` was added to the address shapes tried. Square brackets in addresses are now percent-encoded, which older iOS versions require.
+
+## Gestures, web video, Cloudflare
+- **Volume math:** volume and brightness follow the drag's distance from its start, divided by the screen height. Before, the divisor was a fixed 350 points, which made small drags jump far.
+- **Volume release:** the hidden volume slider is added to the window when a volume drag starts and removed 0.4 s after it ends. While it's in the window, iOS hides its own volume overlay for the side buttons.
+- **Streaming the web player:** the proxy turns an open-ended range request ("bytes=N-") into 2 MB requests, so the first bytes reach the player at once. A 206 answer may cover less than was asked, and players then request the rest.
+- **Cloudflare detection:** a check page is 403/503/429 with Cloudflare's headers (cf-ray, cf-mitigated or Server: cloudflare) and a non-JSON body. A JSON 403 from an API behind Cloudflare is still treated as a login error.
+- **Keeping a Cloudflare pass:** cookies from the check are copied to the app's shared cookie store, which every adapter's network session uses. The page's User-Agent is saved in the adapter's headers, because the pass only works with that same User-Agent.
+- **`Authorization: Key`:** this is sent as the header style with the word "Key " stored at the start of the key. The adapter format needed no new field.

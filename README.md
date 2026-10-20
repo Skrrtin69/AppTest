@@ -290,6 +290,27 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ---
 
+## Viewer gestures, sound and web video
+
+- **Volume and brightness swipes:**
+  - Drag up or down along the right edge (volume) or left edge (brightness). The change is relative to where the drag started: the full screen height is 100%, so a drag of a tenth of the screen changes about 10%.
+  - The app lets go of the volume when the drag ends, so the side buttons work normally again right away.
+  - Turn the swipes off in Settings › **Enable Volume/Brightness Swipes** (on by default).
+- **Start videos muted:** a Settings switch. It applies to every player: the built-in one, Picture in Picture, and the web player used for WebM.
+- **Web player:**
+  - A spinner shows until the video can play. After 10 seconds it switches to a **Retry** button.
+  - The web player's process and decoder files are started off screen at launch.
+  - Videos are fetched in 2 MB pieces (HTTP range requests, 206 answers), so playback starts before the whole file has downloaded.
+
+## Cloudflare and other ways sites ask for keys
+
+- **Cloudflare checks:** when a site answers with a Cloudflare check page instead of its data, Auto-Configure no longer shows "Requires Authentication". It shows **This site is protected by Cloudflare. Tap to verify.** Complete the check on the page that opens. The app then keeps the site's clearance cookie and the browser's User-Agent (added to the adapter's headers, since the clearance only works with the same browser identity), and tries again on its own.
+- **`Authorization: Key <key>`:** this is now one of the ways Test Connection tries to send a key. For sites with no login page, paste the key and tap Test Connection.
+- **More addresses tried:**
+  - Older suggestion addresses: `index.php?page=autocomplete2&q=` and `autocomplete.php?q=`.
+  - A gallery-style search, `/api/galleries/search?query={tags}&page={page}`; single galleries are then expected at `/api/gallery/{id}`.
+  - Suggestion addresses using `search[name_matches]` get a `*` added to the typed text automatically.
+
 ## Tag post counts
 
 - **While typing:** search suggestions show how many posts use each tag, for example `blue (8)`. A tag with 0 posts is dimmed.
