@@ -81,8 +81,18 @@ enum OrientationLock {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         if #available(iOS 16.0, *) {
             for scene in scenes {
-                scene.windows.forEach { $0.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations() }
-                scene.requestGeometryUpdate(.iOS(interfaceOrientations: newMask)) { _ in }
+                // Every controller in the chain (the viewer is presented over the root) must
+                // re-read the allowed orientations, or the request is ignored.
+                for window in scene.windows {
+                    var vc = window.rootViewController
+                    while let c = vc {
+                        c.setNeedsUpdateOfSupportedInterfaceOrientations()
+                        vc = c.presentedViewController
+                    }
+                }
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: newMask)) { error in
+                    NSLog("[Rotation] %@", error.localizedDescription)
+                }
             }
         } else {
             let target: UIInterfaceOrientation? = mode == "portrait" ? .portrait : (mode == "landscape" ? .landscapeRight : nil)

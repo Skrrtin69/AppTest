@@ -188,7 +188,10 @@ final class AppSettings: ObservableObject {
         rotationLock = d.string(forKey: K.rotationLock) ?? "auto"
         batterySaver = d.string(forKey: K.batterySaver) ?? "auto"
         cacheExpiryDays = d.object(forKey: K.cacheExpiryDays) as? Int ?? 0
-        hiddenViewerButtons = d.stringArray(forKey: K.hiddenViewerButtons) ?? ViewerButton.defaultHidden
+        // The first default (before the interval button moved to the menu) is upgraded.
+        let storedHidden = d.stringArray(forKey: K.hiddenViewerButtons)
+        hiddenViewerButtons = storedHidden == ["direction", "tapZones", "rotation"] ? ViewerButton.defaultHidden
+            : (storedHidden ?? ViewerButton.defaultHidden)
         swipeSites = d.object(forKey: K.swipeSites) as? Bool ?? true
     }
 
