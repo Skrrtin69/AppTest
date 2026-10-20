@@ -78,6 +78,7 @@ enum OrientationLock {
         default: newMask = .allButUpsideDown
         }
         mask = newMask
+        NSLog("[Rotation] apply %@ (mask %lu)", mode, newMask.rawValue)
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         if #available(iOS 16.0, *) {
             for scene in scenes {
@@ -87,6 +88,7 @@ enum OrientationLock {
                     var vc = window.rootViewController
                     while let c = vc {
                         c.setNeedsUpdateOfSupportedInterfaceOrientations()
+                        NSLog("[Rotation] refresh %@ supports %lu", String(describing: type(of: c)), c.supportedInterfaceOrientations.rawValue)
                         vc = c.presentedViewController
                     }
                 }
