@@ -77,6 +77,44 @@ enum MockVault {
         }
     }
 
+    static let clearance = "cf_clearance=demo-clearance"
+
+    /// /cf: behaves like a site behind Cloudflare. Without the clearance cookie every page
+    /// (API included) is a 403 check page with Cloudflare's headers; /cf/verify sets it.
+    static func cloudflare(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
+        let passed = req.headers["cookie"]?.contains(clearance) == true
+        if sub == "/verify" {
+            var r = HTTPResponse.text(cfPage("Verified", "<h1>You're verified</h1><p>You can close this page.</p>"),
+                                      type: "text/html; charset=utf-8")
+            r.headers["Set-Cookie"] = "\(clearance); Path=/; Max-Age=86400"
+            return r
+        }
+        guard passed else {
+            var r = HTTPResponse.text(cfPage("Just a moment...", """
+            <h1>Just a moment...</h1><p>Checking your browser before accessing this site.</p>
+            <p><a href="/cf/verify" style="display:inline-block;padding:12px 18px;border:1px solid #888;border-radius:8px">Verify you are human</a></p>
+            """), status: 403, type: "text/html; charset=utf-8")
+            r.headers["cf-ray"] = "8f00demo0000-LAX"
+            r.headers["Server"] = "cloudflare"
+            return r
+        }
+        if sub == "/posts.json" { return MockRoutes.siteA("/posts.json", req: req, origin: origin) }
+        return .text(cfPage("Demo CF site", "<h1>Demo site behind a check</h1>"), type: "text/html; charset=utf-8")
+    }
+
+    private static func cfPage(_ title: String, _ body: String) -> String {
+        "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>\(title)</title></head><body style=\"font:17px -apple-system;padding:24px\">\(body)</body></html>"
+    }
+
+    /// /hk/posts.json: only "Authorization: Key <key>" is accepted.
+    static func keyHeaderSite(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
+        guard sub == "/posts.json" else { return .json(["error": "not found"], status: 404) }
+        guard req.headers["authorization"] == "Key \(apiKey)" else {
+            return .json(["error": "Send your key as: Authorization: Key <your key>"], status: 401)
+        }
+        return MockRoutes.siteA("/posts.json", req: req, origin: origin)
+    }
+
     /// /h/posts.json: the same key, but only accepted in an X-Api-Key header.
     static func headerSite(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
         guard sub == "/posts.json" else { return .json(["error": "not found"], status: 404) }

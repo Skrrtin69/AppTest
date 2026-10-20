@@ -48,6 +48,10 @@ struct SettingsView: View {
                     }
                     Toggle("Animate GIFs in grids", isOn: $settings.animateGridGIFs)
                     Toggle("Autoplay videos in viewer", isOn: $settings.autoplayVideos)
+                    Toggle("Start videos muted", isOn: $settings.startMuted)
+                        .accessibilityIdentifier("startMutedToggle")
+                    Toggle("Enable Volume/Brightness Swipes", isOn: $settings.edgeSwipes)
+                        .accessibilityIdentifier("edgeSwipesToggle")
                     Toggle("Smart square thumbnails", isOn: $settings.smartThumbnails)
                         .accessibilityIdentifier("smartThumbnails")
                     Toggle("Play alongside other audio", isOn: $settings.mixWithOthers)

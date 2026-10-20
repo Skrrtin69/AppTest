@@ -202,12 +202,13 @@ struct ViewerView: View {
                     // A gallery scrolls vertically itself: no dismiss / edge sliders there.
                     if current?.isGallery == true { dragMode = .other; return }
                     let width = UIScreen.main.bounds.width
-                    if v.startLocation.x < 44 {
+                    if v.startLocation.x < 44 && settings.edgeSwipes {
                         dragMode = .brightness
                         startLevel = Double(UIScreen.main.brightness)
-                    } else if v.startLocation.x > width - 44 {
+                    } else if v.startLocation.x > width - 44 && settings.edgeSwipes {
                         dragMode = .volume
                         startLevel = Double(SystemVolume.shared.current)
+                        SystemVolume.shared.begin()
                     } else if dy > 0 && !zoomed && settings.swipeDownAction == "close" {
                         dragMode = .dismiss
                     } else {
@@ -218,11 +219,12 @@ struct ViewerView: View {
                 case .dismiss:
                     dragOffset = max(0, dy)
                 case .brightness:
-                    let level = min(1, max(0, startLevel - Double(dy) / 350))
+                    // Relative to where the drag began: the full screen height is 100%.
+                    let level = min(1, max(0, startLevel - Double(dy) / Double(UIScreen.main.bounds.height)))
                     UIScreen.main.brightness = CGFloat(level)
                     hud = ("sun.max.fill", level)
                 case .volume:
-                    let level = min(1, max(0, startLevel - Double(dy) / 350))
+                    let level = min(1, max(0, startLevel - Double(dy) / Double(UIScreen.main.bounds.height)))
                     SystemVolume.shared.set(Float(level))
                     hud = ("speaker.wave.2.fill", level)
                 default:
@@ -240,6 +242,7 @@ struct ViewerView: View {
                 } else {
                     withAnimation(.spring()) { dragOffset = 0 }
                 }
+                if dragMode == .volume { SystemVolume.shared.end() }
                 dragMode = .none
                 withAnimation(.easeOut.delay(0.6)) { hud = nil }
             }

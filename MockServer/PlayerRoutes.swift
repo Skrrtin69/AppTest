@@ -43,13 +43,25 @@ enum PlayerRoutes {
         }
     }
 
+    static let chunk = 2 * 1024 * 1024
+
     /// Fetches `url` for the player (forwarding Range) using the matching adapter's client.
     static func proxy(_ req: HTTPRequest) async -> HTTPResponse {
         guard let s = req.query["url"], let url = URL(string: s), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
             return .json(["error": "bad url"], status: 400)
         }
         var r = URLRequest(url: url)
-        if let range = req.headers["range"] { r.setValue(range, forHTTPHeaderField: "Range") }
+        if let range = req.headers["range"] {
+            // "bytes=N-" would make the whole rest of the file download before anything is
+            // sent on; asking for 2 MB at a time lets the player start right away (it asks
+            // for the next piece itself, as a 206 answer allows).
+            if let m = range.range(of: "^bytes=[0-9]+-$", options: .regularExpression), m.lowerBound == range.startIndex,
+               let start = Int(range.dropFirst("bytes=".count).dropLast()) {
+                r.setValue("bytes=\(start)-\(start + Self.chunk - 1)", forHTTPHeaderField: "Range")
+            } else {
+                r.setValue(range, forHTTPHeaderField: "Range")
+            }
+        }
         let client = req.query["site"].flatMap { AdapterRegistry.shared.adapter(for: $0)?.client } ?? NetworkClient.shared
         for (k, v) in client.mediaHeaders { r.setValue(v, forHTTPHeaderField: k) }
         do {
@@ -81,7 +93,7 @@ enum PlayerRoutes {
     </style></head><body><div id="stage"></div><button id="snd" aria-label="Sound">🔊</button>
     <script src="/player/ogv/ogv.js"></script>
     <script>
-    var q=new URLSearchParams(location.search), src=q.get('src')||'', type=q.get('type')||'';
+    var q=new URLSearchParams(location.search), src=q.get('src')||'', type=q.get('type')||'', startMuted=q.get('muted')==='1';
     var stage=document.getElementById('stage'), player=null, usingOgv=false, snd=document.getElementById('snd');
     function setSoundIcon(){ snd.textContent = (player && player.muted) ? '🔇' : '🔊'; snd.setAttribute('aria-label', (player && player.muted) ? 'Sound off, tap for sound' : 'Sound on'); }
     // A tap here is also the user gesture iOS needs before it allows audio.
@@ -94,10 +106,11 @@ enum PlayerRoutes {
       stage.innerHTML='';
       OGVLoader.base='/player/ogv';
       try{ player=new OGVPlayer({simd:false,threading:false}); }catch(e){fail('decoder failed to start: '+e);return;}
-      player.muted=false;
+      player.muted=startMuted;
       player.addEventListener('ended',function(){ if(window.mdLoopOn){player.currentTime=0;player.play();} else {post('ended');} });
       player.addEventListener('error',function(){fail('decoder error');});
       player.addEventListener('playing',function(){post('engine: ogv.js (WebAssembly)');});
+      player.addEventListener('canplay',function(){post('canplay');});
       player.addEventListener('loadedmetadata',function(){post('metadata '+player.videoWidth+'x'+player.videoHeight);});
       player.src=src;
       stage.appendChild(player);
@@ -107,9 +120,10 @@ enum PlayerRoutes {
     }
     function useNative(){
       var v=document.createElement('video');
-      v.setAttribute('playsinline',''); v.playsInline=true; v.autoplay=true; v.loop=true; v.muted=false; v.controls=true;
+      v.setAttribute('playsinline',''); v.playsInline=true; v.autoplay=true; v.loop=true; v.muted=startMuted; v.controls=true;
       v.addEventListener('error',useOgv);
       v.addEventListener('playing',function(){post('engine: WebKit <video>');});
+      v.addEventListener('canplay',function(){post('canplay');});
       v.addEventListener('ended',function(){post('ended');});
       v.src=src; stage.appendChild(v); player=v;
       snd.style.display='block'; setSoundIcon();

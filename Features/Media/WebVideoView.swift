@@ -12,6 +12,8 @@ struct WebVideoView: UIViewRepresentable {
     /// false = auto-advance: report the end instead of looping.
     var loop: Bool = true
     var onFinished: (() -> Void)? = nil
+    /// Called once the page's player can play (or has shown an error).
+    var onReady: (() -> Void)? = nil
     /// Reports which engine ended up playing (or the error), for the on-screen label.
     var onStatus: ((String) -> Void)? = nil
 
@@ -22,6 +24,7 @@ struct WebVideoView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         Self.enableWebMFeatures(config.preferences)
+        config.processPool = Self.processPool
         config.userContentController.add(context.coordinator, name: "status")
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.isOpaque = false
@@ -29,6 +32,7 @@ struct WebVideoView: UIViewRepresentable {
         wv.scrollView.isScrollEnabled = false
         wv.accessibilityIdentifier = "webVideo"
         context.coordinator.onStatus = onStatus
+        context.coordinator.onReady = onReady
         context.coordinator.loadedURL = url
         wv.load(URLRequest(url: Self.playerURL(for: url, siteID: siteID)))
         return wv
@@ -36,6 +40,7 @@ struct WebVideoView: UIViewRepresentable {
 
     func updateUIView(_ wv: WKWebView, context: Context) {
         context.coordinator.onStatus = onStatus
+        context.coordinator.onReady = onReady
         if context.coordinator.loadedURL != url {
             context.coordinator.loadedURL = url
             wv.load(URLRequest(url: Self.playerURL(for: url, siteID: siteID)))
@@ -67,7 +72,27 @@ struct WebVideoView: UIViewRepresentable {
             src = "/proxy?url=" + encode(url.absoluteString) + (siteID.map { "&site=" + encode($0) } ?? "")
         }
         let type = url.pathExtension.lowercased() == "webm" ? "video/webm" : ""
-        return URL(string: "\(server)/player/video.html?src=\(encode(src))&type=\(encode(type))") ?? url
+        let muted = AppSettings.shared.startMuted ? "&muted=1" : ""
+        return URL(string: "\(server)/player/video.html?src=\(encode(src))&type=\(encode(type))\(muted)") ?? url
+    }
+
+    /// Shared by every web player, so later ones reuse the already running web process.
+    static let processPool = WKProcessPool()
+    private static var warm: WKWebView?
+
+    /// Starts the web process and loads the player and decoder files once, off screen,
+    /// so the first web video starts without that delay.
+    @MainActor
+    static func prewarm() {
+        guard warm == nil else { return }
+        let config = WKWebViewConfiguration()
+        config.processPool = processPool
+        enableWebMFeatures(config.preferences)
+        let wv = WKWebView(frame: CGRect(x: 0, y: 0, width: 4, height: 4), configuration: config)
+        let server = MockServer.shared.baseURL.absoluteString
+        wv.loadHTMLString("<!doctype html><html><body><script src=\"\(server)/player/ogv/ogv.js\"></script></body></html>",
+                          baseURL: URL(string: server))
+        warm = wv
     }
 
     static func encode(_ s: String) -> String {
@@ -104,10 +129,16 @@ struct WebVideoView: UIViewRepresentable {
         var loadedURL: URL?
         var onStatus: ((String) -> Void)?
         var onFinished: (() -> Void)?
+        var onReady: (() -> Void)?
+        private var readySent = false
         func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
             let text = "\(message.body)"
             NSLog("[WebVideo] %@", text)
             if text == "ended" { DispatchQueue.main.async { self.onFinished?() } }
+            if !readySent, text == "canplay" || text.hasPrefix("engine:") || text.hasPrefix("error:") {
+                readySent = true
+                DispatchQueue.main.async { self.onReady?() }
+            }
             if text.hasPrefix("engine:") || text.hasPrefix("error:") {
                 let status = text.replacingOccurrences(of: "engine: ", with: "")
                 DispatchQueue.main.async { self.onStatus?(status) }

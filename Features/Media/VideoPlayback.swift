@@ -81,6 +81,9 @@ struct MediaVideoView: View {
 
     @State private var path: PlaybackPath?
     @State private var engine: String?
+    @State private var webReady = false
+    @State private var webTimedOut = false
+    @State private var webAttempt = 0
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -96,9 +99,37 @@ struct MediaVideoView: View {
                 }
             case .some(.web):
                 WebVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
-                             loop: !settings.autoAdvance, onFinished: onFinished) { engine = $0 }
+                             loop: !settings.autoAdvance, onFinished: onFinished,
+                             onReady: { webReady = true }) { engine = $0 }
+                    .id(webAttempt)
                     .overlay(alignment: .bottomTrailing) {
                         if showControls { SpeedButton().padding(.trailing, 70).padding(.bottom, 145) }
+                    }
+                    .overlay {
+                        // Until the page's player can play: a spinner, then Retry after 10 s.
+                        if !webReady {
+                            if webTimedOut {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "exclamationmark.triangle.fill").font(.largeTitle)
+                                    Text("The video is taking too long to start.").font(.subheadline)
+                                    Button { webAttempt += 1 } label: { Label("Retry", systemImage: "arrow.clockwise") }
+                                        .buttonStyle(.borderedProminent)
+                                        .accessibilityIdentifier("webVideoRetry")
+                                }
+                                .foregroundColor(.white)
+                                .padding(20)
+                                .background(RoundedRectangle(cornerRadius: 14).fill(Color.black.opacity(0.7)))
+                            } else {
+                                ProgressView().tint(.white).scaleEffect(1.5)
+                                    .accessibilityIdentifier("webVideoLoading")
+                            }
+                        }
+                    }
+                    .task(id: "\(url.absoluteString)#\(webAttempt)") {
+                        webReady = false
+                        webTimedOut = false
+                        try? await Task.sleep(nanoseconds: 10_000_000_000)
+                        if !Task.isCancelled, !webReady { webTimedOut = true }
                     }
             }
             if let p = path, showControls {
@@ -142,7 +173,7 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         let item = AVPlayerItem(asset: AVURLAsset.withSiteHeaders(url))
         player = AVPlayer(playerItem: item)
         super.init()
-        player.isMuted = false
+        player.isMuted = AppSettings.shared.startMuted
         // Loop by default.
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
             Task { @MainActor in

@@ -68,6 +68,10 @@ enum MockRoutes {
             return siteA("/posts.json", req: req, origin: origin)
         case p == "/legacy" || p.hasPrefix("/legacy/"):
             return MockVault.legacy(String(p.dropFirst("/legacy".count)), req: req, origin: origin)
+        case p == "/cf" || p.hasPrefix("/cf/"):
+            return MockVault.cloudflare(String(p.dropFirst(3)), req: req, origin: origin)
+        case p.hasPrefix("/hk/"):
+            return MockVault.keyHeaderSite(String(p.dropFirst(3)), req: req, origin: origin)
         case p.hasPrefix("/h/"):
             return MockVault.headerSite(String(p.dropFirst(2)), req: req, origin: origin)
         case p == "/v" || p.hasPrefix("/v/"):

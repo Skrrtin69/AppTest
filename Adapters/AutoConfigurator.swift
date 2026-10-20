@@ -55,6 +55,8 @@ enum AutoConfigFailure: Error, Equatable {
     case noList(rawJSON: String)
     case noMedia(rawJSON: String)
     case emptyList(path: String)
+    /// A Cloudflare check page instead of the API (not a login problem).
+    case cloudflare(url: String)
 
     var title: String {
         switch self {
@@ -67,6 +69,7 @@ enum AutoConfigFailure: Error, Equatable {
         case .noList: return "Couldn't find a list of results"
         case .noMedia: return "Found a list, but no picture or video addresses in it"
         case .emptyList: return "0 results"
+        case .cloudflare: return "Protected by Cloudflare"
         }
     }
 
@@ -80,6 +83,7 @@ enum AutoConfigFailure: Error, Equatable {
         case .notJSON(let snippet): return "MediaDeck needs the site's data address (an API that answers in JSON), not a page meant for a browser. The answer started with: \(snippet)"
         case .noList: return "Couldn't find a list of results. Open the Field Mapper and pick the list manually."
         case .emptyList(let p): return "The answer has a list (\(p.isEmpty ? "the answer itself" : "'\(p)'")) but it's empty, so there's nothing to learn the fields from."
+        case .cloudflare: return "This site is protected by Cloudflare. Tap to verify."
         case .noMedia: return "None of the results contain a web address (http…) or a file path ending in a picture/video type. Open the Field Mapper and pick the addresses manually."
         }
     }
@@ -94,6 +98,7 @@ enum AutoConfigFailure: Error, Equatable {
         case .notJSON: return "Find the site's API address (often contains /api/ or ends in .json) and paste that instead."
         case .noList, .noMedia: return "Open the Field Mapper"
         case .emptyList: return "Use a sample tag that has results (or leave it empty), then tap Analyze."
+        case .cloudflare: return "Tap Verify, finish the check on the page, and MediaDeck tries again on its own."
         }
     }
 }
@@ -164,6 +169,10 @@ struct AutoConfigurator {
             return .failure(.network(error.localizedDescription))
         }
         let bodyText = String(decoding: data.prefix(500), as: UTF8.self)
+        // Cloudflare's check page (403/503 + its headers, HTML): not a login problem.
+        if Self.isCloudflareCheck(response, data: data) {
+            return .failure(.cloudflare(url: url.absoluteString))
+        }
         if response.statusCode == 401 || response.statusCode == 403 {
             if input.authStyle != nil && input.authStyle != AuthStyle.none {
                 let said = ErrorParser.message(from: data, contentType: response.value(forHTTPHeaderField: "Content-Type"))
@@ -416,6 +425,8 @@ extension AutoConfigurator {
         "/post.json?tags={tags}&page={page}",
         "/post/index.json?tags={tags}&page={page}",
         "/api/posts?tags={tags}&page={page}",
+        // Gallery/album style sites (single galleries at /api/gallery/{id}).
+        "/api/galleries/search?query={tags}&page={page}",
     ]
     /// Filled in when nothing answered, for the user to check.
     static let defaultTemplate = "/posts.json?tags={tags}&page={page}"
@@ -455,6 +466,16 @@ extension AutoConfigurator {
         let rest = parts.rest.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         // The site itself, or a folder it lives in (example.org/board): no file name at the end.
         return rest.isEmpty || !(rest.split(separator: "/").last ?? "").contains(".")
+    }
+
+    /// A Cloudflare challenge: 403/503/429 with Cloudflare's headers and a webpage (a JSON
+    /// 403 from an API behind Cloudflare is a real login error, so it doesn't count).
+    static func isCloudflareCheck(_ r: HTTPURLResponse, data: Data) -> Bool {
+        guard [403, 503, 429].contains(r.statusCode) else { return false }
+        let server = (r.value(forHTTPHeaderField: "Server") ?? "").lowercased()
+        let cf = r.value(forHTTPHeaderField: "cf-ray") != nil || r.value(forHTTPHeaderField: "cf-mitigated") != nil || server.contains("cloudflare")
+        guard cf else { return false }
+        return (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) == nil
     }
 
     /// Phrases servers use when a request needs a login or key.
@@ -537,6 +558,13 @@ extension AutoConfigurator {
                 continue
             // JSON (even if it needs a login or a manual field pick): this is the API.
             default:
+                // Gallery-style search: single galleries live next to it.
+                if t.hasPrefix("/api/galleries/search"), case .success(var p) = r, p.config.postPath.isEmpty {
+                    p.config.postPath = "gallery/{id}"
+                    p.guesses[.postPath] = FieldGuess(level: .medium, reason: "Gallery-style API: single galleries are usually at /api/gallery/{id}.",
+                                                      value: p.config.jsonValue(for: .postPath))
+                    return (.success(p), attempt.urlTemplate)
+                }
                 return (r, attempt.urlTemplate)
             }
         }

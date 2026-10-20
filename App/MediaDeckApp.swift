@@ -82,6 +82,8 @@ final class BootModel: ObservableObject {
         ShareInbox.process()
         WidgetFeedWriter.scheduleUpdate()
         PanicManager.shared.installSwipe()
+        // The web video player's process and files, ready before the first WebM.
+        WebVideoView.prewarm()
         Task { await FollowStore.shared.checkIfDue() }
         // Cached files not opened within the chosen number of days.
         Task.detached(priority: .background) { await ImageCache.shared.expire() }

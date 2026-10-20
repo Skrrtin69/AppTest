@@ -59,7 +59,8 @@ final class AppSettings: ObservableObject {
                          wifiOnlyMedia = "wifiOnlyMedia", mixWithOthers = "mixWithOthers",
                          smartThumbnails = "smartThumbnails", twoPageLandscape = "twoPageLandscape", fallbackSite = "fallbackSite",
                          stripEXIF = "stripEXIF", autoTagDownloads = "autoTagDownloads", panicGesture = "panicGesture", panicAction = "panicAction",
-                         doubleTapAction = "doubleTapAction", swipeUpAction = "swipeUpAction", swipeDownAction = "swipeDownAction"
+                         doubleTapAction = "doubleTapAction", swipeUpAction = "swipeUpAction", swipeDownAction = "swipeDownAction",
+                         startMuted = "startMuted", edgeSwipes = "edgeSwipes"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
@@ -67,7 +68,7 @@ final class AppSettings: ObservableObject {
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
                           readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
                           detectClipboardLinks, dataSaver, wifiOnlyMedia, mixWithOthers,
-                          smartThumbnails, twoPageLandscape, fallbackSite, stripEXIF, autoTagDownloads, panicGesture, panicAction, doubleTapAction, swipeUpAction, swipeDownAction]
+                          smartThumbnails, twoPageLandscape, fallbackSite, stripEXIF, autoTagDownloads, panicGesture, panicAction, doubleTapAction, swipeUpAction, swipeDownAction, startMuted, edgeSwipes]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -96,6 +97,10 @@ final class AppSettings: ObservableObject {
     @Published var updateURL: String = defaultUpdateURL { didSet { d.set(updateURL, forKey: K.updateURL) } }
     @Published var animateGridGIFs: Bool = true { didSet { d.set(animateGridGIFs, forKey: K.animateGridGIFs) } }
     @Published var autoplayVideos: Bool = true { didSet { d.set(autoplayVideos, forKey: K.autoplayVideos) } }
+    /// Every player (native, web, Picture in Picture) starts with the sound off.
+    @Published var startMuted: Bool = false { didSet { d.set(startMuted, forKey: K.startMuted) } }
+    /// Viewer edge swipes: left edge = brightness, right edge = volume.
+    @Published var edgeSwipes: Bool = true { didSet { d.set(edgeSwipes, forKey: K.edgeSwipes) } }
     /// Thumbnails stay blurred until tapped once.
     @Published var blurThumbnails: Bool = false { didSet { d.set(blurThumbnails, forKey: K.blurThumbnails) } }
     /// Thumbnails of posts already opened are dimmed.
@@ -225,6 +230,8 @@ final class AppSettings: ObservableObject {
         updateURL = d.string(forKey: K.updateURL)?.nonEmpty ?? Self.defaultUpdateURL
         animateGridGIFs = d.object(forKey: K.animateGridGIFs) as? Bool ?? true
         autoplayVideos = d.object(forKey: K.autoplayVideos) as? Bool ?? true
+        startMuted = d.object(forKey: K.startMuted) as? Bool ?? false
+        edgeSwipes = d.object(forKey: K.edgeSwipes) as? Bool ?? true
         blurThumbnails = d.object(forKey: K.blurThumbnails) as? Bool ?? false
         dimViewed = d.object(forKey: K.dimViewed) as? Bool ?? true
         viewerAspect = ViewerAspect(rawValue: d.string(forKey: K.viewerAspect) ?? "") ?? .fit

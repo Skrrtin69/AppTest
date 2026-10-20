@@ -39,6 +39,9 @@ struct AutoConfigView: View {
     /// The site logs in with a username and password instead of a key.
     @State private var useLogin = false
     @State private var notice: Notice?
+    /// Cloudflare check page to open; bumped after it's passed, to try again.
+    @State private var cfPage: LoginPage?
+    @State private var verifyTick = 0
 
     enum Notice: Equatable {
         /// The resolver found nothing and filled in the usual address.
@@ -84,6 +87,17 @@ struct AutoConfigView: View {
             }
             .safeAreaInset(edge: .bottom) { actionBar(proxy) }
             .onChange(of: reanalyze) { _ in Task { await testConnection(proxy) } }
+            .onChange(of: verifyTick) { _ in Task { if hasLogin { await testConnection(proxy) } else { await analyze(proxy) } } }
+        }
+        .sheet(item: $cfPage) { page in
+            CloudflareVerifyView(url: page.url) { userAgent in
+                // The check is tied to this browser identity: the adapter must send the same one.
+                var lines = headersText.split(separator: "\n").map(String.init)
+                lines.removeAll { $0.lowercased().hasPrefix("user-agent") }
+                lines.append("User-Agent = \(userAgent)")
+                headersText = lines.joined(separator: "\n")
+                verifyTick += 1
+            }
         }
         .sheet(item: $loginPage) { page in
             ThemedWebPage(url: page.url, onFindKey: { key, user in useFound(key, user) },
@@ -166,6 +180,8 @@ struct AutoConfigView: View {
                 Button("Demo Members (guest limits)") { urlText = "\(o)/a/members/posts.json?tags={tags}&page={page}"; sampleTag = "red" }
                 Button("Demo Formats (zip, webp, apng, stream…)") { urlText = "\(o)/u/posts.json?tags={tags}&page={page}"; sampleTag = "" }
                 Button("Demo Vault (log in to find the key)") { urlText = "\(o)/v/posts.json?tags={tags}&page={page}"; sampleTag = "blue" }
+                Button("Demo Cloudflare (security check)") { urlText = "\(o)/cf/posts.json?tags={tags}&page={page}"; sampleTag = "blue" }
+                Button("Demo Key Header (Authorization: Key)") { urlText = "\(o)/hk/posts.json?tags={tags}&page={page}"; sampleTag = "blue" }
                 Button("Demo Header Key (X-Api-Key only)") { urlText = "\(o)/h/posts.json?tags={tags}&page={page}"; sampleTag = "blue" }
                 Button("Demo Gallery (multi-page)") { urlText = "\(o)/g/posts.json?tags={tags}&page={page}"; sampleTag = "comic" }
             } label: { Label("Try a demo address", systemImage: "testtube.2") }
@@ -289,6 +305,22 @@ struct AutoConfigView: View {
             switch f {
             case .noList(let raw), .noMedia(let raw):
                 ErrorCard(title: f.title, message: f.message, next: f.nextAction, actionTitle: "Open Field Mapper") { mapperRequest = MapperRequest(json: raw) }
+            case .cloudflare(let address):
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Protected by Cloudflare", systemImage: "shield.lefthalf.filled")
+                        .font(.headline).foregroundColor(.orange)
+                    Button {
+                        if let u = siteHome ?? URL(string: address) { cfPage = LoginPage(url: u) }
+                    } label: {
+                        Text("This site is protected by Cloudflare. Tap to verify.")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("cloudflareVerify")
+                    Text("The site showed a security check instead of its data. Complete it once on the page that opens; MediaDeck keeps the pass and tries again.")
+                        .font(.footnote).foregroundColor(.secondary)
+                }
+                .padding(.vertical, 6)
             case .needsLogin:
                 VStack(alignment: .leading, spacing: 10) {
                     Label("Requires Authentication", systemImage: "lock.fill")
@@ -307,7 +339,7 @@ struct AutoConfigView: View {
                         .buttonStyle(.borderedProminent)
                         .accessibilityIdentifier("loginFindKey")
                     }
-                    Text("Or type the key in the API key field below.").font(.footnote).foregroundColor(.secondary)
+                    Text("No login page? Paste the site's API key in the field below and tap Test Connection.").font(.footnote).foregroundColor(.secondary)
                 }
                 .padding(.vertical, 6)
             default:
@@ -471,7 +503,8 @@ struct AutoConfigView: View {
         } else {
             attempts = [("\(keyParam)= in the address", .apiKeyQuery, keyParam, nil),
                         ("Authorization: Bearer", .bearer, nil, nil),
-                        ("X-Api-Key header", .apiKeyHeader, "X-Api-Key", nil)]
+                        ("X-Api-Key header", .apiKeyHeader, "X-Api-Key", nil),
+                        ("Authorization: Key", .apiKeyHeader, "Authorization", nil)]
             if username.nonEmpty != nil {
                 attempts.append(("\(keyParam)= and \(userParam)= in the address", .apiKeyQuery, keyParam, userParam))
             }
@@ -482,10 +515,14 @@ struct AutoConfigView: View {
         var tried: [String] = []
         for a in attempts {
             tried.append(a.label)
+            // "Authorization: Key <key>": the header value carries the word Key.
+            let sent = a.label == "Authorization: Key"
+                ? Credentials(username: creds.username, password: nil, apiKey: "Key " + (apiKey.nonEmpty ?? ""))
+                : creds
             let input = AutoConfigInput(urlTemplate: urlText, sampleTag: sampleTag,
                                         headers: AdapterEditorView.parsePairs(headersText),
                                         authStyle: a.style, authParamName: a.param, authUserParamName: a.userParam,
-                                        credentials: creds)
+                                        credentials: sent)
             let (result, resolved) = await configurator.resolveAndAnalyze(input, guessedScheme: normalized.guessed)
             DebugLog.log("AuthTester", "\(a.label): \(Self.describe(result))")
             switch result {
@@ -524,6 +561,7 @@ struct AutoConfigView: View {
         authStyle = a.style
         authParamName = a.param ?? ""
         authUserParam = a.userParam ?? ""
+        if a.label == "Authorization: Key", !apiKey.hasPrefix("Key ") { apiKey = "Key " + apiKey }
     }
 
     /// JSON came back with this login; only the field mapping needs a look.

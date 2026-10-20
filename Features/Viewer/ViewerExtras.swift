@@ -10,17 +10,34 @@ final class SystemVolume {
     static let shared = SystemVolume()
     private let view = MPVolumeView(frame: CGRect(x: -2000, y: -2000, width: 10, height: 10))
 
+    private var releaseWork: DispatchWorkItem?
+
     var current: Float { AVAudioSession.sharedInstance().outputVolume }
 
+    /// Takes hold of the volume for a drag (the hidden slider only works while in a window;
+    /// while it is there, the hardware buttons don't show the system volume overlay).
+    func begin() {
+        releaseWork?.cancel()
+        guard view.superview == nil else { return }
+        let window = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }.first { $0.isKeyWindow }
+        window?.addSubview(view)
+    }
+
     func set(_ value: Float) {
-        if view.superview == nil {
-            let window = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-                .flatMap { $0.windows }.first { $0.isKeyWindow }
-            window?.addSubview(view)
-        }
+        begin()
         guard let slider = view.subviews.compactMap({ $0 as? UISlider }).first else { return }
         slider.value = min(1, max(0, value))
         slider.sendActions(for: .valueChanged)
+    }
+
+    /// Lets go after the drag, so the physical buttons behave normally again.
+    func end() {
+        releaseWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.view.removeFromSuperview() }
+        releaseWork = work
+        // A moment for the last value to reach the system.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
     }
 }
 

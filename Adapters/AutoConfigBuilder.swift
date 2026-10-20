@@ -401,6 +401,8 @@ extension AutoConfigurator {
         mutating func probeAutocomplete(adapter: GenericAdapter) async {
             let patterns = ["tags/autocomplete.json?q={query}", "tags/autocomplete?q={query}", "autocomplete.json?q={query}",
                             "autocomplete?q={query}", "suggest?q={query}",
+                            // Older boards
+                            "index.php?page=autocomplete2&q={query}", "autocomplete.php?q={query}",
                             "tags.json?search[name_matches]={query}*&search[order]=count", "tags.json?q={query}"]
             let query = String((input.sampleTag.split(separator: " ").first ?? "a").prefix(2))
             let bases = parts.base == parts.origin ? [parts.base] : [parts.base, parts.origin]

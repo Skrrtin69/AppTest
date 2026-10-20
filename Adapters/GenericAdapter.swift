@@ -68,7 +68,10 @@ final class GenericAdapter: SiteAdapter {
         guard let path = config.autocompletePath?.nonEmpty else { return [] }
         let q = query.trimmingCharacters(in: .whitespaces)
         guard q.count >= 1 else { return [] }
-        let url = try buildURL(path: path, vars: ["query": Self.encode(prepareTag(q))])
+        var term = prepareTag(q)
+        // name_matches searches need a wildcard to find tags that start with the text.
+        if path.contains("name_matches"), !path.contains("{query}*"), !term.hasSuffix("*") { term += "*" }
+        let url = try buildURL(path: path, vars: ["query": Self.encode(term)])
         let json = try await fetchJSON(url)
         let list = DottedPath.evaluate(config.autocompleteResultsPath ?? "", in: json) ?? json
         let namePath = config.tagNamePath?.nonEmpty ?? config.autocompleteNameKey?.nonEmpty ?? "name"
