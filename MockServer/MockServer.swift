@@ -202,7 +202,7 @@ final class MockServer {
 struct HTTPRequest {
     let method: String
     let path: String
-    let query: [String: String]
+    var query: [String: String]
     /// Lowercased header names.
     let headers: [String: String]
     var body = Data()

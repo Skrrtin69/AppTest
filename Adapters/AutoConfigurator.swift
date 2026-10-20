@@ -169,9 +169,16 @@ struct AutoConfigurator {
             return .failure(.network(error.localizedDescription))
         }
         let bodyText = String(decoding: data.prefix(500), as: UTF8.self)
+        DebugLog.log("Probe", Self.trace(url, response, data))
         // Cloudflare's check page (403/503 + its headers, HTML): not a login problem.
         if Self.isCloudflareCheck(response, data: data) {
             return .failure(.cloudflare(url: url.absoluteString))
+        }
+        // A 403 that says something else ("Use new API…", a plain 403 page from a
+        // proxy) is just an error: the resolver moves on to the next API shape.
+        if response.statusCode == 403, !Self.forbiddenMeansLogin(data) {
+            return .failure(.http(status: 403,
+                                  body: ErrorParser.message(from: data, contentType: response.value(forHTTPHeaderField: "Content-Type")) ?? String(bodyText.prefix(300))))
         }
         if response.statusCode == 401 || response.statusCode == 403 {
             if input.authStyle != nil && input.authStyle != AuthStyle.none {
@@ -425,12 +432,22 @@ extension AutoConfigurator {
         "/post.json?tags={tags}&page={page}",
         "/post/index.json?tags={tags}&page={page}",
         "/api/posts?tags={tags}&page={page}",
+        // Versioned APIs that replaced the older paths above.
+        "/api/v2/search?query={tags}&page={page}",
+        "/api/v2/posts?tags={tags}&page={page}",
         // Gallery/album style sites (single galleries at /api/gallery/{id}).
         "/api/galleries/search?query={tags}&page={page}",
     ]
     /// Filled in when nothing answered, for the user to check.
     static let defaultTemplate = "/posts.json?tags={tags}&page={page}"
     static let unresolvedMessage = "Couldn't auto-resolve. Please check this default address."
+
+    static func verdict(_ r: Result<AutoConfigProposal, AutoConfigFailure>) -> String {
+        switch r {
+        case .success: return "API found"
+        case .failure(let f): return f.title
+        }
+    }
 
     /// Seconds each address gets while probing.
     static let probeTimeout: Double = 5
@@ -468,14 +485,39 @@ extension AutoConfigurator {
         return rest.isEmpty || !(rest.split(separator: "/").last ?? "").contains(".")
     }
 
-    /// A Cloudflare challenge: 403/503/429 with Cloudflare's headers and a webpage (a JSON
-    /// 403 from an API behind Cloudflare is a real login error, so it doesn't count).
+    /// A Cloudflare challenge. Every answer from a site behind Cloudflare carries its
+    /// headers (Server: cloudflare, cf-ray), even ordinary 403/404 pages, so those alone
+    /// mean nothing: it takes `cf-mitigated: challenge`, or a 403/503/429 webpage that is
+    /// Cloudflare's own check page.
     static func isCloudflareCheck(_ r: HTTPURLResponse, data: Data) -> Bool {
+        if (r.value(forHTTPHeaderField: "cf-mitigated") ?? "").lowercased().contains("challenge") { return true }
         guard [403, 503, 429].contains(r.statusCode) else { return false }
         let server = (r.value(forHTTPHeaderField: "Server") ?? "").lowercased()
-        let cf = r.value(forHTTPHeaderField: "cf-ray") != nil || r.value(forHTTPHeaderField: "cf-mitigated") != nil || server.contains("cloudflare")
-        guard cf else { return false }
-        return (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) == nil
+        guard r.value(forHTTPHeaderField: "cf-ray") != nil || server.contains("cloudflare") else { return false }
+        let html = String(decoding: data.prefix(30_000), as: UTF8.self).lowercased()
+        return challengeMarkers.contains { html.contains($0) }
+    }
+
+    /// Text found only on Cloudflare's check pages.
+    static let challengeMarkers = ["just a moment", "challenge-platform", "cf_chl_", "cf-chl-", "checking your browser",
+                                   "verify you are human", "cf-browser-verification", "attention required! | cloudflare",
+                                   "captcha"]
+
+    /// A 403 is a login problem when it says so, is JSON (an API's own error), or says nothing.
+    static func forbiddenMeansLogin(_ data: Data) -> Bool {
+        let text = String(decoding: data.prefix(3000), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty || mentionsAuth(data) { return true }
+        if (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) is [String: Any] { return true }
+        let visible = text.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression).lowercased()
+        return visible.count < 300 && (visible.contains("forbidden") || visible.contains("permission"))
+    }
+
+    /// One line for the debug console: status, type, the Cloudflare headers, and the body.
+    static func trace(_ url: URL, _ r: HTTPURLResponse, _ data: Data) -> String {
+        let h = { (k: String) in r.value(forHTTPHeaderField: k) ?? "–" }
+        let body = String(decoding: data.prefix(400), as: UTF8.self)
+            .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ").prefix(160)
+        return "GET \(DebugLog.redact(url)) → \(r.statusCode) \(h("Content-Type")) · server=\(h("Server")) cf-ray=\(r.value(forHTTPHeaderField: "cf-ray") == nil ? "no" : "yes") cf-mitigated=\(h("cf-mitigated")) · \(data.count) bytes: \(body)"
     }
 
     /// Phrases servers use when a request needs a login or key.
@@ -552,6 +594,7 @@ extension AutoConfigurator {
                     r = r2
                 }
             }
+            DebugLog.log("Probe", "\(t) → \(Self.verdict(r))")
             switch r {
             // A webpage, an error page (404…) or no answer: try the next shape.
             case .failure(.notJSON), .failure(.http), .failure(.network):

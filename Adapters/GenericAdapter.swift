@@ -56,7 +56,7 @@ final class GenericAdapter: SiteAdapter {
     }
 
     /// Keys looked for when the adapter has no tagCountPath.
-    static let countKeys = ["post_count", "count", "posts", "postCount", "total", "use_count"]
+    static let countKeys = ["post_count", "count", "posts", "postCount", "total", "use_count", "label"]
 
     /// Tag suggestions for what's being typed, using autocompletePath. Empty when unsupported.
     func suggest(_ query: String) async throws -> [String] {
@@ -93,7 +93,11 @@ final class GenericAdapter: SiteAdapter {
             case let n as Int: return n
             case let n as Double: return Int(n)
             case let n as NSNumber: return n.intValue
-            case let s as String: if let n = Int(s.replacingOccurrences(of: ",", with: "")) { return n }
+            case let s as String:
+                if let n = Int(s.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces)) { return n }
+                // "blush (3922720)": the count written after the name.
+                if let r = s.range(of: "\\(([0-9][0-9,]*)\\)\\s*$", options: .regularExpression),
+                   let n = Int(s[r].filter(\.isNumber)) { return n }
             default: continue
             }
         }

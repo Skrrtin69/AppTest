@@ -402,7 +402,9 @@ extension AutoConfigurator {
             let patterns = ["tags/autocomplete.json?q={query}", "tags/autocomplete?q={query}", "autocomplete.json?q={query}",
                             "autocomplete?q={query}", "suggest?q={query}",
                             // Older boards
-                            "index.php?page=autocomplete2&q={query}", "autocomplete.php?q={query}",
+                            "index.php?page=autocomplete2&term={query}&type=tag_query&limit=10",
+                            "public/autocomplete.php?q={query}", "autocomplete.php?q={query}",
+                            "index.php?page=autocomplete2&q={query}",
                             "tags.json?search[name_matches]={query}*&search[order]=count", "tags.json?q={query}"]
             let query = String((input.sampleTag.split(separator: " ").first ?? "a").prefix(2))
             let bases = parts.base == parts.origin ? [parts.base] : [parts.base, parts.origin]
@@ -458,7 +460,9 @@ extension AutoConfigurator {
                 if a.allSatisfy({ $0 is String }) { return (nil, a.count) }
                 let objs = a.compactMap { $0 as? [String: Any] }
                 guard objs.count == a.count else { return nil }
-                for k in ["name", "label", "tag", "value", "term", "title"] where objs.allSatisfy({ $0[k] is String }) {
+                // "value" before "label": legacy boards put the tag in value and a display
+                // form ("blue eyes", "blush (123)") in label.
+                for k in ["name", "value", "tag", "term", "label", "title"] where objs.allSatisfy({ $0[k] is String }) {
                     return (k, a.count)
                 }
                 return nil

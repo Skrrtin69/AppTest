@@ -181,6 +181,9 @@ struct AutoConfigView: View {
                 Button("Demo Formats (zip, webp, apng, stream…)") { urlText = "\(o)/u/posts.json?tags={tags}&page={page}"; sampleTag = "" }
                 Button("Demo Vault (log in to find the key)") { urlText = "\(o)/v/posts.json?tags={tags}&page={page}"; sampleTag = "blue" }
                 Button("Demo Cloudflare (security check)") { urlText = "\(o)/cf/posts.json?tags={tags}&page={page}"; sampleTag = "blue" }
+                Button("Demo Moved API (403 text, not a check)") { urlText = "\(o)/mv"; sampleTag = "blue" }
+                Button("Demo Legacy Board 1 (autocomplete2)") { urlText = "\(o)/lb1"; sampleTag = "blue" }
+                Button("Demo Legacy Board 2 (label counts)") { urlText = "\(o)/lb2"; sampleTag = "blue" }
                 Button("Demo Key Header (Authorization: Key)") { urlText = "\(o)/hk/posts.json?tags={tags}&page={page}"; sampleTag = "blue" }
                 Button("Demo Header Key (X-Api-Key only)") { urlText = "\(o)/h/posts.json?tags={tags}&page={page}"; sampleTag = "blue" }
                 Button("Demo Gallery (multi-page)") { urlText = "\(o)/g/posts.json?tags={tags}&page={page}"; sampleTag = "comic" }

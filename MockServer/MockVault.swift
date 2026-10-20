@@ -111,6 +111,52 @@ enum MockVault {
         "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>\(title)</title></head><body style=\"font:17px -apple-system;padding:24px\">\(body)</body></html>"
     }
 
+    /// /mv: a site behind Cloudflare whose old API paths answer 403 text/plain
+    /// "Use new API…" (with cf-ray and Server: cloudflare, but no challenge); the
+    /// working API is /mv/api/v2/search, which needs no login.
+    static func movedAPI(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
+        var r: HTTPResponse
+        if sub == "/api/v2/search" {
+            var q = req
+            q.query["tags"] = req.query["query"]
+            r = MockRoutes.siteA("/posts.json", req: q, origin: origin)
+        } else if sub.hasPrefix("/api/") {
+            r = .text("Use new API \(origin)/mv/api/v2/docs", status: 403)
+        } else if sub == "" || sub == "/" {
+            r = .text(cfPage("Demo moved API", "<h1>Demo site</h1><p>Normal home page, no check.</p>"), type: "text/html; charset=utf-8")
+        } else {
+            r = .text(cfPage("Not found", "<h1>404</h1>"), status: 404, type: "text/html; charset=utf-8")
+        }
+        r.headers["cf-ray"] = "8f00demo0001-LAX"
+        r.headers["Server"] = "cloudflare"
+        return r
+    }
+
+    /// /lb1 and /lb2: open legacy boards. /lb1 suggests at index.php?page=autocomplete2&term=
+    /// (counts as strings; q= gets an empty list). /lb2 redirects public/autocomplete.php to
+    /// /lb2/ac/autocomplete.php, which sends JSON as text/html with the count in the label.
+    static func legacyBoard(_ name: String, _ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
+        func tags(_ q: String) -> [(tag: String, count: Int)] { MockCatalog.suggestions(q.lowercased()).map { ($0.tag, $0.count) } }
+        switch sub {
+        case "/index.php" where req.query["page"] == "dapi":
+            return MockRoutes.siteA("/posts.json", req: req, origin: origin)
+        case "/index.php" where req.query["page"] == "autocomplete2" && name == "lb1":
+            guard let term = req.query["term"] else { return .json([]) }
+            return .json(tags(term).map { ["type": "tag", "label": $0.tag.replacingOccurrences(of: "_", with: " "), "value": $0.tag,
+                                           "post_count": String($0.count), "category": "tag"] })
+        case "/public/autocomplete.php" where name == "lb2":
+            var r = HTTPResponse.text("<html><body>302 Found</body></html>", status: 302, type: "text/html")
+            r.headers["Location"] = "\(origin)/lb2/ac/autocomplete.php?q=\(req.query["q"] ?? "")"
+            return r
+        case "/ac/autocomplete.php" where name == "lb2":
+            let list = tags(req.query["q"] ?? "").map { ["label": "\($0.tag) (\($0.count))", "value": $0.tag, "type": "general"] }
+            let data = (try? JSONSerialization.data(withJSONObject: list)) ?? Data("[]".utf8)
+            return .text(String(decoding: data, as: UTF8.self), type: "text/html; charset=UTF-8")
+        default:
+            return .text("<html><body><h1>404</h1></body></html>", status: 404, type: "text/html")
+        }
+    }
+
     /// /hk/posts.json: only "Authorization: Key <key>" is accepted.
     static func keyHeaderSite(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
         guard sub == "/posts.json" else { return .json(["error": "not found"], status: 404) }
