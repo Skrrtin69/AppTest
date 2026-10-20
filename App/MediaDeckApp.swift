@@ -20,6 +20,7 @@ struct MediaDeckApp: App {
             case .active:
                 LockManager.shared.willEnterForeground()
                 Task { await boot.resume() }
+                if boot.ready { ClipboardWatcher.shared.check() }
             case .inactive:
                 break
             @unknown default:
@@ -64,6 +65,7 @@ final class BootModel: ObservableObject {
         BrowseModel.shared.ensureTab()
         AppRouter.shared.markReady()
         ready = true
+        ClipboardWatcher.shared.check()
         // Cached files not opened within the chosen number of days.
         Task.detached(priority: .background) { await ImageCache.shared.expire() }
         if let e = CoreDataStack.shared.loadError {

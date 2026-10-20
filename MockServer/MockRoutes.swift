@@ -61,6 +61,8 @@ enum MockRoutes {
         case p.hasPrefix("/a/"):
             let sub = String(p.dropFirst(2))
             return MockExtras.siteAExtra(sub, req: req, origin: origin, member: false) ?? siteA(sub, req: req, origin: origin)
+        case p.hasPrefix("/rs/"):
+            return MockReverse.respond(req, origin: origin)
         case p.hasPrefix("/g/") || p == "/g":
             return MockGallery.respond(String(p.dropFirst(2)), req: req, origin: origin)
         case p.hasPrefix("/k"):
@@ -148,6 +150,7 @@ enum MockRoutes {
             "score": i.score,
             "created_at": i.created,
             "source": "\(origin)/a/view/\(i.n)",
+            "uploader": MockCatalog.uploaders[i.n % MockCatalog.uploaders.count],
             "file_url_mp4": i.mp4Alternate.map { "\(origin)/media/\($0)" as Any } ?? NSNull(),
         ]
     }

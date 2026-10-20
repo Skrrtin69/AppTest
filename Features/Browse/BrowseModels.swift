@@ -173,7 +173,7 @@ final class SearchTabModel: ObservableObject, Identifiable {
     /// Blacklisted posts are hidden (applied live, so editing the blacklist updates every grid).
     func visiblePosts(blacklist: Set<String>) -> [Post] {
         guard !blacklist.isEmpty else { return posts }
-        return posts.filter { !$0.tags.contains { blacklist.contains($0.lowercased()) } }
+        return posts.filter { !AppSettings.hides($0, blacklist) }
     }
 
     /// Starts over from page 1.

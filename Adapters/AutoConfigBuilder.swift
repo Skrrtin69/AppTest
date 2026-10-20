@@ -454,6 +454,12 @@ extension AutoConfigurator {
                 default: break
                 }
             }
+            for p in common where values(p).allSatisfy({ ($0 as? String)?.isEmpty == false }) {
+                let k = AutoConfigurator.lastKey(p).lowercased()
+                if ["uploader", "uploader_name", "author", "owner", "username", "user_name", "poster", "creator"].contains(k), meta["uploader"] == nil {
+                    meta["uploader"] = p
+                }
+            }
             config.metadataPaths = meta
             set(.metadataPaths, .medium, meta.isEmpty
                 ? "No size or score numbers found to show in the Info panel."

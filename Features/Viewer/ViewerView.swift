@@ -15,6 +15,9 @@ struct ViewerView: View {
     @State private var slideshow = false
     @State private var showInfo = false
     @State private var collectionBatch: PostBatch?
+    @State private var reverseFor: PostBatch?
+    @State private var quickHide: PostBatch?
+    @ObservedObject private var dominant = DominantColors.shared
     @State private var sizes: [String: CGSize] = [:]
     // Vertical drag: swipe down to close; left edge = brightness, right edge = volume.
     @State private var dragMode: ViewerDragMode = .none
@@ -32,7 +35,7 @@ struct ViewerView: View {
 
     var body: some View {
         ZStack {
-            ViewerBackdrop(style: settings.viewerBackground).opacity(1 - Double(min(dragOffset, 400)) / 600).ignoresSafeArea()
+            ViewerBackdrop(style: settings.viewerBackground, color: current.flatMap { dominant.colors[$0.key] }).opacity(1 - Double(min(dragOffset, 400)) / 600).ignoresSafeArea()
             Group {
                 if settings.verticalReading {
                     VerticalReader(posts: posts, startIndex: index, index: $index,
@@ -113,6 +116,8 @@ struct ViewerView: View {
             }
         }
         .sheet(item: $collectionBatch) { CollectionPickerSheet(posts: $0.posts) }
+        .sheet(item: $reverseFor) { ReverseSearchSheet(post: $0.posts[0]) }
+        .sheet(item: $quickHide) { QuickHideSheet(post: $0.posts[0]) }
     }
 
     /// Pager position ↔ post index (reversed in right-to-left mode).
@@ -169,6 +174,11 @@ struct ViewerView: View {
                 }
             }
             .onEnded { v in
+                // Swipe up on a post: quick blacklist / mute.
+                if dragMode == .other, !zoomed, v.translation.height < -110,
+                   abs(v.translation.width) < abs(v.translation.height) * 0.6, let p = current, !p.isGallery {
+                    quickHide = PostBatch(posts: [p])
+                }
                 if dragMode == .dismiss && (dragOffset > 140 || v.predictedEndTranslation.height > 400) {
                     dismiss()
                 } else {
@@ -378,6 +388,9 @@ struct ViewerView: View {
                             label: { Label("Copy Source URL", systemImage: "link") }
                         Button { UIApplication.shared.open(s) } label: { Label("Open Source", systemImage: "safari") }
                     }
+                    Divider()
+                    Button { reverseFor = PostBatch(posts: [p]) } label: { Label("Reverse Search", systemImage: "magnifyingglass.circle") }
+                    Button { quickHide = PostBatch(posts: [p]) } label: { Label("Hide Posts Like This…", systemImage: "eye.slash") }
                 } label: { Image(systemName: "ellipsis.circle") }
                 .accessibilityLabel("More")
             }
@@ -413,7 +426,7 @@ struct ViewerPage: View {
     var body: some View {
         Group {
             if !isNear {
-                Color.black
+                Color.clear
             } else if post.isGallery {
                 GalleryPage(post: post, isActive: isActive, onTap: { onTap(0.5) }, onFinished: onFinished)
             } else if post.mediaType == .video {
@@ -425,7 +438,6 @@ struct ViewerPage: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
     }
 }
 
@@ -439,12 +451,34 @@ struct FullImagePage: View {
     var onTap: (CGFloat) -> Void
     var onSize: (CGSize) -> Void
     @StateObject private var model = ImageLoadModel()
+    /// Data Saver: the user asked for the original of this post.
+    @State private var wantsFull = false
+
+    /// The address shown: with Data Saver on, the smaller version until Load Full Resolution.
+    var shownURL: URL {
+        if settings.dataSaverActive && !wantsFull { return post.sampleURL ?? post.thumbnailURL }
+        return settings.viewerPrefersLighter ? (post.sampleURL ?? post.mediaURL) : post.mediaURL
+    }
 
     var body: some View {
         ZStack {
             if let img = model.image {
                 ZoomableImageView(image: img, aspect: aspect, onZoomChange: onZoom, onSingleTap: onTap)
                     .accessibilityIdentifier("viewerImage")
+                if shownURL != post.mediaURL && settings.dataSaverActive && !wantsFull {
+                    VStack {
+                        Spacer()
+                        Button { wantsFull = true } label: {
+                            Label("Load Full Resolution", systemImage: "arrow.up.left.and.arrow.down.right")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(Capsule().fill(Color.black.opacity(0.65)))
+                                .foregroundColor(.white)
+                        }
+                        .accessibilityIdentifier("loadFullResolution")
+                        .padding(.bottom, 110)
+                    }
+                }
             } else {
                 CachedAsyncImage(url: post.thumbnailURL, maxPixel: 600, contentMode: .scaleAspectFit)
                     .opacity(0.6)
@@ -461,7 +495,7 @@ struct FullImagePage: View {
             }
         }
         .contentShape(Rectangle())
-        .task(id: post.mediaURL) { await load(force: false) }
+        .task(id: shownURL) { await load(force: false) }
         // Auto-advance: a GIF moves on after one full cycle, a still picture after the interval.
         .task(id: "\(isActive)-\(settings.autoAdvance)-\(model.image != nil)") {
             guard isActive, settings.autoAdvance, let img = model.image else { return }
@@ -474,9 +508,11 @@ struct FullImagePage: View {
     func load(force: Bool) async {
         let client = AdapterRegistry.shared.adapter(for: post.siteID)?.client
         // Prefer lighter: the site's medium-size file when there is one.
-        let url = AppSettings.shared.viewerPrefersLighter ? (post.sampleURL ?? post.mediaURL) : post.mediaURL
+        let url = shownURL
+        let key = post.key
         await model.load(url, maxPixel: 4096, animate: true, client: client, onLoad: { img in
             onSize(CGSize(width: img.size.width * img.scale, height: img.size.height * img.scale))
+            DominantColors.shared.compute(for: key, image: img)
         }, force: force)
     }
 }

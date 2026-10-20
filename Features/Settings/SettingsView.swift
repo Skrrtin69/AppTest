@@ -81,8 +81,25 @@ struct SettingsView: View {
                     if settings.savingPower {
                         Label("Battery Saver is on now", systemImage: "battery.25").foregroundColor(.orange)
                     }
-                } header: { Text("Battery") } footer: {
-                    Text("Battery Saver stops GIF animation in grids, doesn't start videos by itself, shows the lighter file in the viewer when the site has one, and doesn't preload the next posts.")
+                    Picker("Data Saver", selection: $settings.dataSaver) {
+                        Text("Off").tag("off")
+                        Text("On mobile data").tag("cellular")
+                        Text("Always").tag("always")
+                    }
+                    .accessibilityIdentifier("dataSaverPicker")
+                } header: { Text("Battery and data") } footer: {
+                    Text("Battery Saver stops GIF animation in grids, doesn't start videos by itself, shows the lighter file in the viewer when the site has one, and doesn't preload the next posts. Data Saver opens pictures in their smaller version first; tap Load Full Resolution for the original.")
+                }
+
+                Section {
+                    NavigationLink(destination: ReverseEnginesView()) {
+                        HStack { Label("Reverse Search", systemImage: "magnifyingglass.circle"); Spacer()
+                            Text("\(ReverseEngineStore.shared.engines.filter(\.enabled).count) on").foregroundColor(.secondary) }
+                    }
+                    .accessibilityIdentifier("reverseSearchSettings")
+                    Toggle("Offer to open copied links", isOn: $settings.detectClipboardLinks)
+                } header: { Text("Tools") } footer: {
+                    Text("When you copy a link to a post or search on one of your sites and come back to MediaDeck, it offers to open it here. iOS asks for permission when you tap Open.")
                 }
 
                 Section("Browsing") {

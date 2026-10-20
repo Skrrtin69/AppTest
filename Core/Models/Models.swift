@@ -59,6 +59,11 @@ struct Post: Codable, Hashable, Identifiable {
     var pages: [URL]? = nil
     var isGallery: Bool { (pages?.count ?? 0) > 1 }
 
+    /// Who posted it, when the adapter maps an "uploader" (or author/owner/user) metadata field.
+    var uploader: String? {
+        ["uploader", "author", "owner", "user", "username", "poster"].lazy.compactMap { metadata[$0]?.nonEmpty }.first
+    }
+
     /// Unique across sites; used for favorites, selection and SwiftUI identity.
     var key: String { "\(siteID):\(id)" }
 

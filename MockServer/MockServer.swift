@@ -109,7 +109,18 @@ final class MockServer {
             if let data = data { buf.append(data) }
             if let end = buf.range(of: Data("\r\n\r\n".utf8)) {
                 let head = String(decoding: buf[buf.startIndex..<end.lowerBound], as: UTF8.self)
-                guard let request = HTTPRequest(head: head) else { conn.cancel(); return }
+                guard var request = HTTPRequest(head: head) else { conn.cancel(); return }
+                // Uploads: wait for the whole body (up to 40 MB) before answering.
+                let length = min(Int(request.headers["content-length"] ?? "0") ?? 0, 40 * 1024 * 1024)
+                let bodyStart = buf.distance(from: buf.startIndex, to: end.upperBound)
+                if length > 0 {
+                    if buf.count - bodyStart < length && !isComplete && error == nil {
+                        self.receive(conn, buffer: buf)
+                        return
+                    }
+                    let from = buf.index(buf.startIndex, offsetBy: bodyStart)
+                    request.body = Data(buf[from..<buf.index(from, offsetBy: min(length, buf.count - bodyStart))])
+                }
                 if request.path == "/proxy" {
                     Task {
                         let response = await PlayerRoutes.proxy(request)
@@ -194,6 +205,7 @@ struct HTTPRequest {
     let query: [String: String]
     /// Lowercased header names.
     let headers: [String: String]
+    var body = Data()
 
     init?(head: String) {
         let lines = head.components(separatedBy: "\r\n")

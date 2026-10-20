@@ -49,13 +49,14 @@ final class AppSettings: ObservableObject {
         static let preferLighter = "preferLighter", viewerBackground = "viewerBackground", autoAdvance = "autoAdvance"
         static let readingRTL = "readingRTL", tapZones = "tapZones", rotationLock = "rotationLock"
         static let batterySaver = "batterySaver", cacheExpiryDays = "cacheExpiryDays", hiddenViewerButtons = "hiddenViewerButtons"
-        static let swipeSites = "swipeSites"
+        static let swipeSites = "swipeSites", detectClipboardLinks = "detectClipboardLinks", dataSaver = "dataSaver"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
                           blurThumbnails, dimViewed, viewerAspect, playbackSpeed, verticalReading,
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
-                          readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites]
+                          readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
+                          detectClipboardLinks, dataSaver]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -121,6 +122,16 @@ final class AppSettings: ObservableObject {
     /// Swipe sideways on the site name to switch sites.
     @Published var swipeSites: Bool = true { didSet { d.set(swipeSites, forKey: K.swipeSites) } }
 
+    /// Offer to open copied web links that belong to one of the user's sites.
+    @Published var detectClipboardLinks: Bool = true { didSet { d.set(detectClipboardLinks, forKey: K.detectClipboardLinks) } }
+    /// "off", "cellular" (on mobile data / Low Data Mode) or "always": the viewer shows the
+    /// lighter file first, with a Load Full Resolution button.
+    @Published var dataSaver: String = "off" { didSet { d.set(dataSaver, forKey: K.dataSaver) } }
+
+    var dataSaverActive: Bool {
+        dataSaver == "always" || (dataSaver == "cellular" && NetworkStatus.shared.onMeteredData)
+    }
+
     /// Battery Saver in effect right now: no GIF animation in grids, no video autoplay,
     /// lighter files in the viewer, no preloading of neighbouring posts.
     var savingPower: Bool {
@@ -133,7 +144,12 @@ final class AppSettings: ObservableObject {
     func showsInToolbar(_ b: ViewerButton) -> Bool { !hiddenViewerButtons.contains(b.rawValue) }
 
     func cycleViewerBackground() {
-        viewerBackground = viewerBackground == "black" ? "white" : (viewerBackground == "white" ? "checker" : "black")
+        switch viewerBackground {
+        case "black": viewerBackground = "white"
+        case "white": viewerBackground = "checker"
+        case "checker": viewerBackground = "color"
+        default: viewerBackground = "black"
+        }
     }
 
     /// Columns to use right now: two more when the phone is sideways.
@@ -193,6 +209,8 @@ final class AppSettings: ObservableObject {
         hiddenViewerButtons = storedHidden == ["direction", "tapZones", "rotation"] ? ViewerButton.defaultHidden
             : (storedHidden ?? ViewerButton.defaultHidden)
         swipeSites = d.object(forKey: K.swipeSites) as? Bool ?? true
+        detectClipboardLinks = d.object(forKey: K.detectClipboardLinks) as? Bool ?? true
+        dataSaver = d.string(forKey: K.dataSaver) ?? "off"
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }
@@ -200,9 +218,20 @@ final class AppSettings: ObservableObject {
     var blacklistSet: Set<String> { Set(blacklist.map { $0.lowercased() }) }
 
     func isBlacklisted(_ post: Post) -> Bool {
-        let bl = blacklistSet
+        Self.hides(post, blacklistSet)
+    }
+
+    /// A post is hidden when one of its tags is blacklisted, or its uploader is muted
+    /// (muted uploaders are stored in the blacklist as "uploader:name").
+    static func hides(_ post: Post, _ bl: Set<String>) -> Bool {
         guard !bl.isEmpty else { return false }
+        if let u = post.uploader, bl.contains("uploader:" + u.lowercased()) { return true }
         return post.tags.contains { bl.contains($0.lowercased()) }
+    }
+
+    func muteUploader(_ name: String) {
+        let entry = "uploader:" + name.lowercased()
+        if !blacklist.contains(entry) { blacklist.append(entry) }
     }
 
     // MARK: Import / export / reset

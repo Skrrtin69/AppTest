@@ -28,6 +28,19 @@ struct InfoPanel: View {
                     row("ID", post.id)
                     row("Type", post.mediaType.label)
                     row("Dimensions", pixelSize.map { "\(Int($0.width)) × \(Int($0.height))" } ?? "Unknown until loaded")
+                    if let u = post.uploader {
+                        HStack {
+                            Text("Uploader")
+                            Spacer()
+                            Text(u).foregroundColor(.secondary)
+                            let muted = settings.blacklistSet.contains("uploader:" + u.lowercased())
+                            Button(muted ? "Muted" : "Mute") {
+                                settings.muteUploader(u)
+                                ToastCenter.shared.show("Muted \(u). Unmute in Settings › Tag Blacklist.", style: .success)
+                            }
+                            .buttonStyle(.bordered).disabled(muted)
+                        }
+                    }
                 }
                 Section("Tags (tap to search, hold to blacklist)") {
                     if post.tags.isEmpty { Text("No tags").foregroundColor(.secondary) }

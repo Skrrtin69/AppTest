@@ -42,6 +42,7 @@ struct MockItem {
 enum MockCatalog {
     static let count = 60
     static let pageSize = 20
+    static let uploaders = ["demo_uploader_ana", "demo_uploader_bo", "demo_uploader_cy", "demo_uploader_dee"]
 
     static let colors = ["red", "orange", "yellow", "green", "blue", "purple", "pink", "gray"]
     static let patterns = ["circles", "stripes", "grid", "waves", "dots", "gradient"]
