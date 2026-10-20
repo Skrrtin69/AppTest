@@ -460,10 +460,12 @@ struct SearchTabView: View {
             } else {
                 ScrollViewReader { proxy in
                 ScrollView {
-                    Color.clear.frame(height: 0).id("gridTop")
-                        .background(GeometryReader { g in
-                            Color.clear.preference(key: GridTopOffset.self, value: g.frame(in: .named("grid")).minY)
-                        })
+                    // Lazy, so the marker disappears once scrolled well past: that's when the
+                    // floating "back to top" button shows.
+                    LazyVStack(spacing: 0) {
+                    Color.clear.frame(height: 1).id("gridTop")
+                        .onAppear { withAnimation(.easeInOut(duration: 0.2)) { showTopButton = false } }
+                        .onDisappear { withAnimation(.easeInOut(duration: 0.2)) { showTopButton = true } }
                     PostGrid(posts: visible, selecting: tab.selecting, selected: tab.selected, showSource: tab.isMerged,
                              onTap: { i in
                                  if tab.selecting { tab.toggleSelect(visible[i]) } else { Haptics.tap(); onOpen(visible, i) }
@@ -473,12 +475,7 @@ struct SearchTabView: View {
                              onAddToCollection: onAddToCollection) {
                         footer
                     }
-                }
-                .coordinateSpace(name: "grid")
-                .onPreferenceChange(GridTopOffset.self) { y in
-                    // More than two screens down.
-                    let far = y < -UIScreen.main.bounds.height * 2
-                    if far != showTopButton { withAnimation(.easeInOut(duration: 0.2)) { showTopButton = far } }
+                    }
                 }
                 .refreshable { await tab.refresh() }
                 .onChange(of: tab.scrollToTopToken) { _ in withAnimation { proxy.scrollTo("gridTop", anchor: .top) } }
@@ -686,9 +683,3 @@ struct SearchHistorySheet: View {
     }
 }
 
-/// The grid's top edge in its scroll view (negative once scrolled down).
-struct GridTopOffset: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    // Sibling views report the default 0; the marker's (negative) offset must win.
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = min(value, nextValue()) }
-}
