@@ -85,7 +85,6 @@ struct SettingsView: View {
                     Picker("Swipe down", selection: $settings.swipeDownAction) {
                         Text("Close the viewer").tag("close"); Text("Nothing").tag("none")
                     }
-                    Toggle("Show posts on a connected TV or monitor", isOn: $settings.useExternalDisplay)
                 } header: { Text("Reading") } footer: {
                     Text("Right-to-left suits manga: swipe right for the next post. With edge taps on, tapping the outer third of a picture turns the page and the middle shows the controls.")
                 }

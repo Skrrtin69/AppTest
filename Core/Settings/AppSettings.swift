@@ -57,7 +57,7 @@ final class AppSettings: ObservableObject {
         static let batterySaver = "batterySaver", cacheExpiryDays = "cacheExpiryDays", hiddenViewerButtons = "hiddenViewerButtons"
         static let swipeSites = "swipeSites", detectClipboardLinks = "detectClipboardLinks", dataSaver = "dataSaver",
                          wifiOnlyMedia = "wifiOnlyMedia", mixWithOthers = "mixWithOthers",
-                         smartThumbnails = "smartThumbnails", useExternalDisplay = "useExternalDisplay",
+                         smartThumbnails = "smartThumbnails",
                          doubleTapAction = "doubleTapAction", swipeUpAction = "swipeUpAction", swipeDownAction = "swipeDownAction"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
@@ -66,7 +66,7 @@ final class AppSettings: ObservableObject {
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
                           readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
                           detectClipboardLinks, dataSaver, wifiOnlyMedia, mixWithOthers,
-                          smartThumbnails, useExternalDisplay, doubleTapAction, swipeUpAction, swipeDownAction]
+                          smartThumbnails, doubleTapAction, swipeUpAction, swipeDownAction]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -146,8 +146,6 @@ final class AppSettings: ObservableObject {
 
     /// Square thumbnails are cropped around the interesting part of the picture.
     @Published var smartThumbnails: Bool = true { didSet { d.set(smartThumbnails, forKey: K.smartThumbnails) } }
-    /// Show the open post on a connected TV / monitor.
-    @Published var useExternalDisplay: Bool = true { didSet { d.set(useExternalDisplay, forKey: K.useExternalDisplay) } }
     /// Viewer gestures: what a double tap / swipe up / swipe down does.
     @Published var doubleTapAction: String = "zoom" { didSet { d.set(doubleTapAction, forKey: K.doubleTapAction) } }
     @Published var swipeUpAction: String = "hide" { didSet { d.set(swipeUpAction, forKey: K.swipeUpAction) } }
@@ -241,7 +239,6 @@ final class AppSettings: ObservableObject {
         wifiOnlyMedia = d.object(forKey: K.wifiOnlyMedia) as? Bool ?? false
         mixWithOthers = d.object(forKey: K.mixWithOthers) as? Bool ?? false
         smartThumbnails = d.object(forKey: K.smartThumbnails) as? Bool ?? true
-        useExternalDisplay = d.object(forKey: K.useExternalDisplay) as? Bool ?? true
         doubleTapAction = d.string(forKey: K.doubleTapAction) ?? "zoom"
         swipeUpAction = d.string(forKey: K.swipeUpAction) ?? "hide"
         swipeDownAction = d.string(forKey: K.swipeDownAction) ?? "close"

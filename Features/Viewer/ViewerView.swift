@@ -80,14 +80,10 @@ struct ViewerView: View {
                 .transition(.opacity)
             }
         }
-        .onDisappear {
-            if settings.rotationLock != "auto" { OrientationLock.apply("auto") }
-            ExternalDisplay.shared.show(nil)
-        }
+        .onDisappear { if settings.rotationLock != "auto" { OrientationLock.apply("auto") } }
         .statusBar(hidden: !chrome)
         .modifier(HideHomeIndicator(hidden: !chrome))
         .onAppear {
-            ExternalDisplay.shared.show(current)
             // Wait for the full-screen presentation to finish: a rotation requested while it's
             // still animating in is dropped by iOS.
             if settings.rotationLock != "auto" {
@@ -97,7 +93,6 @@ struct ViewerView: View {
             if let p = current { ViewedStore.shared.markViewed(p) }
         }
         .onChange(of: index) { _ in
-            ExternalDisplay.shared.show(current)
             prefetchNeighbors()
             if let p = current { ViewedStore.shared.markViewed(p) }
             if !slideshow { Haptics.tap() }
