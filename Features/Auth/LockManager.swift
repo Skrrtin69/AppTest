@@ -48,7 +48,7 @@ final class LockManager: ObservableObject {
         LibraryStore.shared.reload()
         DownloadManager.shared.objectWillChange.send()
         AdapterRegistry.shared.objectWillChange.send()
-        BrowseModel.shared.decoyChanged()
+        Task { @MainActor in BrowseModel.shared.decoyChanged() }
     }
 
     static func hash(_ pin: String) -> Data {
