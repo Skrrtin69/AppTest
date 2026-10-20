@@ -228,7 +228,7 @@ Support/      entitlements (Info.plist is generated)
 scripts/      build_ipa.sh, build_deb.sh, make_media.sh
 ```
 
-Third-party code: **ogv.js** 1.9.0 (MIT; includes libvpx, nestegg, libopus and libvorbis under their BSD-style licenses). The license files are in `Resources/Player/ogv/`.
+Third-party code: **ogv.js** 1.9.0 (MIT; includes libvpx, nestegg, libopus and libvorbis under their BSD-style licenses). The license files are in `Resources/Player/ogv/`. **MobileVLCKit** 3.7.4 (LGPL 2.1), VideoLAN's official binary: CI downloads it, checks its SHA-256 and keeps the arm64 slice (`scripts/fetch_vlckit.sh`). It isn't stored in the repo.
 
 See `DECISIONS.md` for design choices and `BLOCKERS.md` for open issues.
 
@@ -298,9 +298,13 @@ Failures are explained in plain English with one next step: bad address, unreach
   - Turn the swipes off in Settings › Reading & Viewer › **Enable Volume/Brightness Swipes** (on by default).
 - **Start videos muted:** a switch in Settings › Reading & Viewer. It applies to every player: the built-in one, Picture in Picture, and the web player used for WebM.
 - **Web player:**
-  - A spinner shows until the video can play. After 10 seconds it switches to a **Retry** button.
-  - The web player's process and decoder files are started off screen at launch.
-  - Videos are fetched in 2 MB pieces (HTTP range requests, 206 answers), so playback starts before the whole file has downloaded.
+  - **"Loading video..."** shows until the video can play. If it hasn't started in time, or the player reports an error, a card offers **Retry** and **Open in Safari**.
+  - **How long it waits** depends on a 1 MB speed test run at launch (Settings › About › tap Version 5 times › Debug Console shows the result): over 15 Mbps 15 s, 5–15 Mbps 30 s, under 5 Mbps (or a failed test) 60 s.
+  - The web player's process, ogv.js and every WebM decoder module are loaded off screen at launch, and the page waits for them before it starts the stream.
+  - **Proxy:** range requests (206) are passed on as the data arrives. An open-ended range is cut into pieces (512 KB first, then 2 MB). If a site ignores ranges, the file is fetched once, kept in memory, and the pieces are cut from it.
+  - **Decoder speed:** the player page is cross-origin isolated, so ogv.js decodes with one thread per CPU core. WebAssembly SIMD is used on iOS 16.4 and later; iOS 16.2 doesn't have it.
+- **What's inside a .webm:** the first 64 KB are read before choosing a player. An MP4 that is only *named* .webm plays in AVPlayer (through the local server under a .mp4 name). H.264/HEVC inside Matroska can't be decoded by ogv.js; that needs VLCKit.
+- **Use VLCKit for Video (Faster, Larger App):** Settings › Reading & Viewer, off by default. WebM and MKV then play in VLCKit (native ARM code, several threads) instead of the web player. VLCKit is in every copy of the app (about 39 MB), so the switch only picks the player. VLC decodes in software: iOS doesn't let apps use a hardware VP9 decoder.
 
 ## Cloudflare and other ways sites ask for keys
 

@@ -140,3 +140,26 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 - **Legacy tag counts:** the probe sent `q=` to `index.php?page=autocomplete2`, which answers `[]` on a real board; it needs `term=`. The other style of board redirects `public/autocomplete.php` and puts the count only in the label (`blush (3922720)`). Both are now detected. The tag name is read from `value` before `label`, and counts are parsed from the label.
   - Verified on the phone: mocks `/lb1` (autocomplete2, counts as strings) and `/lb2` (302 to JSON sent as text/html, counts in labels) both showed `blue, 8 posts` in the search bar. Both test adapters were deleted.
   - The owner's saved Gelbooru and Rule34 adapters have **no suggestions address**. They need Auto-Configure re-run, or the address added in Edit, to show counts. They were not changed.
+
+## 22. Web video timeout and pipeline
+- **Done:** a launch speed test sets the timeout (15/30/60 s). The native "Loading video..." overlay is shown until `canplay`. A Retry / Open in Safari card appears on timeout or error. ogv.js modules are loaded before the stream starts. The proxy streams 206 answers.
+- **Verified on the phone, live videos from the owner's Danbooru adapter (`filetype:webm`):**
+  - The speed test measured 21.9 Mbps, so the timeout is 15 s.
+  - A 19 MB WebM was playing in ogv.js 1.4 s after the tap.
+  - Range pieces: the site's CDN answers 206.
+- **Not seen on the phone:** the timeout card itself. Every live video started well within 15 s.
+
+## 23. WebM decoding speed: threads, SIMD, sniffing, VLCKit
+- **Verified on the phone (iOS 16.2), same live 21.7 MB 1080×1920 VP9 WebM, 30 fps:**
+
+  | Player | Start | Decoding | Keeps up |
+  |---|---|---|---|
+  | ogv.js, 1 thread | metadata 0.4 s after page load | 21–32 ms/frame | yes (1.00×), little headroom |
+  | ogv.js, 4 threads | metadata 0.6 s after page load | 14–19 ms/frame (8 late frames while threads start) | yes (1.00×) |
+  | VLCKit | playing 0.2 s after opening | native | yes; pause, play and time (0:09 / 0:56) work |
+
+  - The page reported `isolated=true SharedArrayBuffer=true simd=false cores=4`. Sniffing read the file as `Matroska/WebM, video V_VP9`.
+  - The proxy delivers 1 MB in 0.2–0.4 s. The first streaming version, a byte-by-byte loop, managed only 0.3 MB/s; this was found and fixed during testing.
+  - My first stats wrongly showed stalls: ogv's `resetPlaybackStats()` also zeroes its frame counter. The stats now report per-window frames and a real-time ratio.
+- **Not testable here:** SIMD (needs iOS 16.4+). An MP4 named .webm and H.264-in-Matroska weren't found among live posts, so those two sniffing branches are untested on the phone.
+- **State left on the phone:** VLCKit off (default), single-thread test switch off. At the owner's request, MediaDeck's app passcode (and decoy passcode) was turned off so reinstalls no longer stop at the lock screen.
