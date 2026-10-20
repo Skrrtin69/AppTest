@@ -109,7 +109,10 @@ enum MockRoutes {
         if sub == "/auth/check" { return .json(["ok": true, "user": demoUser]) }
         if sub == "/tags/autocomplete.json" {
             let q = (req.query["q"] ?? "").lowercased()
-            var list: [[String: Any]] = MockCatalog.suggestions(q).map { ["name": $0.tag, "post_count": $0.count] }
+            var list: [[String: Any]] = MockCatalog.suggestions(q).map {
+                ["name": $0.tag, "post_count": $0.count,
+                 "category": MockCatalog.colors.contains($0.tag) ? "color" : (MockCatalog.patterns.contains($0.tag) ? "pattern" : "general")]
+            }
             // A tag nobody uses any more (0 posts), so the dimmed style can be seen.
             if !list.isEmpty || q.count >= 2 { list.append(["name": "\(q)_unused", "post_count": 0]) }
             return .json(list)
