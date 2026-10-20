@@ -162,12 +162,16 @@ enum PlayerRoutes {
       var kind=m[1]==='Demuxer'?'demuxer':'decoder-'+m[2].toLowerCase();
       return 'ogv-'+kind+'-'+m[3].toLowerCase()+(m[4]?'-simd':'')+(m[5]?'-mt':'')+'-wasm.wasm';
     }
-    var lastFrames=0;
+    // Every 5 s while playing: frames decoded, CPU time per frame, late frames, and how many
+    // seconds of video played per second (1.00 = keeping up). The counters restart each time.
+    var lastPos=-1, lastAt=0;
     function postStats(){
-      if(!usingOgv||!player||!player.getPlaybackStats||player.paused) return;
+      if(!usingOgv||!player||!player.getPlaybackStats||player.paused) { lastPos=-1; return; }
       try{
-        var s=player.getPlaybackStats(), f=s.framesProcessed-lastFrames; lastFrames=s.framesProcessed;
-        if(f>0) post('stats '+f+' frames · decode '+(s.videoDecodingTime/f).toFixed(1)+' ms/frame · late '+(s.lateFrames||0)+' · '+(simdOK?'SIMD':'no SIMD')+' · '+(threadsOK?cores+' threads':'1 thread'));
+        var s=player.getPlaybackStats(), f=s.framesProcessed, now=Date.now(), pos=player.currentTime;
+        var ratio=(lastPos>=0 && pos>=lastPos) ? ((pos-lastPos)/((now-lastAt)/1000)).toFixed(2) : '–';
+        lastPos=pos; lastAt=now;
+        post('stats '+f+' frames · '+(f>0?(s.videoDecodingTime/f).toFixed(1):'–')+' ms/frame · late '+(s.lateFrames||0)+' · real-time '+ratio+' · '+(simdOK?'SIMD':'no SIMD')+' · '+(threadsOK?cores+' threads':'1 thread'));
         if(player.resetPlaybackStats) player.resetPlaybackStats();
       }catch(e){}
     }
