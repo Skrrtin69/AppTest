@@ -117,7 +117,7 @@ struct MassReverseSheet: View {
             Spacer()
             if let s = r?.best?.source {
                 Button {
-                    Task { if let m = r?.best, let post = await MatchOpener.post(for: m) { viewer = ViewerRequest(posts: [post], index: 0) } else { UIApplication.shared.open(s) } }
+                    Task { if let m = r?.best, let post = await MatchOpener.post(for: m) { viewer = ViewerRequest(posts: [post], index: 0) } else { await UIApplication.shared.open(s) } }
                 } label: { Image(systemName: "eye") }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("View match")

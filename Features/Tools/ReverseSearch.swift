@@ -399,14 +399,7 @@ struct ReverseSearchSheet: View {
                 if let e = error {
                     Section { Label(e, systemImage: "exclamationmark.triangle").foregroundColor(.red) }
                 }
-                if let m = matches {
-                    Section {
-                        if m.isEmpty { Text("No matches.").foregroundColor(.secondary) }
-                        ForEach(m) { match in MatchRow(match: match) { Task { await openMatch($0) } } }
-                    } header: { Text("\(m.count) match\(m.count == 1 ? "" : "es")") } footer: {
-                        Text("Tap a match to view it: a match on one of your sites opens that post; others open their preview picture (⋯ › Open Source for the page). Hold a match for its page and link.")
-                    }
-                }
+                if let m = matches { matchSection(m) }
             }
             .navigationTitle("Reverse Search")
             .navigationBarTitleDisplayMode(.inline)
@@ -417,11 +410,24 @@ struct ReverseSearchSheet: View {
         }
     }
 
+    func matchSection(_ m: [ReverseMatch]) -> some View {
+        Section {
+            if m.isEmpty { Text("No matches.").foregroundColor(.secondary) }
+            ForEach(m) { match in
+                MatchRow(match: match, onOpen: { picked in Task { await openMatch(picked) } })
+            }
+        } header: {
+            Text("\(m.count) match\(m.count == 1 ? "" : "es")")
+        } footer: {
+            Text("Tap a match to view it: a match on one of your sites opens that post; others open their preview picture (⋯ › Open Source for the page). Hold a match for its page and link.")
+        }
+    }
+
     func openMatch(_ m: ReverseMatch) async {
         opening = true
         defer { opening = false }
         if let p = await MatchOpener.post(for: m) { viewer = ViewerRequest(posts: [p], index: 0) }
-        else if let s = m.source { UIApplication.shared.open(s) }
+        else if let s = m.source { await UIApplication.shared.open(s) }
     }
 
     func run(_ e: ReverseEngine) async {
