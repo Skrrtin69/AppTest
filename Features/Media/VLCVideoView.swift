@@ -161,6 +161,9 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     private var resumeAtMs: Int32 = 0
     private var wasPlaying = false
     private var suspended = false
+    /// Reopened while paused: play to the first frame (muted), then pause on it.
+    private var pauseOnStart = false
+    private var mutedBeforePeek = false
 
     // iOS closes the local server's connections while the app is away, so VLC's stream
     // would be dead on return: stop it in the background and reopen it at the same time.
@@ -217,6 +220,13 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     }
 
     func togglePause() {
+        // Play pressed before the app's own reopen ran: reopen now and play.
+        if suspended, let url = reopenURL?() {
+            wasPlaying = true
+            resume(from: url)
+            return
+        }
+        pauseOnStart = false
         if player.isPlaying { player.pause() } else { player.play() }
     }
 
@@ -262,7 +272,15 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         let media = VLCMedia(url: url)
         media.addOptions(["network-caching": 1000, "start-time": Double(resumeAtMs) / 1000])
         player.media = media
-        if wasPlaying, active { player.play() }
+        if wasPlaying, active {
+            player.play()
+        } else {
+            // Show the paused frame instead of a black screen.
+            pauseOnStart = true
+            mutedBeforePeek = player.audio?.isMuted ?? false
+            player.audio?.isMuted = true
+            player.play()
+        }
         DebugLog.log("VLC", "Foreground: reopened at \(resumeAtMs) ms\(wasPlaying && active ? ", playing" : ", paused")")
     }
     #else
@@ -297,6 +315,11 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
             switch state {
             case .playing:
                 markReady()
+                if pauseOnStart {
+                    pauseOnStart = false
+                    player.pause()
+                    player.audio?.isMuted = mutedBeforePeek
+                }
             case .error:
                 // Errors from the stream being closed for the background don't count.
                 guard !suspended else { return }
