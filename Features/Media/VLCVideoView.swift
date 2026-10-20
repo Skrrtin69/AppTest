@@ -169,22 +169,25 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     override init() {
         super.init()
         let nc = NotificationCenter.default
-        nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.pauseForInactive()
-        }
-        nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.suspend()
-        }
-        nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await MockServer.shared.ensureReady()
-                guard let self = self, let url = self.reopenURL?() else { return }
-                self.resume(from: url)
-            }
-        }
+        observers = [
+            nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.pauseForInactive()
+            },
+            nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.suspend()
+            },
+            nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    await MockServer.shared.ensureReady()
+                    guard let self = self, let url = self.reopenURL?() else { return }
+                    self.resume(from: url)
+                }
+            },
+        ]
     }
 
-    deinit { NotificationCenter.default.removeObserver(self) }
+    private var observers: [NSObjectProtocol] = []
+    deinit { observers.forEach { NotificationCenter.default.removeObserver($0) } }
 
     #if canImport(MobileVLCKit)
     private let player = VLCMediaPlayer()
