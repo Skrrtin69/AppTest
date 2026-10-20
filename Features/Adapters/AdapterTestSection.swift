@@ -229,6 +229,7 @@ struct AccountView: View {
             try await auth.login(adapter: a)
             // Offer the account's own hidden tags / defaults for review.
             await AccountSync.shared.run(a)
+            await FavoriteSync.shared.offerUpload(siteID: a.id)
             ToastCenter.shared.show("Logged in to \(displayName)", style: .success)
         } catch {
             ToastCenter.shared.error(error)

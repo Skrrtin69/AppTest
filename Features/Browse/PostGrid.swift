@@ -7,6 +7,8 @@ struct PostGrid<Footer: View>: View {
     var selected: Set<String> = []
     /// Merged search: label each thumbnail with the site it came from.
     var showSource: Bool = false
+    /// Favorites: cloud = also saved to the account, phone = only on this phone.
+    var showSyncState: Bool = false
     var onTap: (Int) -> Void
     var onLongPressSelect: ((Post) -> Void)? = nil
     var onAppearIndex: ((Int) -> Void)? = nil
@@ -27,7 +29,7 @@ struct PostGrid<Footer: View>: View {
         LazyVGrid(columns: columns, spacing: settings.gridSpacing) {
             ForEach(Array(posts.enumerated()), id: \.element.key) { index, post in
                 GridCell(post: post, aspect: settings.thumbAspect, selecting: selecting,
-                         isSelected: selected.contains(post.key), showSource: showSource)
+                         isSelected: selected.contains(post.key), showSource: showSource, showSyncState: showSyncState)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         // With blur on, the first tap only reveals the thumbnail.
@@ -57,6 +59,8 @@ struct GridCell: View {
     var selecting: Bool = false
     var isSelected: Bool = false
     var showSource: Bool = false
+    var showSyncState: Bool = false
+    @ObservedObject private var favoriteSync = FavoriteSync.shared
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var store = LibraryStore.shared
     @ObservedObject private var viewed = ViewedStore.shared
@@ -102,6 +106,12 @@ struct GridCell: View {
             }
             .overlay(alignment: .bottomTrailing) {
                 if showSource { SourceBadge(siteID: post.siteID).padding(3) }
+                if showSyncState {
+                    Image(systemName: favoriteSync.isSynced(post) ? "icloud.fill" : "iphone")
+                        .font(.caption2.weight(.bold)).foregroundColor(.white)
+                        .padding(4).background(Circle().fill(Color.black.opacity(0.55))).padding(3)
+                        .accessibilityLabel(favoriteSync.isSynced(post) ? "Saved to account" : "Saved on this phone")
+                }
             }
             .overlay(alignment: .bottomLeading) {
                 if store.favoriteKeys.contains(post.key) {
@@ -186,6 +196,10 @@ struct PostMenuItems: View {
             UIPasteboard.general.string = post.mediaURL.absoluteString
             ToastCenter.shared.show("URL copied")
         } label: { Label("Copy URL", systemImage: "doc.on.doc") }
+        Button {
+            UIPasteboard.general.string = post.id
+            ToastCenter.shared.show("ID \(post.id) copied")
+        } label: { Label("Copy ID", systemImage: "number") }
         Button { Presenter.share([post.mediaURL]) } label: { Label("Share", systemImage: "square.and.arrow.up") }
         if let src = post.sourceURL {
             Button { UIApplication.shared.open(src) } label: { Label("Open Source", systemImage: "safari") }

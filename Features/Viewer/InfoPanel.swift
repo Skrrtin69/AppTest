@@ -36,7 +36,7 @@ struct InfoPanel: View {
                             let hidden = settings.blacklistSet.contains(tag.lowercased())
                             Text(tag).strikethrough(hidden).font(.footnote).lineLimit(1)
                                 .padding(.horizontal, 10).padding(.vertical, 5)
-                                .background(Capsule().fill(hidden ? Color.red.opacity(0.2) : Color.accentColor.opacity(0.18)))
+                                .background(Capsule().fill(hidden ? Color.red.opacity(0.2) : TagColors.color(for: post.tagCategories?[tag]).opacity(0.22)))
                                 .onTapGesture { onTag(tag) }
                                 // Long-press: blacklist instantly.
                                 .onLongPressGesture(minimumDuration: 0.5) { quickBlacklist(tag) }
@@ -62,6 +62,15 @@ struct InfoPanel: View {
                         }
                     }
                 }
+                if let cats = post.tagCategories, !cats.isEmpty {
+                    Section("Tag colors") {
+                        HStack(spacing: 10) {
+                            ForEach(Array(Set(cats.values)).sorted(), id: \.self) { c in
+                                HStack(spacing: 4) { Circle().fill(TagColors.color(for: c)).frame(width: 9, height: 9); Text(c).font(.caption) }
+                            }
+                        }
+                    }
+                }
                 Section("Links") {
                     if let s = post.sourceURL {
                         Text(s.absoluteString).font(.footnote).textSelection(.enabled)
@@ -71,6 +80,7 @@ struct InfoPanel: View {
                     } else {
                         Text("No source URL").foregroundColor(.secondary)
                     }
+                    Button { Task { await HashCopier.copyMD5(post) } } label: { Label("Copy MD5", systemImage: "number.square") }
                     Button { UIPasteboard.general.string = post.mediaURL.absoluteString; ToastCenter.shared.show("Media URL copied") }
                         label: { Label("Copy Media URL", systemImage: "link") }
                 }

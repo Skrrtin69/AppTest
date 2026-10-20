@@ -53,6 +53,8 @@ struct Post: Codable, Hashable, Identifiable {
     let metadata: [String: String]
     /// Medium-size URL if the adapter maps one (`sampleURLPath`); used for "preview" quality.
     var sampleURL: URL? = nil
+    /// Tag → category (e.g. "artist") when the site provides one; used to color tags.
+    var tagCategories: [String: String]? = nil
 
     /// Unique across sites; used for favorites, selection and SwiftUI identity.
     var key: String { "\(siteID):\(id)" }

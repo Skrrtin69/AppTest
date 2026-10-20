@@ -83,6 +83,10 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
     var authUserParamName: String?
     /// Page where a logged-in user can see their API key (for guided key retrieval).
     var apiKeyPageURL: String?
+    /// Adds (POST) / removes (DELETE) post {id} from the account's favorites. Needs a login.
+    var favoritePath: String?
+    /// When tags are objects: which key holds the tag's category (e.g. category, type).
+    var tagCategoryKey: String?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case id, displayName, baseURL, searchPath, postPath, mediaBaseURL, requiresAuth, rateLimitPerSecond
@@ -92,7 +96,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         case sortOptions, ratingOptions, userAgent, proxyHost, proxyPort, timeoutSeconds, headers
         case alternateMediaURLPaths, tagSpaceReplacement, autocompletePath, autocompleteResultsPath, autocompleteNameKey, randomTag
         case relatedTagsPath, wikiPath, tagAliasesPath, votePath, accountSettingsPath, registerURL
-        case authUserParamName, apiKeyPageURL
+        case authUserParamName, apiKeyPageURL, favoritePath, tagCategoryKey
     }
 
     init(id: String, displayName: String, baseURL: URL, searchPath: String, postPath: String,
@@ -168,6 +172,8 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         registerURL = try c.decodeIfPresent(String.self, forKey: .registerURL)
         authUserParamName = Self.sanitizeParamName(try c.decodeIfPresent(String.self, forKey: .authUserParamName))
         apiKeyPageURL = try c.decodeIfPresent(String.self, forKey: .apiKeyPageURL)
+        favoritePath = try c.decodeIfPresent(String.self, forKey: .favoritePath)
+        tagCategoryKey = try c.decodeIfPresent(String.self, forKey: .tagCategoryKey)
     }
 
     /// Writes every key, including empty ones as null, so an exported file shows all fields.
@@ -205,6 +211,8 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         try c.encode(registerURL, forKey: .registerURL)
         try c.encode(authUserParamName, forKey: .authUserParamName)
         try c.encode(apiKeyPageURL, forKey: .apiKeyPageURL)
+        try c.encode(favoritePath, forKey: .favoritePath)
+        try c.encode(tagCategoryKey, forKey: .tagCategoryKey)
     }
 
     /// Starting point for the "Add adapter" form.
@@ -231,6 +239,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         c.accountSettingsPath = "account.json"
         c.registerURL = "register"
         c.votePath = "posts/{id}/vote"
+        c.favoritePath = "favorites/{id}"
         c.sortOptions = ["newest", "oldest", "random"]
         return c
     }

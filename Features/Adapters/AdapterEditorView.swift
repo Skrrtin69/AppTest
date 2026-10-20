@@ -230,6 +230,8 @@ struct AdapterEditorView: View {
         case .registerURL: plain(opt(\.registerURL), "register", id: "field-registerURL")
         case .authUserParamName: plain(opt(\.authUserParamName), "user_id", id: "field-authUserParamName")
         case .apiKeyPageURL: plain(opt(\.apiKeyPageURL), "account/api", id: "field-apiKeyPageURL")
+        case .favoritePath: plain(opt(\.favoritePath), "favorites/{id}", id: "field-favoritePath")
+        case .tagCategoryKey: plain(opt(\.tagCategoryKey), "category", id: "field-tagCategoryKey")
         }
     }
 

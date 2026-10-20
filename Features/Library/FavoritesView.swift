@@ -13,8 +13,52 @@ struct FavoritesView: View {
     @State private var newCollection = ""
     @State private var showNewCollection = false
 
+    @State private var siteFilter: String?
+    @State private var query = ""
+
+    /// Every site's favorites together, narrowed by the site chip and the search text.
     var favoritePosts: [Post] {
-        store.favorites.map { $0.post }.filter { !settings.isBlacklisted($0) }
+        let q = query.lowercased().trimmingCharacters(in: .whitespaces)
+        return store.favorites.map { $0.post }.filter { p in
+            !settings.isBlacklisted(p) && (siteFilter == nil || p.siteID == siteFilter) &&
+            (q.isEmpty || p.id.lowercased().contains(q) || p.tags.contains { $0.lowercased().contains(q) } ||
+             AdapterRegistry.shared.displayName(for: p.siteID).lowercased().contains(q))
+        }
+    }
+
+    var favoriteSites: [String] { Array(Set(store.favorites.map { $0.post.siteID })).sorted() }
+
+    var filterBar: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                TextField("Search favorites (tags, ID, site)", text: $query)
+                    .textInputAutocapitalization(.never).disableAutocorrection(true)
+                    .accessibilityIdentifier("favoritesSearch")
+            }
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.16)))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    chip("All", selected: siteFilter == nil) { siteFilter = nil }
+                    ForEach(favoriteSites, id: \.self) { s in
+                        chip(AdapterRegistry.shared.displayName(for: s), selected: siteFilter == s) { siteFilter = s }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 6)
+    }
+
+    func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(.caption.weight(selected ? .bold : .regular))
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Capsule().fill(selected ? Color.accentColor.opacity(0.25) : Color.gray.opacity(0.14)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Filter \(title)\(selected ? ", selected" : "")")
     }
 
     var body: some View {
@@ -49,12 +93,15 @@ struct FavoritesView: View {
     }
 
     @ViewBuilder var favoritesGrid: some View {
-        if favoritePosts.isEmpty {
+        if !store.favorites.isEmpty { filterBar }
+        if favoritePosts.isEmpty && !store.favorites.isEmpty {
+            EmptyStateView(icon: "magnifyingglass", title: "No matches", message: "No favorites match this filter.")
+        } else if favoritePosts.isEmpty {
             EmptyStateView(icon: "heart", title: "No favorites yet",
                            message: "Long-press any thumbnail and choose Favorite, or tap the heart in the viewer.")
         } else {
             ScrollView {
-                PostGrid(posts: favoritePosts, selecting: selecting, selected: selected,
+                PostGrid(posts: favoritePosts, selecting: selecting, selected: selected, showSource: siteFilter == nil, showSyncState: true,
                          onTap: { i in
                              if selecting {
                                  let k = favoritePosts[i].key

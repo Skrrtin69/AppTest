@@ -214,11 +214,24 @@ final class GenericAdapter: SiteAdapter {
         }
         return Post(id: id, siteID: config.id, thumbnailURL: thumb, mediaURL: media,
                     mediaType: Self.mediaType(typeStrings: typeStrings, url: media, config: config),
-                    tags: tags, sourceURL: source, metadata: meta, sampleURL: sample)
+                    tags: tags, sourceURL: source, metadata: meta, sampleURL: sample,
+                    tagCategories: tagCategories(node))
     }
 
     static func isMP4(_ url: URL) -> Bool {
         ["mp4", "m4v", "mov"].contains(url.pathExtension.lowercased())
+    }
+
+    /// Tag → category, read from tag objects when tagCategoryKey is set.
+    func tagCategories(_ node: Any) -> [String: String]? {
+        guard let key = config.tagCategoryKey?.nonEmpty,
+              let list = DottedPath.evaluate(config.tagsPath, in: node) as? [Any] else { return nil }
+        let nameKey = config.tagsNameKey?.nonEmpty ?? "name"
+        var out: [String: String] = [:]
+        for case let d as [String: Any] in list {
+            if let name = DottedPath.stringValue(d[nameKey]), let cat = DottedPath.stringValue(d[key]) { out[name] = cat }
+        }
+        return out.isEmpty ? nil : out
     }
 
     /// Plain-English problems with mapping one result, keyed by the field at fault.

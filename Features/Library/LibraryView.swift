@@ -86,7 +86,7 @@ struct LibraryView: View {
             .fullScreenCover(item: $viewer) { ViewerView(posts: $0.posts, startIndex: $0.index, isLocal: true) }
             .confirmationDialog("Delete \(selected.count) item(s) from this device?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
-                    downloads.remove(Array(selected)); selected = []; selecting = false
+                    downloads.removeWithUndo(Array(selected)); selected = []; selecting = false
                 }
             }
         }
@@ -112,7 +112,7 @@ struct LibraryView: View {
             selecting = true
             selected = Set(list.map { $0.id })
         } label: { Label("Select", systemImage: "checkmark.circle") }
-        Button(role: .destructive) { downloads.remove(list.map { $0.id }) } label: { Label("Delete", systemImage: "trash") }
+        Button(role: .destructive) { downloads.removeWithUndo(list.map { $0.id }) } label: { Label("Delete", systemImage: "trash") }
     }
 
     var selectionBar: some View {

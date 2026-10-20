@@ -68,7 +68,7 @@ enum MockExtras {
         }
         if sub.hasPrefix("/favorites/") {
             guard member else { return .json(["message": "Log in to save favorites to your account."], status: 401) }
-            return .json(["message": "Added to your account's favorites."])
+            return .json(["message": req.method == "DELETE" ? "Removed from your account's favorites." : "Added to your account's favorites."])
         }
         if sub == "/account.json" {
             guard member else { return .json(["message": "Log in to see your account."], status: 401) }

@@ -384,4 +384,28 @@ final class AppRouter: ObservableObject {
         let site = AdapterRegistry.shared.config(for: siteID) != nil ? siteID : (AdapterRegistry.shared.enabledConfigs.first?.id ?? siteID)
         BrowseModel.shared.openTab(siteID: site, query: tag)
     }
+
+    /// A search requested from outside (Shortcuts, links). Runs now if the app is ready,
+    /// otherwise as soon as startup finishes.
+    private var pending: (tags: String, siteName: String?)?
+    private(set) var ready = false
+
+    func queueSearch(tags: String, siteName: String?) {
+        pending = (tags, siteName)
+        if ready { runPending() }
+    }
+
+    func markReady() {
+        ready = true
+        runPending()
+    }
+
+    private func runPending() {
+        guard let p = pending else { return }
+        pending = nil
+        let registry = AdapterRegistry.shared
+        let named = p.siteName.flatMap { n in registry.enabledConfigs.first { $0.displayName.lowercased() == n.lowercased() || $0.id == n } }
+        let site = named?.id ?? BrowseModel.shared.current?.siteID ?? registry.enabledConfigs.first?.id ?? ""
+        search(tag: p.tags, siteID: site)
+    }
 }

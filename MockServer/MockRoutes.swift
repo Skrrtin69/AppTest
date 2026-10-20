@@ -220,7 +220,7 @@ enum MockRoutes {
                 "w": i.width,
                 "h": i.height,
             ],
-            "tag_list": i.tags.map { ["name": $0, "count": 1] },
+            "tag_list": i.tags.map { ["name": $0, "count": 1, "category": MockCatalog.colors.contains($0) ? "color" : (MockCatalog.patterns.contains($0) ? "pattern" : "general")] },
             "author": ["name": "generator-\(i.n % 5)"],
             "links": ["source": "\(origin)/b/view/\(i.n)"],
             "stats": ["score": i.score],

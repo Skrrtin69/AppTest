@@ -7,10 +7,14 @@ enum ThemePalette {
 
     static var current: Colors {
         let mode = AppSettings.shared.theme
+        if let c = mode.custom {
+            return Colors(background: c.background, surface: c.surface, text: c.text, accent: c.accent)
+        }
         let dark: Bool
         switch mode {
         case .light: dark = false
         case .dark, .amoled: dark = true
+        case .custom: dark = true
         case .system: dark = UITraitCollection.current.userInterfaceStyle == .dark
         }
         if mode == .amoled { return Colors(background: "#000000", surface: "#111111", text: "#FFFFFF", accent: "#0A84FF") }

@@ -30,8 +30,8 @@ struct SettingsView: View {
                 }
 
                 Section("Appearance") {
-                    Picker("Theme", selection: $settings.theme) {
-                        ForEach(ThemeMode.allCases) { Text($0.label).tag($0) }
+                    NavigationLink(destination: ThemesView()) {
+                        HStack { Text("Theme"); Spacer(); Text(settings.theme.label).foregroundColor(.secondary) }
                     }
                     .accessibilityIdentifier("themePicker")
                     Stepper("Grid columns: \(settings.gridColumns)", value: $settings.gridColumns, in: 2...5)
@@ -45,6 +45,7 @@ struct SettingsView: View {
                     }
                     Toggle("Animate GIFs in grids", isOn: $settings.animateGridGIFs)
                     Toggle("Autoplay videos in viewer", isOn: $settings.autoplayVideos)
+                    Toggle("Prefer lighter images in the viewer", isOn: $settings.preferLighter)
                     Toggle("Blur thumbnails until tapped", isOn: $settings.blurThumbnails)
                     Toggle("Dim posts I've already opened", isOn: $settings.dimViewed)
                     Button("Forget which posts I've opened") {

@@ -97,6 +97,11 @@ extension View {
 struct ThemedBackground: ViewModifier {
     @ObservedObject var settings = AppSettings.shared
     func body(content: Content) -> some View {
-        content.background((settings.theme == .amoled ? Color.black : Color(UIColor.systemBackground)).ignoresSafeArea())
+        content.background(background.ignoresSafeArea())
+    }
+
+    var background: Color {
+        if let c = settings.theme.custom { return Color(hex: c.background) }
+        return settings.theme == .amoled ? Color.black : Color(UIColor.systemBackground)
     }
 }

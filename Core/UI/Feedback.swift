@@ -27,6 +27,22 @@ final class ToastCenter: ObservableObject {
         let id = UUID()
         let message: String
         let style: Style
+        var actionTitle: String? = nil
+        var action: (() -> Void)? = nil
+        static func == (a: Toast, b: Toast) -> Bool { a.id == b.id }
+    }
+
+    /// A message with a button (e.g. Undo). Stays a little longer so there's time to tap it.
+    func show(_ message: String, style: Toast.Style = .info, actionTitle: String, action: @escaping () -> Void) {
+        DispatchQueue.main.async {
+            let t = Toast(message: message, style: style, actionTitle: actionTitle, action: action)
+            self.current = t
+            self.hideTask?.cancel()
+            self.hideTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if !Task.isCancelled, self.current?.id == t.id { self.current = nil }
+            }
+        }
     }
 
     @Published var current: Toast?
@@ -68,6 +84,11 @@ struct ToastOverlay: View {
                     Image(systemName: icon(t.style))
                     Text(t.message).font(.subheadline).fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
+                    if let title = t.actionTitle, let action = t.action {
+                        Button(title) { action(); center.current = nil }
+                            .font(.subheadline.weight(.bold))
+                            .accessibilityIdentifier("toastAction")
+                    }
                     Button { center.current = nil } label: { Image(systemName: "xmark").font(.caption.weight(.bold)) }
                         .accessibilityLabel("Dismiss message")
                 }

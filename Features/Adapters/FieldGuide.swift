@@ -26,7 +26,7 @@ enum FieldGuide {
         Section("Web addresses", "How to build the address for a search and for a single post. Words in {curly braces} are filled in by the app.",
          [.searchPath, .postPath, .tagSeparator, .tagSpaceReplacement, .firstPageIndex, .sortOptions, .ratingOptions, .randomTag]),
         Section("Finding things in the answer", "Where each piece of information sits inside the site's JSON answer. Use the Field Mapper to discover these — paste an answer, tap a row, choose \"Use as…\".",
-         [.searchResultsPath, .postIDPath, .thumbnailURLPath, .mediaURLPath, .sampleURLPath, .alternateMediaURLPaths, .mediaTypePath, .tagsPath, .tagsNameKey, .sourceURLPath, .postResultPath, .metadataPaths]),
+         [.searchResultsPath, .postIDPath, .thumbnailURLPath, .mediaURLPath, .sampleURLPath, .alternateMediaURLPaths, .mediaTypePath, .tagsPath, .tagsNameKey, .tagCategoryKey, .sourceURLPath, .postResultPath, .metadataPaths]),
         Section("Tag suggestions", "Optional. Lets the search bar suggest tags while you type.",
          [.autocompletePath, .autocompleteResultsPath, .autocompleteNameKey]),
         Section("Media types", "How the app decides if something is a video, a GIF, or a picture.",
@@ -36,7 +36,7 @@ enum FieldGuide {
         Section("Login", "Only needed if the site wants an account or key. Your actual username/password/key is saved separately and securely under Account.",
          [.authStyle, .authParamName, .authUserParamName, .authCheckPath, .accountSettingsPath, .apiKeyPageURL, .registerURL]),
         Section("Extra features", "Optional. Each button or panel only appears in the app when its address is filled in.",
-         [.relatedTagsPath, .wikiPath, .tagAliasesPath, .votePath]),
+         [.relatedTagsPath, .wikiPath, .tagAliasesPath, .votePath, .favoritePath]),
         Section("Network", "Optional fine-tuning.",
          [.userAgent, .proxyHost, .proxyPort, .timeoutSeconds, .headers]),
     ]
@@ -87,6 +87,8 @@ enum FieldGuide {
         e(.randomTag, "Random tag", "Optional. For the dice button: a tag that makes the site return random results (used only when no Sort choice contains 'random').", "order:random")
         e(.authUserParamName, "User ID name", "Optional. If the site wants your user ID next to the API key, the address parameter's name (like user_id). Your ID goes in the Account screen's Username field.", "user_id")
         e(.apiKeyPageURL, "API key page", "Optional. Full address (or a path added to the base address) of the page that shows your API key once logged in. Used by 'Log in to get my key'.", "account/api")
+        e(.tagCategoryKey, "Tag category key", "Optional. If each tag is an object with a category (like artist or character), which key holds it. Tags are then colored by category in the Info panel.", "category")
+        e(.favoritePath, "Account favorites address", "Optional. Added to the base address; {id} is the post ID. When set and you're logged in, favoriting also saves to your account (POST), and unfavoriting removes it (DELETE).", "favorites/{id}")
         e(.relatedTagsPath, "Related tags address", "Optional. Added to the base address; {tag} is replaced by a tag. When set, the Info panel shows tags that often appear with it.", "tags/related.json?tag={tag}")
         e(.wikiPath, "Tag description address", "Optional. Added to the base address; {tag} is replaced by a tag. When set, holding a tag in the Info panel shows its description.", "wiki/{tag}.json")
         e(.tagAliasesPath, "Tag aliases address", "Optional. Added to the base address; {tag} is replaced by a tag. Shows the tag's other names in its description.", "aliases.json?tag={tag}")

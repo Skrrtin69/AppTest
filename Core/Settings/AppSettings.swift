@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum ThemeMode: String, CaseIterable, Identifiable {
-    case system, light, dark, amoled
+    case system, light, dark, amoled, custom
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -9,6 +9,7 @@ enum ThemeMode: String, CaseIterable, Identifiable {
         case .light: return "Light"
         case .dark: return "Dark"
         case .amoled: return "AMOLED Black"
+        case .custom: return CustomThemeStore.shared.active?.name ?? "Custom"
         }
     }
     var colorScheme: ColorScheme? {
@@ -16,8 +17,11 @@ enum ThemeMode: String, CaseIterable, Identifiable {
         case .system: return nil
         case .light: return .light
         case .dark, .amoled: return .dark
+        case .custom: return (CustomThemeStore.shared.active?.isDark ?? true) ? .dark : .light
         }
     }
+    /// The custom theme in use, when this mode is `.custom`.
+    var custom: CustomTheme? { self == .custom ? CustomThemeStore.shared.active : nil }
 }
 
 enum ThumbAspect: String, CaseIterable, Identifiable {
@@ -42,11 +46,12 @@ final class AppSettings: ObservableObject {
         static let blurThumbnails = "blurThumbnails", dimViewed = "dimViewed"
         static let viewerAspect = "viewerAspect", playbackSpeed = "playbackSpeed", verticalReading = "verticalReading"
         static let warnOnCellular = "warnOnCellular", maxDownloadMB = "maxDownloadMB", gridSpacing = "gridSpacing"
+        static let preferLighter = "preferLighter", viewerBackground = "viewerBackground"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
                           blurThumbnails, dimViewed, viewerAspect, playbackSpeed, verticalReading,
-                          warnOnCellular, maxDownloadMB, gridSpacing]
+                          warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -90,6 +95,14 @@ final class AppSettings: ObservableObject {
     @Published var maxDownloadMB: Double = 0 { didSet { d.set(maxDownloadMB, forKey: K.maxDownloadMB) } }
     /// Gap between grid thumbnails, 0–12 points.
     @Published var gridSpacing: Double = 3 { didSet { d.set(gridSpacing, forKey: K.gridSpacing) } }
+    /// Viewer shows the site's medium-size (usually JPG/WebP) file when there is one.
+    @Published var preferLighter: Bool = false { didSet { d.set(preferLighter, forKey: K.preferLighter) } }
+    /// Viewer backdrop: "black", "white" or "checker".
+    @Published var viewerBackground: String = "black" { didSet { d.set(viewerBackground, forKey: K.viewerBackground) } }
+
+    func cycleViewerBackground() {
+        viewerBackground = viewerBackground == "black" ? "white" : (viewerBackground == "white" ? "checker" : "black")
+    }
 
     /// Columns to use right now: two more when the phone is sideways.
     func columns(landscape: Bool) -> Int { landscape ? gridColumns + 2 : gridColumns }
@@ -129,6 +142,8 @@ final class AppSettings: ObservableObject {
         warnOnCellular = d.object(forKey: K.warnOnCellular) as? Bool ?? true
         maxDownloadMB = d.object(forKey: K.maxDownloadMB) as? Double ?? 0
         gridSpacing = min(12, max(0, d.object(forKey: K.gridSpacing) as? Double ?? 3))
+        preferLighter = d.object(forKey: K.preferLighter) as? Bool ?? false
+        viewerBackground = d.string(forKey: K.viewerBackground) ?? "black"
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }

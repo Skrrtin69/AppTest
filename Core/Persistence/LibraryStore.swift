@@ -102,11 +102,20 @@ final class LibraryStore: ObservableObject {
 
     func toggleFavorite(_ post: Post) {
         if let mo = favoriteMO(post.key) {
+            let collectionIDs = mo.collections.map { $0.id }
             ctx.delete(mo)
-            ToastCenter.shared.show("Removed from favorites")
+            ToastCenter.shared.show("Removed from favorites", actionTitle: "Undo") { [weak self] in
+                guard let self = self else { return }
+                let f = self.ensureFavorite(post)
+                for id in collectionIDs { if let c = self.collectionMO(id) { f.collections.insert(c) } }
+                self.commit()
+                Task { await FavoriteSync.shared.push(post, add: true) }
+            }
+            Task { await FavoriteSync.shared.push(post, add: false) }
         } else {
             ensureFavorite(post)
             ToastCenter.shared.show("Added to favorites", style: .success)
+            Task { await FavoriteSync.shared.push(post, add: true) }
         }
         commit()
     }

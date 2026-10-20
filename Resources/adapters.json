@@ -127,7 +127,8 @@
     "tagSpaceReplacement": "_",
     "autocompletePath": "suggest?q={query}",
     "autocompleteResultsPath": "data.suggestions",
-    "autocompleteNameKey": "label"
+    "autocompleteNameKey": "label",
+    "tagCategoryKey": "category"
   },
   {
     "id": "demo-hotlink",

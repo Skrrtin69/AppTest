@@ -32,7 +32,7 @@ struct ViewerView: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(1 - Double(min(dragOffset, 400)) / 600).ignoresSafeArea()
+            ViewerBackdrop(style: settings.viewerBackground).opacity(1 - Double(min(dragOffset, 400)) / 600).ignoresSafeArea()
             Group {
                 if settings.verticalReading {
                     VerticalReader(posts: posts, startIndex: index, index: $index,
@@ -71,6 +71,7 @@ struct ViewerView: View {
             }
         }
         .statusBar(hidden: !chrome)
+        .modifier(HideHomeIndicator(hidden: !chrome))
         .onAppear {
             prefetchNeighbors()
             if let p = current { ViewedStore.shared.markViewed(p) }
@@ -191,6 +192,8 @@ struct ViewerView: View {
                 Image(systemName: settings.verticalReading ? "rectangle.split.1x2.fill" : "rectangle.split.1x2").font(.title3)
             }
             .accessibilityLabel(settings.verticalReading ? "Vertical reading on" : "Vertical reading off")
+            Button { settings.cycleViewerBackground(); Haptics.tap() } label: { Image(systemName: "circle.lefthalf.filled").font(.title3) }
+                .accessibilityLabel("Background \(settings.viewerBackground)")
             Button { showInfo = true } label: { Image(systemName: "info.circle").font(.title3) }
                 .accessibilityLabel("Info")
         }
@@ -316,7 +319,9 @@ struct FullImagePage: View {
 
     func load(force: Bool) async {
         let client = AdapterRegistry.shared.adapter(for: post.siteID)?.client
-        await model.load(post.mediaURL, maxPixel: 4096, animate: true, client: client, onLoad: { img in
+        // Prefer lighter: the site's medium-size file when there is one.
+        let url = AppSettings.shared.preferLighter ? (post.sampleURL ?? post.mediaURL) : post.mediaURL
+        await model.load(url, maxPixel: 4096, animate: true, client: client, onLoad: { img in
             onSize(CGSize(width: img.size.width * img.scale, height: img.size.height * img.scale))
         }, force: force)
     }

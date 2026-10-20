@@ -58,6 +58,7 @@ final class BootModel: ObservableObject {
         AdapterRegistry.shared.bootstrap()
         DownloadManager.shared.bootstrap()
         BrowseModel.shared.ensureTab()
+        AppRouter.shared.markReady()
         ready = true
         if let e = CoreDataStack.shared.loadError {
             ToastCenter.shared.show("Your saved library couldn't be read and was reset: \(e.localizedDescription)", style: .error)
@@ -80,6 +81,7 @@ struct RootView: View {
     @ObservedObject private var lock = LockManager.shared
     @ObservedObject private var router = AppRouter.shared
     @ObservedObject private var downloads = DownloadManager.shared
+    @ObservedObject private var customThemes = CustomThemeStore.shared
 
     var body: some View {
         ZStack {
@@ -102,8 +104,9 @@ struct RootView: View {
                         .tabItem { Label("Settings", systemImage: "gearshape") }
                         .tag(AppRouter.Tab.settings)
                 }
-                // Rebuild UIKit-backed chrome when the theme changes so AMOLED colors apply.
-                .id(settings.theme)
+                // Rebuild UIKit-backed chrome when the theme changes so AMOLED/custom colors apply.
+                .id("\(settings.theme.rawValue)-\(customThemes.activeID ?? "")-\(customThemes.active.map { $0.background + $0.surface + $0.accent + $0.text } ?? "")")
+                .accentColor(settings.theme.custom.map { Color(hex: $0.accent) })
             } else {
                 VStack(spacing: 12) {
                     ProgressView()
@@ -126,16 +129,28 @@ enum Theme {
         case .system: style = .unspecified
         case .light: style = .light
         case .dark, .amoled: style = .dark
+        case .custom: style = (CustomThemeStore.shared.active?.isDark ?? true) ? .dark : .light
         }
         let black = mode == .amoled
-        UITableView.appearance().backgroundColor = black ? .black : nil
-        UICollectionView.appearance().backgroundColor = black ? .black : nil
+        let custom = mode.custom
+        // Custom theme: its background behind lists, its surface color on the bars.
+        let listBG: UIColor? = custom.map { UIColor(hex: $0.background) } ?? (black ? .black : nil)
+        UITableView.appearance().backgroundColor = listBG
+        UICollectionView.appearance().backgroundColor = listBG
         let nav = UINavigationBarAppearance()
         let tab = UITabBarAppearance()
-        if black {
+        if let c = custom {
+            let surface = UIColor(hex: c.surface), text = UIColor(hex: c.text)
+            nav.configureWithOpaqueBackground(); nav.backgroundColor = surface
+            nav.titleTextAttributes = [.foregroundColor: text]; nav.largeTitleTextAttributes = [.foregroundColor: text]
+            tab.configureWithOpaqueBackground(); tab.backgroundColor = surface
+            UITableViewCell.appearance().backgroundColor = surface
+        } else if black {
+            UITableViewCell.appearance().backgroundColor = nil
             nav.configureWithOpaqueBackground(); nav.backgroundColor = .black
             tab.configureWithOpaqueBackground(); tab.backgroundColor = .black
         } else {
+            UITableViewCell.appearance().backgroundColor = nil
             nav.configureWithDefaultBackground()
             tab.configureWithDefaultBackground()
         }
@@ -143,8 +158,12 @@ enum Theme {
         UINavigationBar.appearance().scrollEdgeAppearance = nav
         UITabBar.appearance().standardAppearance = tab
         UITabBar.appearance().scrollEdgeAppearance = tab
+        let tint = custom.map { UIColor(hex: $0.accent) }
         for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
-            for w in scene.windows { w.overrideUserInterfaceStyle = style }
+            for w in scene.windows {
+                w.overrideUserInterfaceStyle = style
+                w.tintColor = tint
+            }
         }
     }
 }

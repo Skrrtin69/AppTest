@@ -44,7 +44,24 @@ final class DownloadManager: NSObject, ObservableObject {
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
 
-    var completed: [DownloadItem] { items.filter { $0.state == .completed } }
+    /// Items hidden while their Undo toast is showing; really deleted afterwards.
+    @Published private(set) var pendingRemoval: Set<String> = []
+    var completed: [DownloadItem] { items.filter { $0.state == .completed && !pendingRemoval.contains($0.id) } }
+
+    /// Deletes after a 5-second Undo window.
+    func removeWithUndo(_ ids: [String]) {
+        guard !ids.isEmpty else { return }
+        pendingRemoval.formUnion(ids)
+        ToastCenter.shared.show("Deleted \(ids.count) item\(ids.count == 1 ? "" : "s")", actionTitle: "Undo") { [weak self] in
+            self?.pendingRemoval.subtract(ids)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.5) { [weak self] in
+            guard let self = self else { return }
+            let still = ids.filter { self.pendingRemoval.contains($0) }
+            self.pendingRemoval.subtract(still)
+            self.remove(still)
+        }
+    }
     var queue: [DownloadItem] { items.filter { $0.state != .completed } }
 
     // MARK: Startup
