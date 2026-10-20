@@ -46,6 +46,8 @@ struct ThemedWebPage: View {
     /// When set, the toolbar offers "Find Key on Page"; called with the chosen key and the
     /// user ID found on the same page (if any).
     var onFindKey: ((KeyFinder.Found, KeyFinder.Found?) -> Void)? = nil
+    /// Called (and the page closed) when Find Key on Page finds nothing, with the page's address.
+    var onNothingFound: ((URL?) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model = Model()
     @State private var choices: KeyFinder.Result?
@@ -71,6 +73,10 @@ struct ThemedWebPage: View {
                             Button { findKey() } label: { Label("Find Key on Page", systemImage: "key.viewfinder") }
                                 .labelStyle(.titleAndIcon)
                                 .accessibilityIdentifier("findKeyOnPage")
+                            Spacer()
+                            Button { copySelection() } label: { Image(systemName: "doc.on.doc") }
+                                .accessibilityLabel("Copy Selection")
+                                .accessibilityIdentifier("copySelection")
                         } else {
                             Button { copySelection() } label: { Label("Copy Selection", systemImage: "doc.on.doc") }
                                 .accessibilityIdentifier("copySelection")
@@ -122,6 +128,9 @@ struct ThemedWebPage: View {
             let r = KeyFinder.find(json: json)
             DebugLog.log("KeyFinder", "\(r.keys.count) key(s)\(r.userID != nil ? " + user ID" : "") on \(wv.url?.path ?? "")")
             switch r.keys.count {
+            case 0 where onNothingFound != nil:
+                onNothingFound?(wv.url)
+                dismiss()
             case 0:
                 ToastCenter.shared.show("No API key found on this page. Open the page that shows it (usually Account, Profile or Settings), then tap Find Key on Page.", style: .error)
             case 1:

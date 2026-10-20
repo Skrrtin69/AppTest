@@ -36,6 +36,18 @@ struct AutoConfigView: View {
     @State private var loginPage: LoginPage?
     /// Bumped after a key is found on the site, to run Analyze again.
     @State private var reanalyze = 0
+    /// The site logs in with a username and password instead of a key.
+    @State private var useLogin = false
+    @State private var notice: Notice?
+
+    enum Notice: Equatable {
+        /// The resolver found nothing and filled in the usual address.
+        case checkDefault
+        /// Find Key on Page found nothing on this page.
+        case keyNotFound(URL?)
+        /// Every way of sending the key was refused.
+        case keyRejected(tried: [String])
+    }
     @FocusState private var focused: Field?
 
     enum Field: Hashable { case url, tag, headers, keyName, credentials }
@@ -51,10 +63,10 @@ struct AutoConfigView: View {
         ScrollViewReader { proxy in
             Form {
                 inputSection
-                loginSection
+                loginSection(proxy)
                 Section {
                     Button {
-                        Task { await analyze(proxy) }
+                        Task { if hasLogin { await testConnection(proxy) } else { await analyze(proxy) } }
                     } label: {
                         HStack {
                             if running { ProgressView() }
@@ -67,13 +79,20 @@ struct AutoConfigView: View {
                     .accessibilityIdentifier("autoAnalyze")
                 }
                 if let f = failure { failureSection(f).id("failure") }
+                if let n = notice { noticeSection(n).id("failure") }
                 if let p = proposal { proposalSections(p) }
             }
             .safeAreaInset(edge: .bottom) { actionBar(proxy) }
-            .onChange(of: reanalyze) { _ in Task { await analyze(proxy) } }
+            .onChange(of: reanalyze) { _ in Task { await testConnection(proxy) } }
         }
         .sheet(item: $loginPage) { page in
-            ThemedWebPage(url: page.url, onFindKey: { key, user in useFound(key, user) })
+            ThemedWebPage(url: page.url, onFindKey: { key, user in useFound(key, user) },
+                          onNothingFound: { url in
+                              notice = .keyNotFound(url)
+                              failure = nil
+                              showAdvanced = true
+                              DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { focused = .credentials }
+                          })
         }
         .navigationTitle("Auto-Configure")
         .navigationBarTitleDisplayMode(.inline)
@@ -103,19 +122,22 @@ struct AutoConfigView: View {
         return URL(string: parts.base + "/")
     }
 
-    /// Fills the login fields with what Find Key on Page picked, then analyzes again.
+    /// Fills the login fields with what Find Key on Page picked, then tests the connection.
     func useFound(_ key: KeyFinder.Found, _ user: KeyFinder.Found?) {
-        if authStyle == nil || authStyle == AuthStyle.none || authStyle == .basic { authStyle = .apiKeyQuery }
-        if let name = key.paramName { authParamName = name } else if authParamName.isEmpty { authParamName = "api_key" }
+        useLogin = false
+        notice = nil
+        if let name = key.paramName { authParamName = name }
         apiKey = key.value
         if let u = user {
             username = u.value
-            showUserID = true
-            if let name = u.paramName { authUserParam = name } else if authUserParam.isEmpty { authUserParam = "user_id" }
+            if let name = u.paramName { authUserParam = name }
         }
         showAdvanced = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { reanalyze += 1 }
     }
+
+    /// A key, or a username and password, has been entered.
+    var hasLogin: Bool { useLogin ? (username.nonEmpty != nil && password.nonEmpty != nil) : apiKey.nonEmpty != nil }
 
     // MARK: Inputs
 
@@ -144,6 +166,7 @@ struct AutoConfigView: View {
                 Button("Demo Members (guest limits)") { urlText = "\(o)/a/members/posts.json?tags={tags}&page={page}"; sampleTag = "red" }
                 Button("Demo Formats (zip, webp, apng, stream…)") { urlText = "\(o)/u/posts.json?tags={tags}&page={page}"; sampleTag = "" }
                 Button("Demo Vault (log in to find the key)") { urlText = "\(o)/v/posts.json?tags={tags}&page={page}"; sampleTag = "blue" }
+                Button("Demo Header Key (X-Api-Key only)") { urlText = "\(o)/h/posts.json?tags={tags}&page={page}"; sampleTag = "blue" }
                 Button("Demo Gallery (multi-page)") { urlText = "\(o)/g/posts.json?tags={tags}&page={page}"; sampleTag = "comic" }
             } label: { Label("Try a demo address", systemImage: "testtube.2") }
         } header: { Text("Search address") } footer: {
@@ -151,9 +174,61 @@ struct AutoConfigView: View {
         }
     }
 
-    var loginSection: some View {
+    func loginSection(_ proxy: ScrollViewProxy) -> some View {
         Section {
+            if case .keyNotFound(let page) = notice {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Key not found", systemImage: "key.slash").font(.headline).foregroundColor(.orange)
+                    Text("We couldn't find your key automatically. You can find it in your Account Settings or Profile page under 'API' or 'Integrations'.")
+                        .font(.subheadline).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("keyNotFoundHelp")
+                    if let url = page ?? siteHome {
+                        Button { loginPage = LoginPage(url: url) } label: {
+                            Label("Take me to the settings page", systemImage: "safari").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("openSettingsPage")
+                    }
+                    Text("On that page, highlight the key and tap Copy Selection, then paste it into the API key field below and tap Test Connection.")
+                        .font(.footnote).foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
             DisclosureGroup(isExpanded: $showAdvanced) {
+                if useLogin {
+                    TextField("Username", text: $username)
+                        .textInputAutocapitalization(.never).disableAutocorrection(true)
+                        .textContentType(.username)
+                        .accessibilityIdentifier("autoUsername")
+                    SecureField("Password", text: $password)
+                        .textContentType(.password)
+                        .accessibilityIdentifier("autoPassword")
+                } else {
+                    TextField("API key", text: $apiKey)
+                        .textInputAutocapitalization(.never).disableAutocorrection(true)
+                        .textContentType(.oneTimeCode)
+                        .focused($focused, equals: .credentials)
+                        .accessibilityIdentifier("autoApiKey")
+                    TextField("User ID (only if the site gives you one)", text: $username)
+                        .textInputAutocapitalization(.never).disableAutocorrection(true)
+                        .textContentType(.oneTimeCode)
+                        .accessibilityIdentifier("autoUserID")
+                }
+                Button {
+                    Task { await testConnection(proxy) }
+                } label: {
+                    HStack {
+                        if running { ProgressView() }
+                        Text(running ? "Testing…" : "Test Connection").bold()
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(running || !hasLogin || urlText.nonEmpty == nil)
+                .accessibilityIdentifier("testConnection")
+                Toggle("The site uses a username and password", isOn: $useLogin)
+                    .font(.footnote)
+                    .accessibilityIdentifier("useLoginToggle")
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Extra headers (one per line, Name = value)").font(.caption).foregroundColor(.secondary)
                     TextEditor(text: $headersText)
@@ -162,40 +237,49 @@ struct AutoConfigView: View {
                         .textInputAutocapitalization(.never).disableAutocorrection(true)
                         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.3)))
                 }
-                Text("Login style — MediaDeck never guesses this").font(.caption).foregroundColor(.secondary)
-                AuthStylePicker(selection: $authStyle)
-                if authStyle == .apiKeyQuery || authStyle == .apiKeyHeader {
-                    TextField(authStyle == .apiKeyQuery ? "Key name in the address (e.g. api_key)" : "Header name (e.g. X-Api-Key)", text: $authParamName)
-                        .textInputAutocapitalization(.never).disableAutocorrection(true)
-                        .focused($focused, equals: .keyName)
-                        .accessibilityIdentifier("autoAuthParam")
-                }
-                if authStyle == .basic {
-                    CredentialFields(username: $username, password: $password, apiKey: $apiKey)
-                } else if let s = authStyle, s != .none {
-                    TextField("API key", text: $apiKey)
-                        .textInputAutocapitalization(.never).disableAutocorrection(true)
-                        .textContentType(.oneTimeCode)
-                        .accessibilityIdentifier("autoApiKey")
-                    if showUserID || !authUserParam.isEmpty {
-                        TextField("User ID", text: $username)
-                            .textInputAutocapitalization(.never).disableAutocorrection(true)
-                            .textContentType(.oneTimeCode)
-                            .accessibilityIdentifier("autoUserID")
-                        TextField("User ID name in the address (e.g. user_id)", text: $authUserParam)
-                            .textInputAutocapitalization(.never).disableAutocorrection(true)
-                            .accessibilityIdentifier("autoUserParam")
-                    } else {
-                        Button("The site also needs a user ID") { showUserID = true; if authUserParam.isEmpty { authUserParam = "user_id" } }
-                            .font(.footnote)
-                    }
-                }
             } label: {
-                Label("Headers & login (optional)", systemImage: "key")
+                Label("Login (optional)", systemImage: "key")
             }
             .accessibilityIdentifier("autoAdvanced")
+        } footer: {
+            Text(useLogin ? "Test Connection logs in with these details and keeps the adapter if the site accepts them."
+                          : "Paste your key and tap Test Connection. MediaDeck tries the usual ways of sending it (in the address, as a Bearer token, as an X-Api-Key header, with your user ID) and keeps the one the site accepts.")
         }
         .id("login")
+    }
+
+    // MARK: Notices
+
+    @ViewBuilder
+    func noticeSection(_ n: Notice) -> some View {
+        switch n {
+        case .checkDefault:
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Check this address", systemImage: "questionmark.circle.fill").font(.headline).foregroundColor(.orange)
+                    Text(AutoConfigurator.unresolvedMessage).font(.subheadline)
+                        .accessibilityIdentifier("checkDefault")
+                    Text("It's the most common API address. If the site's API lives somewhere else (look for \"API\" in its help pages), paste that address instead, then tap Analyze.")
+                        .font(.footnote).foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+        case .keyRejected(let tried):
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Key rejected", systemImage: "xmark.shield.fill").font(.headline).foregroundColor(.red)
+                    Text("Key rejected. Check if it requires a User ID alongside it, or if the key has expired.")
+                        .font(.subheadline).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("keyRejected")
+                    if !tried.isEmpty {
+                        Text("Tried: " + tried.joined(separator: " · ")).font(.footnote).foregroundColor(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        case .keyNotFound:
+            EmptyView()
+        }
     }
 
     // MARK: Failure
@@ -330,15 +414,21 @@ struct AutoConfigView: View {
         running = true
         failure = nil
         proposal = nil
+        notice = nil
         defer { running = false }
+        urlText = AutoConfigurator.normalizeAddress(urlText)
+        authStyle = nil
         let input = AutoConfigInput(urlTemplate: urlText, sampleTag: sampleTag,
-                                    headers: AdapterEditorView.parsePairs(headersText),
-                                    authStyle: authStyle, authParamName: authParamName.nonEmpty,
-                                    authUserParamName: (showUserID || !authUserParam.isEmpty) ? authUserParam.nonEmpty : nil,
-                                    credentials: credentials)
+                                    headers: AdapterEditorView.parsePairs(headersText))
         let (result, resolved) = await AutoConfigurator(existingIDs: Set(registry.configs.map { $0.id })).resolveAndAnalyze(input)
-        // Only the site's address was pasted: show the API address that was found.
+        // Only the site's address was pasted: show the API address that was found (or the usual one).
         if let resolved = resolved { urlText = resolved }
+        if case .failure(.badAddress(let m)) = result, m == AutoConfigurator.unresolvedMessage {
+            notice = .checkDefault
+            Haptics.error()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { withAnimation { proxy.scrollTo("failure", anchor: .top) } }
+            return
+        }
         switch result {
         case .success(let p):
             proposal = p
@@ -347,19 +437,105 @@ struct AutoConfigView: View {
         case .failure(let f):
             failure = f
             Haptics.error()
-            if case .needsLogin = f {
-                showAdvanced = true
-                // Show the API key fields straight away (most sites use a key in the address).
-                if authStyle == nil || authStyle == AuthStyle.none { authStyle = .apiKeyQuery }
-                if authParamName.isEmpty { authParamName = "api_key" }
-            }
-            // The server's own words asked for a user ID: show that field, named as the server said.
+            // Show the key fields straight away.
+            if case .needsLogin = f { showAdvanced = true }
+            // The server's own words named its user ID parameter: use that name.
             if let param = AutoConfigurator.userIDParam(in: f.message) {
-                showUserID = true
                 showAdvanced = true
-                if authUserParam.isEmpty { authUserParam = param }
+                authUserParam = param
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { withAnimation { proxy.scrollTo("failure", anchor: .top) } }
+        }
+    }
+
+    /// Tries the usual ways of sending the key (or the username and password) and keeps the
+    /// first one the site accepts: the adapter is saved and the wizard closes.
+    func testConnection(_ proxy: ScrollViewProxy) async {
+        focused = nil
+        Keyboard.dismiss()
+        guard hasLogin else { return }
+        running = true
+        failure = nil
+        proposal = nil
+        notice = nil
+        defer { running = false }
+        urlText = AutoConfigurator.normalizeAddress(urlText)
+        let keyParam = authParamName.nonEmpty ?? "api_key"
+        let userParam = authUserParam.nonEmpty ?? "user_id"
+        typealias Attempt = (label: String, style: AuthStyle, param: String?, userParam: String?)
+        var attempts: [Attempt] = []
+        if useLogin {
+            attempts = [("username and password", .basic, nil, nil)]
+        } else {
+            attempts = [("\(keyParam)= in the address", .apiKeyQuery, keyParam, nil),
+                        ("Authorization: Bearer", .bearer, nil, nil),
+                        ("X-Api-Key header", .apiKeyHeader, "X-Api-Key", nil)]
+            if username.nonEmpty != nil {
+                attempts.append(("\(keyParam)= and \(userParam)= in the address", .apiKeyQuery, keyParam, userParam))
+            }
+        }
+        let creds = useLogin ? Credentials(username: username, password: password.nonEmpty, apiKey: nil)
+                             : Credentials(username: username, password: nil, apiKey: apiKey.nonEmpty)
+        let configurator = AutoConfigurator(existingIDs: Set(registry.configs.map { $0.id }))
+        var tried: [String] = []
+        for a in attempts {
+            tried.append(a.label)
+            let input = AutoConfigInput(urlTemplate: urlText, sampleTag: sampleTag,
+                                        headers: AdapterEditorView.parsePairs(headersText),
+                                        authStyle: a.style, authParamName: a.param, authUserParamName: a.userParam,
+                                        credentials: creds)
+            let (result, resolved) = await configurator.resolveAndAnalyze(input)
+            DebugLog.log("AuthTester", "\(a.label): \(Self.describe(result))")
+            switch result {
+            case .success(var p):
+                if let resolved = resolved { urlText = resolved }
+                keep(a)
+                p.report.insert("Connected using \(a.label).", at: 0)
+                proposal = p
+                Haptics.success()
+                save(connectedWith: a.label)
+                return
+            case .failure(.needsLogin), .failure(.loginRejected), .failure(.http(401, _)), .failure(.http(403, _)):
+                continue
+            case .failure(.badAddress(let m)) where m == AutoConfigurator.unresolvedMessage:
+                // A bare address where no API shape answered, even with the key.
+                if let resolved = resolved { urlText = resolved }
+                continue
+            case .failure(let f):
+                // The site answered with this login, but something else needs fixing
+                // (or the address itself is wrong): show it.
+                if let resolved = resolved { urlText = resolved }
+                if Self.siteAnswered(f) { keep(a) }
+                failure = f
+                Haptics.error()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { withAnimation { proxy.scrollTo("failure", anchor: .top) } }
+                return
+            }
+        }
+        notice = .keyRejected(tried: tried)
+        Haptics.error()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { withAnimation { proxy.scrollTo("failure", anchor: .top) } }
+    }
+
+    /// Remembers the way of logging in that worked (used by Test, Edit fields and Save).
+    private func keep(_ a: (label: String, style: AuthStyle, param: String?, userParam: String?)) {
+        authStyle = a.style
+        authParamName = a.param ?? ""
+        authUserParam = a.userParam ?? ""
+    }
+
+    /// JSON came back with this login; only the field mapping needs a look.
+    private static func siteAnswered(_ f: AutoConfigFailure) -> Bool {
+        switch f {
+        case .noList, .noMedia, .emptyList: return true
+        default: return false
+        }
+    }
+
+    private static func describe(_ r: Result<AutoConfigProposal, AutoConfigFailure>) -> String {
+        switch r {
+        case .success: return "accepted"
+        case .failure(let f): return f.title
         }
     }
 
@@ -384,7 +560,7 @@ struct AutoConfigView: View {
         ToastCenter.shared.show("Proposal updated", style: .success)
     }
 
-    func save() {
+    func save(connectedWith method: String? = nil) {
         guard var p = proposal else { return }
         if case .fillForm(_, let apply) = mode {
             apply(p.config, p.guesses)
@@ -418,7 +594,8 @@ struct AutoConfigView: View {
             try? await Task.sleep(nanoseconds: 700_000_000)
             AppRouter.shared.tab = .browse
             BrowseModel.shared.openTab(siteID: id, query: "")
-            ToastCenter.shared.show(lows.isEmpty ? "Added \(name)." : "Added \(name). Tap the badge on its tile to review low-confidence fields.", style: .success)
+            let connected = method.map { "Connected (\($0)). " } ?? ""
+            ToastCenter.shared.show(connected + (lows.isEmpty ? "Added \(name)." : "Added \(name). Tap the badge on its tile to review low-confidence fields."), style: .success)
         }
     }
 }

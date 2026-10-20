@@ -54,6 +54,15 @@ enum MockVault {
         }
     }
 
+    /// /h/posts.json: the same key, but only accepted in an X-Api-Key header.
+    static func headerSite(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
+        guard sub == "/posts.json" else { return .json(["error": "not found"], status: 404) }
+        guard req.headers["x-api-key"] == apiKey else {
+            return .json(["error": "Missing or wrong X-Api-Key header."], status: 401)
+        }
+        return MockRoutes.siteA("/posts.json", req: req, origin: origin)
+    }
+
     private static func html(_ title: String, _ body: String, status: Int = 200) -> HTTPResponse {
         .text("""
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>\(title)</title></head>

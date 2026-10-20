@@ -393,10 +393,28 @@ extension AutoConfigurator {
     /// Common API shapes tried, in order, when only a site's address is pasted.
     static let apiTemplates = [
         "/index.php?page=dapi&s=post&q=index&json=1&tags={tags}&pid={page}",
+        // Same API in its standard (XML) form: only used if the site answers it with JSON.
+        "/index.php?page=dapi&s=post&q=index&tags={tags}&pid={page}",
         "/posts.json?tags={tags}&page={page}",
         "/api/v1/posts?tags={tags}&page={page}",
+        "/post.json?tags={tags}&page={page}",
+        "/post/index.json?tags={tags}&page={page}",
+        "/api/posts?tags={tags}&page={page}",
     ]
-    static let unresolvedMessage = "Couldn't automatically resolve the API address. Please paste the full JSON API URL manually."
+    /// Filled in when nothing answered, for the user to check.
+    static let defaultTemplate = "/posts.json?tags={tags}&page={page}"
+    static let unresolvedMessage = "Couldn't auto-resolve. Please check this default address."
+
+    /// "example.org" → "https://example.org" (web addresses typed without a scheme).
+    static func normalizeAddress(_ t: String) -> String {
+        var s = t.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return s }
+        let lower = s.lowercased()
+        if lower.hasPrefix("http://") || lower.hasPrefix("https://") { return s }
+        if lower.contains("://") { return s }   // another scheme: reported as unusable later
+        while s.hasPrefix("/") { s.removeFirst() }
+        return "https://" + s
+    }
 
     /// Just a site's address: no path, query or placeholders (e.g. https://example.org/).
     static func isBareAddress(_ t: String) -> Bool {
@@ -424,6 +442,6 @@ extension AutoConfigurator {
                 return (r, attempt.urlTemplate)
             }
         }
-        return (.failure(.badAddress(Self.unresolvedMessage)), nil)
+        return (.failure(.badAddress(Self.unresolvedMessage)), origin + Self.defaultTemplate)
     }
 }
