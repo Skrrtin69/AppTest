@@ -31,8 +31,7 @@ struct MediaDeckApp: App {
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        NSLog("[Rotation] asked for window %@ -> %lu", String(describing: type(of: window)), OrientationLock.mask.rawValue)
-        return OrientationLock.mask
+        OrientationLock.mask
     }
 
     func application(_ application: UIApplication,

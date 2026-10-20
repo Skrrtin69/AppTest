@@ -90,3 +90,4 @@ Choices made while building MediaDeck, and why.
 - **Battery Saver** is computed, not stored: `savingPower` = "on", or "auto" plus iOS Low Power Mode. It updates live through the power-state notification. Grid images reload when animation is switched, so GIFs stop or start at once.
 - **Cache expiry** uses the file's modification date, which the cache refreshes on every read, so the setting means "not opened in N days". It runs at launch, when the setting changes, and before each size trim.
 - **Toolbar customization** stores the buttons moved into the menu (`hiddenViewerButtons`). Close, the counter and Info are always shown. A new button defaults to the menu, so the bar never overflows.
+- **Rotation lock** has to refresh every controller in the presentation chain, because the viewer is a SwiftUI full-screen cover over the root. The request is sent after the cover finishes appearing, and closing the viewer goes back to automatic.

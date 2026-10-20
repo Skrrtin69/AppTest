@@ -64,7 +64,7 @@ Status per item is tracked in commits and in BLOCKERS.md.
 ## Phase 10: Long-Form & Gallery Reading ✅
 - Multi-page galleries, ImageIO-downsampled tall images, vertical stacking, "1 / 24" page indicator.
 
-## Phase 11: Reader Ergonomics & Customization ✅ (rotation lock: see BLOCKERS)
+## Phase 11: Reader Ergonomics & Customization ✅
 - RTL mode; tap-to-turn zones; orientation lock; Battery Saver; cache expiration; customizable viewer toolbar; swipe to switch sites.
 
 ## Phase 12: Ultimate Workflow QoL
