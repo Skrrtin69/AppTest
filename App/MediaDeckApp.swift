@@ -34,25 +34,6 @@ struct MediaDeckApp: App {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
-    /// A connected TV / monitor gets its own scene showing the open post; everything else
-    /// keeps the configuration SwiftUI would use anyway.
-    func application(_ application: UIApplication, configurationForConnecting session: UISceneSession,
-                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-        let external: Bool
-        if #available(iOS 16.0, *) {
-            external = session.role == .windowExternalDisplayNonInteractive
-        } else {
-            external = session.role == UISceneSession.Role(rawValue: "UIWindowSceneSessionRoleExternalDisplay")
-        }
-        if external {
-            let c = UISceneConfiguration(name: "External Display", sessionRole: session.role)
-            c.delegateClass = ExternalSceneDelegate.self
-            return c
-        }
-        // The app's own window: a plain configuration, so SwiftUI attaches its scene as usual.
-        return UISceneConfiguration(name: nil, sessionRole: session.role)
-    }
-
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         OrientationLock.mask
     }
