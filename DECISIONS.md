@@ -61,3 +61,19 @@ Choices made while building MediaDeck, and why.
 - **IDs for numeric/local hosts** append the first path folder (e.g. 127-0-0-1-a), since the host alone can't tell sites apart.
 - **Login style is never guessed:** 401/403 stops with a picker that starts with nothing selected.
 - **Review badges:** guesses are stored per adapter with their proposed value; a low guess stops counting as soon as the field's value changes or the user taps "Mark all as reviewed".
+
+## Phases 1–8
+- **WebM audio:** no remuxing library. Remuxing VP8/VP9 into MP4 doesn't help, because AVPlayer on iOS still can't decode that video, and the remux libraries are retired. The ogv.js decoder already in the app plays the Vorbis/Opus audio. When a post also has an MP4 (`alternateMediaURLPaths`), the MP4 is used.
+- **Errors:** `ErrorParser` reads common message keys (message, error, detail, description, errors[]…), or an HTML title, and shows them verbatim. No per-status wording.
+- **Merged search:** sites are queried in parallel (TaskGroup) with their own page/cursor. Results are interleaved; duplicates are dropped by post key, and by identical media URL only across *different* sites.
+- **Media requests:** one path (`NetworkClient.mediaData`) adds the adapter's headers and a default Referer (the adapter's base address), upgrades public http→https with an http fallback, and rejects HTML and empty answers. AVPlayer gets the same headers through its asset options; the web player goes through the in-app proxy.
+- **Not built, by choice:**
+  - automatic API discovery and capability probing
+  - automatic key-location testing, and scraping keys from web pages
+  - CAPTCHA-backed web scraping for reverse search
+  - iCloud sync
+
+  Instead, Auto-Configure reports Public / Requires auth from one normal search and shows the site's own error wording; you choose how the key is sent. Site pages open themed, with a Copy Selection button.
+- **Favorites sync state** is stored as a key set in UserDefaults, not as a new Core Data attribute. The Core Data model is defined in code, so changing it could force a store reset.
+- **Delete with Undo:** Library deletions wait 5 seconds (items are hidden meanwhile) before files are removed.
+- **Custom themes** are stored as hex colors, so the same values feed SwiftUI, UIKit appearance proxies, and the injected web-page CSS.

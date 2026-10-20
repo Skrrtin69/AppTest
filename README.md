@@ -218,3 +218,48 @@ Settings → Sites & Adapters → **Auto-configure from URL** (or the **Auto-con
 6. If the site needs a login, Analyze says so and asks you to choose the login style (it never guesses), then run Analyze again.
 
 Failures are explained in plain English with one next step: bad address, unreachable server, HTTP error (with the server's text), a web page instead of an API, or no list found (with a button to the Field Mapper).
+
+---
+
+## What's new (Phases 1–8)
+
+**Playback and errors**
+- Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
+- Errors show the site's own words ("You can search for at most 6 tags…", "Too many requests…"), or just "HTTP 429" when the site says nothing.
+- Media requests carry the adapter's headers plus a Referer, so sites that block hotlinking work. Public `http://` media is upgraded to https (with a fallback), and a web page where a picture was expected says "Site blocked request or requires login."
+
+**Searching**
+- "Quoted words" are one tag; spaces inside become the adapter's `tagSpaceReplacement` (e.g. `_`).
+- Tag suggestions while typing (adapter `autocompletePath`).
+- Tag pills with ✕, a dice for random results, numbers-only searches open that post ID, Go to page…, tap the active tab to scroll up, and sort/rating remembered per site.
+- **All Sites (merged)** searches every enabled site at once. Each thumbnail gets a small site badge, and one site failing doesn't stop the others.
+- Optional blur-until-tapped and dimming of posts you've opened.
+
+**Viewer**
+- Fit / Fill / 1:1, double-tap zooms where you tap, 1× / 1.5× / 2× video speed, a vertical (comic) reading mode, and a black / white / checkerboard background.
+- Swipe down to close; slide on the left edge for brightness and the right edge for volume. A tap hides all controls (and the home indicator).
+- Long-press a thumbnail for a big preview; Copy Image, Copy ID, Copy MD5.
+- Info panel: hold a tag to blacklist it. When the adapter has the addresses, it also shows related tags, tag descriptions and aliases, a vote button, and tag colors by category.
+
+**Downloads and data**
+- Download All Results, Select All / Invert, Retry All, and Download Anyway for files over your size limit.
+- Asks before big downloads on mobile data, skips files that are already downloaded, exports a ZIP, and clears the cache for one site.
+- Deleting from the Library or unfavoriting can be undone from the message that appears.
+
+**Accounts**
+- After logging in, MediaDeck offers to import the account's hidden tags and default sort/rating, as a checklist you review first.
+- Sites can link their sign-up and API-key pages. They open inside the app, styled to match your theme. Log in yourself, highlight your key, tap **Copy Selection**, and paste it into the form.
+- If a site wants a user ID next to the key, Auto-Configure notices from the site's own error and shows a User ID field.
+- Favorites can also save to your account (adapter `favoritePath`). A cloud icon means saved to the account, a phone icon means only on this phone. After logging in, the app offers to upload phone-only favorites.
+
+**Look**
+- Custom themes: Settings › Theme › New Theme, with the iOS color picker for background, surface, text and accent. They apply to the whole app and to the site pages it opens.
+- Landscape adds two grid columns, plus a grid spacing slider (0–12 pt).
+- Messages can be dismissed with ✕ or a swipe up.
+
+**Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
+
+### New adapters.json fields (all optional)
+`alternateMediaURLPaths`, `tagSpaceReplacement`, `autocompletePath`, `autocompleteResultsPath`, `autocompleteNameKey`, `randomTag`, `relatedTagsPath`, `wikiPath`, `tagAliasesPath`, `votePath`, `accountSettingsPath`, `registerURL`, `authUserParamName`, `apiKeyPageURL`, `favoritePath`, `tagCategoryKey`, and the `bearer` login style.
+
+Each is explained in Settings › Sites & Adapters › Field Guide. Features whose field is empty don't appear in the app.
