@@ -212,6 +212,11 @@ final class GenericAdapter: SiteAdapter {
         for (name, path) in config.metadataPaths {
             if let v = DottedPath.string(path, in: node) { meta[name] = v }
         }
+        // Animation archive: remember the frame timings for when the archive is decoded.
+        if let fp = config.zipFramesPath?.nonEmpty {
+            let delays = ZipFrames.parse(DottedPath.evaluate(fp, in: node))
+            if !delays.isEmpty { ZipFrames.register(media, delays: delays) }
+        }
         return Post(id: id, siteID: config.id, thumbnailURL: thumb, mediaURL: media,
                     mediaType: Self.mediaType(typeStrings: typeStrings, url: media, config: config),
                     tags: tags, sourceURL: source, metadata: meta, sampleURL: sample,
@@ -287,10 +292,14 @@ final class GenericAdapter: SiteAdapter {
         // "video/mp4" style MIME types → also try the subtype
         candidates += candidates.compactMap { $0.split(separator: "/").last.map(String.init) }
         if candidates.isEmpty { candidates = [url.pathExtension.lowercased()] }
-        let videos = Set(config.videoExtensions.map { $0.lowercased() })
+        // Extensions are compared without case (.MP4 = .mp4). HLS playlists are always video.
+        let videos = Set(config.videoExtensions.map { $0.lowercased() } + ["m3u8"])
         let gifs = Set(config.gifExtensions.map { $0.lowercased() })
-        if candidates.contains(where: { videos.contains($0) }) { return .video }
-        if candidates.contains(where: { gifs.contains($0) }) { return .gif }
+        let zips = Set(config.zipExtensions.map { $0.lowercased() })
+        let urlExt = url.pathExtension.lowercased()
+        if candidates.contains(where: { videos.contains($0) }) || urlExt == "m3u8" { return .video }
+        // Frame-by-frame archives play like GIFs.
+        if candidates.contains(where: { gifs.contains($0) || zips.contains($0) }) || zips.contains(urlExt) { return .gif }
         return .image
     }
 

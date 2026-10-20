@@ -63,6 +63,8 @@ enum MockRoutes {
             return MockExtras.siteAExtra(sub, req: req, origin: origin, member: false) ?? siteA(sub, req: req, origin: origin)
         case p.hasPrefix("/rs/"):
             return MockReverse.respond(req, origin: origin)
+        case p.hasPrefix("/u/") || p == "/u":
+            return MockFormats.respond(String(p.dropFirst(2)), req: req, origin: origin)
         case p.hasPrefix("/g/") || p == "/g":
             return MockGallery.respond(String(p.dropFirst(2)), req: req, origin: origin)
         case p.hasPrefix("/k"):

@@ -37,6 +37,8 @@ enum PlayerRoutes {
         case "js": return "application/javascript"
         case "wasm": return "application/wasm"
         case "html": return "text/html; charset=utf-8"
+        case "m3u8": return "application/vnd.apple.mpegurl"
+        case "ts": return "video/mp2t"
         default: return "application/octet-stream"
         }
     }

@@ -30,7 +30,7 @@ enum FieldGuide {
         Section("Tag suggestions", "Optional. Lets the search bar suggest tags while you type.",
          [.autocompletePath, .autocompleteResultsPath, .autocompleteNameKey]),
         Section("Media types", "How the app decides if something is a video, a GIF, or a picture.",
-         [.videoExtensions, .gifExtensions]),
+         [.videoExtensions, .gifExtensions, .zipExtensions, .zipFramesPath]),
         Section("Pages", "How to get the next page of results.",
          [.paginationStyle, .hasNextPagePath, .cursorPath]),
         Section("Login", "Only needed if the site wants an account or key. Your actual username/password/key is saved separately and securely under Account.",
@@ -89,6 +89,8 @@ enum FieldGuide {
         e(.apiKeyPageURL, "API key page", "Optional. Full address (or a path added to the base address) of the page that shows your API key once logged in. Used by 'Log in to get my key'.", "account/api")
         e(.tagCategoryKey, "Tag category key", "Optional. If each tag is an object with a category (like artist or character), which key holds it. Tags are then colored by category in the Info panel.", "category")
         e(.galleryPath, "Gallery pages", "Optional. Inside one result: the list of pages of a multi-page post (comic, album). Those posts open as a scrolling reader with a page counter.", "pages")
+        e(.zipExtensions, "Animation archive types", "Address endings of ZIP files that hold an animation frame by frame (e.g. zip). They play like a GIF.", "zip")
+        e(.zipFramesPath, "Animation frames", "Optional. Inside one result: the list of frames with their delays, like [{\"file\": \"000.jpg\", \"delay\": 80}] (milliseconds). Without it, an animation.json inside the archive is used, or 100 ms per frame.", "frames")
         e(.galleryURLKey, "Gallery page key", "If each page is an object, which key holds the page's address.", "url")
         e(.favoritePath, "Account favorites address", "Optional. Added to the base address; {id} is the post ID. When set and you're logged in, favoriting also saves to your account (POST), and unfavoriting removes it (DELETE).", "favorites/{id}")
         e(.relatedTagsPath, "Related tags address", "Optional. Added to the base address; {tag} is replaced by a tag. When set, the Info panel shows tags that often appear with it.", "tags/related.json?tag={tag}")

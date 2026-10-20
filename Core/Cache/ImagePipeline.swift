@@ -48,8 +48,9 @@ final class ImagePipeline {
         let key = "\(url.absoluteString)|\(Int(maxPixel))|\(animate)" as NSString
         if let img = decoded.object(forKey: key) { return img }
         let data = try await data(for: url, client: client)
+        let delays = ZipFrames.delays(for: url)
         let image = try await Task.detached(priority: .userInitiated) {
-            try Self.decode(data, maxPixel: maxPixel, animate: animate)
+            try Self.decode(data, maxPixel: maxPixel, animate: animate, zipDelays: delays)
         }.value
         decoded.setObject(image, forKey: key, cost: Self.cost(of: image))
         return image
@@ -72,7 +73,11 @@ final class ImagePipeline {
         data.count > 6 && data.prefix(4) == Data("GIF8".utf8)
     }
 
-    static func decode(_ data: Data, maxPixel: CGFloat, animate: Bool) throws -> UIImage {
+    static func decode(_ data: Data, maxPixel: CGFloat, animate: Bool, zipDelays: [String: Double]? = nil) throws -> UIImage {
+        // Clear messages for the usual "not actually a picture" answers.
+        if data.isEmpty { throw AppError.message("File not found on server (it sent an empty file).") }
+        if looksLikeHTML(data) { throw AppError.message("Site blocked request or requires login. (It sent a web page instead of the picture.)") }
+        if ZipReader.isZip(data) { return try decodeZipAnimation(data, maxPixel: maxPixel, animate: animate, delays: zipDelays) }
         guard let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else {
             throw AppError.message("This file isn't an image the app can display.")
         }
@@ -90,7 +95,8 @@ final class ImagePipeline {
             return CGImageSourceCreateImageAtIndex(src, i, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
         }
 
-        if animate, count > 1, isGIF(data) {
+        // GIF, animated WebP and APNG all come through ImageIO with per-frame delays.
+        if animate, count > 1 {
             var images: [UIImage] = []
             var duration: Double = 0
             // Cap frames to keep memory reasonable.
@@ -125,9 +131,72 @@ final class ImagePipeline {
         return CGFloat(longSide.rounded())
     }
 
+    static func looksLikeHTML(_ data: Data) -> Bool {
+        let head = String(decoding: data.prefix(256), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return head.hasPrefix("<!doctype html") || head.hasPrefix("<html") || head.hasPrefix("<head") || head.hasPrefix("<body")
+    }
+
+    /// A ZIP of numbered frames (e.g. "ugoira"): frames sorted by name, timed by the site's
+    /// JSON (zipFramesPath), else an animation.json inside the archive, else 100 ms each.
+    static func decodeZipAnimation(_ data: Data, maxPixel: CGFloat, animate: Bool, delays: [String: Double]?) throws -> UIImage {
+        let entries = try ZipReader.entries(data)
+        let imageExts: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp"]
+        let frames = entries.filter { imageExts.contains(($0.name as NSString).pathExtension.lowercased()) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        guard !frames.isEmpty else { throw AppError.message("This archive has no pictures to animate.") }
+        var timing = delays ?? [:]
+        if timing.isEmpty, let meta = entries.first(where: { ($0.name as NSString).lastPathComponent.lowercased() == "animation.json" }),
+           let json = try? JSONSerialization.jsonObject(with: meta.data) {
+            timing = ZipFrames.parse((json as? [String: Any])?["frames"] ?? json)
+        }
+        func decodeFrame(_ d: Data) -> UIImage? {
+            guard let s = CGImageSourceCreateWithData(d as CFData, nil) else { return nil }
+            var o: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true]
+            if maxPixel > 0 { o[kCGImageSourceThumbnailMaxPixelSize] = maxPixel }
+            return CGImageSourceCreateThumbnailAtIndex(s, 0, o as CFDictionary).map { UIImage(cgImage: $0) }
+        }
+        guard animate else {
+            guard let first = decodeFrame(frames[0].data) else { throw AppError.message("The first frame of this animation is damaged.") }
+            return first
+        }
+        var images: [UIImage] = []
+        var durations: [Double] = []
+        for f in frames.prefix(300) {
+            guard let img = decodeFrame(f.data) else { continue }
+            let name = (f.name as NSString).lastPathComponent
+            images.append(img)
+            durations.append(max(0.02, timing[f.name] ?? timing[name] ?? 0.1))
+        }
+        guard !images.isEmpty else { throw AppError.message("The frames of this animation are damaged.") }
+        return timedAnimation(images, durations)
+    }
+
+    /// UIImage animations use one frame length; frames with longer delays are repeated so
+    /// each shows for about its own time.
+    static func timedAnimation(_ images: [UIImage], _ durations: [Double]) -> UIImage {
+        let unit = max(0.02, durations.min() ?? 0.1)
+        var seq: [UIImage] = []
+        for (img, d) in zip(images, durations) {
+            seq += Array(repeating: img, count: max(1, min(50, Int((d / unit).rounded()))))
+            if seq.count > 1_500 { break }
+        }
+        return UIImage.animatedImage(with: seq, duration: unit * Double(seq.count)) ?? images[0]
+    }
+
     private static func frameDelay(_ src: CGImageSource, _ i: Int) -> Double {
-        guard let props = CGImageSourceCopyPropertiesAtIndex(src, i, nil) as? [CFString: Any],
-              let gif = props[kCGImagePropertyGIFDictionary] as? [CFString: Any] else { return 0.1 }
+        guard let props = CGImageSourceCopyPropertiesAtIndex(src, i, nil) as? [CFString: Any] else { return 0.1 }
+        // Animated WebP and APNG keep their timing in their own dictionaries.
+        for (dictKey, unclamped, clamped) in [
+            (kCGImagePropertyWebPDictionary, kCGImagePropertyWebPUnclampedDelayTime, kCGImagePropertyWebPDelayTime),
+            (kCGImagePropertyPNGDictionary, kCGImagePropertyAPNGUnclampedDelayTime, kCGImagePropertyAPNGDelayTime),
+        ] {
+            if let d = props[dictKey] as? [CFString: Any] {
+                let v = (d[unclamped] as? Double) ?? (d[clamped] as? Double) ?? 0
+                if v > 0.011 { return v }
+                if !d.isEmpty, d[clamped] != nil || d[unclamped] != nil { return 0.1 }
+            }
+        }
+        guard let gif = props[kCGImagePropertyGIFDictionary] as? [CFString: Any] else { return 0.1 }
         let d = (gif[kCGImagePropertyGIFUnclampedDelayTime] as? Double) ?? (gif[kCGImagePropertyGIFDelayTime] as? Double) ?? 0.1
         return d < 0.02 ? 0.1 : d
     }

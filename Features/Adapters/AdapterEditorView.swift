@@ -234,6 +234,11 @@ struct AdapterEditorView: View {
         case .tagCategoryKey: plain(opt(\.tagCategoryKey), "category", id: "field-tagCategoryKey")
         case .galleryPath: plain(opt(\.galleryPath), "pages", id: "field-galleryPath")
         case .galleryURLKey: plain(opt(\.galleryURLKey), "url", id: "field-galleryURLKey")
+        case .zipExtensions:
+            plain(Binding(get: { c.zipExtensions.joined(separator: " ") },
+                          set: { c.zipExtensions = $0.split(whereSeparator: { $0 == " " || $0 == "," || $0 == "\n" }).map { String($0).lowercased() } }),
+                  "zip", id: "field-zipExtensions")
+        case .zipFramesPath: plain(opt(\.zipFramesPath), "frames", id: "field-zipFramesPath")
         }
     }
 

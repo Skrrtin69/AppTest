@@ -162,6 +162,14 @@ final class DownloadManager: NSObject, ObservableObject {
     @MainActor
     func enqueue(_ posts: [Post]) async {
         guard !LockManager.shared.decoyActive else { return }
+        // Live streams (HLS playlists) are many small pieces, not one file.
+        let streams = posts.filter { $0.mediaURL.pathExtension.lowercased() == "m3u8" }
+        if !streams.isEmpty {
+            ToastCenter.shared.show(streams.count == posts.count ? "Streams can't be downloaded, only played."
+                                    : "\(streams.count) stream\(streams.count == 1 ? "" : "s") skipped: streams can only be played.")
+        }
+        let posts = posts.filter { $0.mediaURL.pathExtension.lowercased() != "m3u8" }
+        guard !posts.isEmpty else { return }
         let settings = AppSettings.shared
         guard !posts.isEmpty else { return }
         // Mobile data: confirm batches and videos first.
@@ -408,6 +416,17 @@ extension DownloadManager: URLSessionDownloadDelegate {
         guard let id = downloadTask.taskDescription, let item = items.first(where: { $0.id == id }) else { return }
         if let http = downloadTask.response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             update(id) { $0.state = .failed; $0.error = "Server answered \(http.statusCode)" }
+            return
+        }
+        // An empty file or a web page instead of the media: fail with a clear reason.
+        let size = (try? location.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        if size == 0 {
+            update(id) { $0.state = .failed; $0.error = "File not found on server (it sent an empty file)." }
+            return
+        }
+        if let type = (downloadTask.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")?.lowercased(),
+           type.contains("text/html") {
+            update(id) { $0.state = .failed; $0.error = "Site blocked request or requires login. (It sent a web page instead of the file.)" }
             return
         }
         // Must move the file before this method returns.

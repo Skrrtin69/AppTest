@@ -91,6 +91,11 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
     var galleryPath: String?
     /// If gallery pages are objects, which key holds each page's address.
     var galleryURLKey: String?
+    /// Address endings of frame-by-frame animation archives (played as animations).
+    var zipExtensions: [String] = ["zip"]
+    /// Inside one result: the list of animation frames with their delays,
+    /// e.g. [{"file": "000.jpg", "delay": 80}] (delay in milliseconds).
+    var zipFramesPath: String?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case id, displayName, baseURL, searchPath, postPath, mediaBaseURL, requiresAuth, rateLimitPerSecond
@@ -100,14 +105,14 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         case sortOptions, ratingOptions, userAgent, proxyHost, proxyPort, timeoutSeconds, headers
         case alternateMediaURLPaths, tagSpaceReplacement, autocompletePath, autocompleteResultsPath, autocompleteNameKey, randomTag
         case relatedTagsPath, wikiPath, tagAliasesPath, votePath, accountSettingsPath, registerURL
-        case authUserParamName, apiKeyPageURL, favoritePath, tagCategoryKey, galleryPath, galleryURLKey
+        case authUserParamName, apiKeyPageURL, favoritePath, tagCategoryKey, galleryPath, galleryURLKey, zipExtensions, zipFramesPath
     }
 
     init(id: String, displayName: String, baseURL: URL, searchPath: String, postPath: String,
          mediaBaseURL: URL, requiresAuth: Bool = false, rateLimitPerSecond: Double = 2,
          searchResultsPath: String, postIDPath: String, thumbnailURLPath: String, mediaURLPath: String,
          mediaTypePath: String, tagsPath: String, tagsNameKey: String? = nil, sourceURLPath: String? = nil,
-         videoExtensions: [String] = ["mp4", "webm", "mov", "m4v"], gifExtensions: [String] = ["gif"],
+         videoExtensions: [String] = ["mp4", "webm", "mov", "m4v", "m3u8"], gifExtensions: [String] = ["gif"],
          authStyle: AuthStyle = .none, authParamName: String? = nil,
          paginationStyle: PaginationStyle = .pageNumber, hasNextPagePath: String? = nil, cursorPath: String? = nil) {
         self.id = id; self.displayName = displayName; self.baseURL = baseURL
@@ -142,7 +147,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         tagsPath = try c.decodeIfPresent(String.self, forKey: .tagsPath) ?? ""
         tagsNameKey = try c.decodeIfPresent(String.self, forKey: .tagsNameKey)
         sourceURLPath = try c.decodeIfPresent(String.self, forKey: .sourceURLPath)
-        videoExtensions = try c.decodeIfPresent([String].self, forKey: .videoExtensions) ?? ["mp4", "webm", "mov", "m4v"]
+        videoExtensions = try c.decodeIfPresent([String].self, forKey: .videoExtensions) ?? ["mp4", "webm", "mov", "m4v", "m3u8"]
         gifExtensions = try c.decodeIfPresent([String].self, forKey: .gifExtensions) ?? ["gif"]
         authStyle = try c.decodeIfPresent(AuthStyle.self, forKey: .authStyle) ?? .none
         authParamName = Self.sanitizeParamName(try c.decodeIfPresent(String.self, forKey: .authParamName))
@@ -180,6 +185,8 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         tagCategoryKey = try c.decodeIfPresent(String.self, forKey: .tagCategoryKey)
         galleryPath = try c.decodeIfPresent(String.self, forKey: .galleryPath)
         galleryURLKey = try c.decodeIfPresent(String.self, forKey: .galleryURLKey)
+        zipExtensions = try c.decodeIfPresent([String].self, forKey: .zipExtensions) ?? ["zip"]
+        zipFramesPath = try c.decodeIfPresent(String.self, forKey: .zipFramesPath)
     }
 
     /// Writes every key, including empty ones as null, so an exported file shows all fields.
@@ -221,6 +228,8 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         try c.encode(tagCategoryKey, forKey: .tagCategoryKey)
         try c.encode(galleryPath, forKey: .galleryPath)
         try c.encode(galleryURLKey, forKey: .galleryURLKey)
+        try c.encode(zipExtensions, forKey: .zipExtensions)
+        try c.encode(zipFramesPath, forKey: .zipFramesPath)
     }
 
     /// Starting point for the "Add adapter" form.

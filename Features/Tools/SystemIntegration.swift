@@ -48,8 +48,13 @@ enum ShareInbox {
 
     /// mediadeck://inbox, mediadeck://favorites,
     /// mediadeck://search?tag=X[&site=Y], mediadeck://post?id=Y[&site=Z]
+    private static var lastLink: (url: URL, at: Date)?
+
     static func handle(_ url: URL) {
         guard url.scheme == "mediadeck" else { return }
+        // The same link can arrive twice when it also launches/activates the app.
+        if let l = lastLink, l.url == url, Date().timeIntervalSince(l.at) < 2 { return }
+        lastLink = (url, Date())
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         func q(_ names: String...) -> String? { items.first { names.contains($0.name.lowercased()) }?.value?.nonEmpty }
         // "site" may be an adapter id or its display name; without it the open site is used.

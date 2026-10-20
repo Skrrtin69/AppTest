@@ -114,6 +114,7 @@ struct AutoConfigView: View {
                 Button("Demo Site C (unclear field names)") { urlText = "\(o)/c/list.json?tags={tags}&page={page}"; sampleTag = "dots" }
                 Button("Demo Site K (key + user ID)") { urlText = "\(o)/k/posts.json?tags={tags}&page={page}"; sampleTag = "red" }
                 Button("Demo Members (guest limits)") { urlText = "\(o)/a/members/posts.json?tags={tags}&page={page}"; sampleTag = "red" }
+                Button("Demo Formats (zip, webp, apng, stream…)") { urlText = "\(o)/u/posts.json?tags={tags}&page={page}"; sampleTag = "" }
                 Button("Demo Gallery (multi-page)") { urlText = "\(o)/g/posts.json?tags={tags}&page={page}"; sampleTag = "comic" }
             } label: { Label("Try a demo address", systemImage: "testtube.2") }
         } header: { Text("Search address") } footer: {

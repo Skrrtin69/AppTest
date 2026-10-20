@@ -51,6 +51,7 @@ extension AutoConfigurator {
             var tagPaths: [(path: String, nameKey: String?)] = []
             var idPaths: [String] = []
             var galleryPaths: [(path: String, urlKey: String?)] = []
+            var framePaths: [String] = []
             for p in common {
                 let vs = values(p)
                 let strings = vs.compactMap { $0 as? String }
@@ -69,6 +70,11 @@ extension AutoConfigurator {
                     if Set(ints).count == ints.count { idPaths.append(p) }
                 } else if let arrays = vs as? [[Any]], arrays.contains(where: { !$0.isEmpty }) {
                     let elems = arrays.flatMap { $0 }
+                    // Objects with a file name and a delay = frames of an animation archive.
+                    if let objs = elems as? [[String: Any]], !objs.isEmpty,
+                       objs.allSatisfy({ ($0["file"] ?? $0["name"]) is String && ($0["delay"] ?? $0["duration"]) != nil }) {
+                        framePaths.append(p); continue
+                    }
                     // A list of addresses (or of objects holding one) = the pages of a gallery.
                     if let strs = elems as? [String], strs.allSatisfy({ AutoConfigurator.isURLString($0) }) {
                         galleryPaths.append((p, nil)); continue
@@ -92,6 +98,12 @@ extension AutoConfigurator {
             assignTagSpaces()
             assignAlternates()
             assignGallery(galleryPaths)
+            config.zipFramesPath = framePaths.first
+            set(.zipFramesPath, framePaths.isEmpty ? .medium : .high, framePaths.isEmpty
+                ? "No animation frame list found (only needed for frame-by-frame animation archives)."
+                : "Key \(AutoConfigurator.lastKey(framePaths[0])) lists frames with delays, so .zip animations play with the right timing.")
+            config.zipExtensions = ["zip"]
+            set(.zipExtensions, .medium, "Addresses ending in .zip are frame-by-frame animations.")
             assignMetadata(common, values: values)
             assignPostPath(maps.first ?? [:])
             pagination()
@@ -148,7 +160,7 @@ extension AutoConfigurator {
             set(.tagSeparator, .medium, "A space between tags (sent as %20). Some sites want + instead; change it if multi-tag searches find nothing.")
             config.firstPageIndex = 1
             set(.firstPageIndex, .medium, "Pages are counted from 1, like most sites. Use 0 if the first page comes back empty.")
-            config.videoExtensions = ["mp4", "webm", "mov", "m4v"]
+            config.videoExtensions = ["mp4", "webm", "mov", "m4v", "m3u8"]
             set(.videoExtensions, .medium, "Standard video types; add more if the site uses others.")
             config.gifExtensions = ["gif"]
             set(.gifExtensions, .medium, "Standard animated-GIF type.")
