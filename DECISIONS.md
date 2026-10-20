@@ -156,3 +156,10 @@ Choices made while building MediaDeck, and why.
 - **Six tabs would push Settings under iOS's "More"**, so Downloads moved into the Library, and the queue count shows as the Library tab's badge.
 - **Mass reverse search** runs sequentially with a 1.5 s pause between requests. "Duplicates" means selected posts whose best match is the same source address, or a match that points to a different post on one of your sites.
 - **Fallback** is offered only when the first page fails with a timeout, connection error, 429 or 5xx, and only if a fallback site is chosen. Nothing switches without a tap.
+
+## Reverse search upload fix
+- **Cause of "You need an Image!":** in upload mode, the engine address still carried `url={url}` filled with the picture's address. The engine used that address (unreachable for 127.0.0.1, or competing with the file) instead of the uploaded file. Upload mode now removes any query item containing `{url}` and keeps everything else (`output_type`, `api_key`, …).
+- **The upload is always a still JPEG** (max 2000 px) in one multipart part named by `uploadField` (default `file`), with `filename="image.jpg"`, `Content-Type: image/jpeg`, and the boundary in the request's Content-Type. Videos use their first frame (AVAssetImageGenerator, with the site's headers), falling back to the thumbnail for WebM. GIF, WebP, APNG and ZIP animations use their first frame. Transparent pictures are flattened onto white.
+- **Redirects keep the POST body** (a dedicated session re-sends method, body and headers).
+- **Engine errors:** a negative `header.status` (even with HTTP 200), or an HTTP error, shows the engine's `header.message` with HTML tags, entities and literal `\uXXXX` escapes removed.
+- The demo engine now rejects uploads that aren't a multipart `file` picture, or that also send `url=`, so this is covered by tests on the demo server.

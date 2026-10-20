@@ -43,3 +43,6 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 ## 9. Phases 18–20
 - No blockers. HLS was verified with a short local stream (demo Formats site, post u5). Real HLS servers may need the adapter's headers, which are passed to AVPlayer.
 - Pools on adapters created before Phase 20 need the pool fields added by hand (Field Guide › Pools and archives). Only new installs get them on the built-in Demo Site A.
+
+## 10. Reverse search against the real service
+- The upload fix was tested on the demo engine, using an address shaped like the real one (`?output_type=2&api_key={api_key}&url={url}`, upload mode): a picture, an MP4, a WebM-only video and a ZIP animation, plus the cleaned error message. It wasn't run against the real service, to avoid sending demo pictures with the owner's key; one search from the app will confirm it.

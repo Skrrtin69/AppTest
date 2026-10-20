@@ -212,6 +212,8 @@ Settings › Tools › Reverse Search › Add Engine (or **Edit all as JSON**). 
 - `{api_key}` is filled from the key you type in the engine's form. Keys are stored in the Keychain, never in the JSON file.
 - The paths work like adapter paths. `resultsPath` is the list of matches; the other paths are read inside each match.
 - Use the engine's own JSON API. MediaDeck doesn't read web pages meant for browsers.
+- When a picture is uploaded, any `url={url}` part of the address is left out automatically, so one address works in both modes. Videos are searched by their first frame, and animations (GIF, WebP, APNG, ZIP) by their first frame; the raw video or archive is never sent.
+- If the engine reports an error (for example a negative `header.status`), its message is shown as plain text.
 
 ## Project layout
 
