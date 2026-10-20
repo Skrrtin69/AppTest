@@ -46,7 +46,11 @@ enum TagColors {
         case "copyright", "series": return .purple
         case "meta": return .gray
         case "general": return .accentColor
-        default: return SourceBadge.color(for: c)
+        default:
+            // A fixed set of clearly different colors (hashed hues can land too close together).
+            let palette: [Color] = [.pink, .teal, .indigo, .yellow, .mint, .brown, .cyan, .red]
+            let hash = c.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0x7fffffff }
+            return palette[hash % palette.count]
         }
     }
 }
