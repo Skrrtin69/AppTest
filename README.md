@@ -269,9 +269,10 @@ The first one the site accepts is kept: the adapter is saved, the wizard closes,
 2. Go to the page that shows your key (usually Account, Profile or Settings) and tap **Find Key on Page** in the bottom toolbar.
 3. The app reads the page by context, not by guessing random long strings:
    - text right after a label such as "API Key", "API Token", "Secret" or "Credentials", including a value on the line below the label;
-   - `api_key=…` / `user_id=…` in example addresses, which also gives the parameter names;
+   - `api_key=…` / `user_id=…` anywhere: in example addresses, or inside a text box (even `&api_key=…&user_id=…` combined in one box, which fills both fields). This also gives the parameter names;
    - a text box labeled as the key.
    A user ID is found the same way.
+   If you highlight text before tapping Find Key on Page, that text is read first.
 4. With one key, the form is filled in, the page closes with a confirmation, and Test Connection runs on its own. With several, a picker shows each one with where it was found (for example "Found next to 'API Key'"). If none is found, you're told which page to open.
 
 Try it with **Try a demo address › Demo Vault (log in to find the key)**: log in with demo / demo. The account page has a single key. Its **Developer settings** page has two, so you can try the picker.

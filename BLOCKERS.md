@@ -72,3 +72,8 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
   - the https→http fallback for a non-local site.
 
   A successful test saves an adapter, so running it adds demo adapters to the list.
+
+## 15. Key reader: combined `&api_key=…&user_id=…`
+- **Fixed:** on a live site, the key sat in a text box as `&api_key=…&user_id=…`. The reader only looked for `name=value` in the page's visible text, and text-box contents aren't part of that, so it reported no key. It also needed the value to start right after `?`, `&` or a space. Now `name=value` is read anywhere: page text, every text box, and highlighted text. The value runs to the next `&`, space or quote, so a combined string fills both the key and the user ID.
+- **Highlighted text is read first:** text highlighted on the page or inside a box is parsed before the rest of the page. A bare highlighted code counts as the key.
+- **Not run on the phone yet:** the demo Vault now has an "API credentials" page (`/v/combined`) with exactly that combined box. Running it through Test Connection saves a demo adapter.
