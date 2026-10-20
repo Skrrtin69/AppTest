@@ -58,10 +58,10 @@ Status per item is tracked in commits and in BLOCKERS.md.
 - Tag category colors; prefer lighter formats; copy hash/MD5; undo toast for deletions; viewer background cycling; auto-hide system UI; copy URL/ID from the grid.
 - Siri/Shortcuts via AppIntents.
 
-## Phase 9: Continuous Playback & Autoplay
+## Phase 9: Continuous Playback & Autoplay ✅
 - Loop Current vs Auto-Advance: videos advance on completion, GIFs after one cycle, images on a timer; loop at the end of a feed.
 
-## Phase 10: Long-Form & Gallery Reading
+## Phase 10: Long-Form & Gallery Reading ✅
 - Multi-page galleries, ImageIO-downsampled tall images, vertical stacking, "1 / 24" page indicator.
 
 ## Phase 11: Reader Ergonomics & Customization

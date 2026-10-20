@@ -221,7 +221,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ---
 
-## What's new (Phases 1–8)
+## What's new (Phases 1–10)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -257,9 +257,18 @@ Failures are explained in plain English with one next step: bad address, unreach
 - Landscape adds two grid columns, plus a grid spacing slider (0–12 pt).
 - Messages can be dismissed with ✕ or a swipe up.
 
+**Continuous playback (Phase 9)**
+- The viewer's repeat button switches **Loop** (each post repeats) and **Auto-advance**. With auto-advance on, videos move on when they end, GIFs after one cycle, and still pictures after the slideshow interval. After the last post it goes back to the first.
+
+**Galleries and long strips (Phase 10)**
+- Posts with several pages (albums, comics) show a stack badge with the page count in the grid. They open as a scrolling reader with a **3 / 24** counter, plus buttons that jump to the first or last page.
+- Very tall pictures are decoded at screen width, not shrunk by their height, so they stay sharp without using too much memory.
+- Vertical reading mode shows every page of every gallery one after another.
+- Auto-Configure notices a list of page addresses in each result and fills in `galleryPath` / `galleryURLKey`.
+
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 
 ### New adapters.json fields (all optional)
-`alternateMediaURLPaths`, `tagSpaceReplacement`, `autocompletePath`, `autocompleteResultsPath`, `autocompleteNameKey`, `randomTag`, `relatedTagsPath`, `wikiPath`, `tagAliasesPath`, `votePath`, `accountSettingsPath`, `registerURL`, `authUserParamName`, `apiKeyPageURL`, `favoritePath`, `tagCategoryKey`, and the `bearer` login style.
+`alternateMediaURLPaths`, `tagSpaceReplacement`, `autocompletePath`, `autocompleteResultsPath`, `autocompleteNameKey`, `randomTag`, `relatedTagsPath`, `wikiPath`, `tagAliasesPath`, `votePath`, `accountSettingsPath`, `registerURL`, `authUserParamName`, `apiKeyPageURL`, `favoritePath`, `tagCategoryKey`, `galleryPath`, `galleryURLKey`, and the `bearer` login style.
 
 Each is explained in Settings › Sites & Adapters › Field Guide. Features whose field is empty don't appear in the app.

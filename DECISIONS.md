@@ -77,3 +77,9 @@ Choices made while building MediaDeck, and why.
 - **Favorites sync state** is stored as a key set in UserDefaults, not as a new Core Data attribute. The Core Data model is defined in code, so changing it could force a store reset.
 - **Delete with Undo:** Library deletions wait 5 seconds (items are hidden meanwhile) before files are removed.
 - **Custom themes** are stored as hex colors, so the same values feed SwiftUI, UIKit appearance proxies, and the injected web-page CSS.
+
+## Phases 9–10
+- **Auto-advance** is one global setting (`autoAdvance`), not per post. Video end is reported by AVPlayer's end notification, or by the web player's `ended` event. Only the page that is on screen may advance the viewer, so preloaded neighbours can't skip ahead.
+- **Galleries** keep the post model flat: `Post.pages` is an optional list of URLs, and `mediaURL` stays the first page. Favorites, downloads and the Info panel keep working unchanged. Each page becomes a temporary single-picture post (`post.page(i)`) only for display.
+- **Tall images:** when a picture is more than 2.5× taller than wide, the requested size is used as its *width*. No decode goes above about 24 megapixels, so a 720×6000 strip stays sharp, and a huge scan can't exhaust memory.
+- **Gestures in galleries:** swipe-down-to-close and the edge brightness/volume sliders are off on gallery posts, because the gallery scrolls vertically itself. Close with ✕.

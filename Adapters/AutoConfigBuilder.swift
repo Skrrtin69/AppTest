@@ -185,7 +185,7 @@ extension AutoConfigurator {
 
         // MARK: URLs
 
-        static let thumbWords = ["thumb", "preview", "sq", "small", "low", "sample"]
+        static let thumbWords = ["thumb", "preview", "sq", "small", "low", "sample", "cover", "poster"]
         static let mediaWords = ["file", "full", "original", "large", "high", "media", "image", "video", "src", "url", "source"]
 
         mutating func assignURLs(_ urlPaths: [String], values: (String) -> [Any]) -> Bool {

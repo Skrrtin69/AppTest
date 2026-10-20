@@ -94,8 +94,13 @@ struct VerticalReader: View {
                 }
             }
             .onAppear {
-                if let first = rows.first(where: { $0.post == startIndex }) {
-                    proxy.scrollTo("post-\(first.post)-\(first.item.id)", anchor: .top)
+                guard let first = rows.first(where: { $0.post == startIndex }) else { return }
+                let target = "post-\(first.post)-\(first.item.id)"
+                proxy.scrollTo(target, anchor: .top)
+                // Rows above change height as their pictures load (tall strips especially),
+                // which pushes the start post down; settle on it again shortly after.
+                for delay in [0.4, 1.0] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { proxy.scrollTo(target, anchor: .top) }
                 }
             }
         }
