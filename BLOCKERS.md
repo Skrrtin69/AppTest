@@ -77,3 +77,12 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 - **Fixed:** on a live site, the key sat in a text box as `&api_key=…&user_id=…`. The reader only looked for `name=value` in the page's visible text, and text-box contents aren't part of that, so it reported no key. It also needed the value to start right after `?`, `&` or a space. Now `name=value` is read anywhere: page text, every text box, and highlighted text. The value runs to the next `&`, space or quote, so a combined string fills both the key and the user ID.
 - **Highlighted text is read first:** text highlighted on the page or inside a box is parsed before the rest of the page. A bare highlighted code counts as the key.
 - **Not run on the phone yet:** the demo Vault now has an "API credentials" page (`/v/combined`) with exactly that combined box. Running it through Test Connection saves a demo adapter.
+
+## 16. Connection wizard: device results
+- **Passed on the phone:**
+  1. A wrong key on Demo Vault gave "Key rejected…", listing the three ways tried. No user ID was given, so the 4th wasn't tried.
+  2. Find Key on Page on the login page (no key there) closed the page and showed "Key not found", the help text, "Take me to the settings page" and the key fields.
+  3. That button reopened the site. After logging in, the API credentials page had `&api_key=…&user_id=…` in one box. Find Key on Page filled both fields, and Test Connection ran by itself and connected on the 4th way: "Connected (api_key= and user_id= in the address). Added 127.0.0.1 V." The test adapter was deleted afterwards.
+- **Not run:** the X-Api-Key-only demo site (Demo Header Key).
+- **Cosmetic:** the "key.slash" icon next to "Key not found" doesn't show on this iOS version.
+- **Open question from the owner's own test:** a real site's bare address ended at "Check this address". Its index.php API may answer without JSON (for example a plain-text "missing authentication" message), which the resolver skips like any webpage. This hasn't been looked into yet.
