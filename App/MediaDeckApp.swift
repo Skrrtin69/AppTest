@@ -49,7 +49,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             c.delegateClass = ExternalSceneDelegate.self
             return c
         }
-        return session.configuration
+        // The app's own window: a plain configuration, so SwiftUI attaches its scene as usual.
+        return UISceneConfiguration(name: nil, sessionRole: session.role)
     }
 
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
