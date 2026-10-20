@@ -214,6 +214,10 @@ struct ViewerView: View {
                         .accessibilityLabel("Download")
                     Spacer()
                 }
+                if AdapterRegistry.shared.adapter(for: p.siteID)?.supportsVoting == true {
+                    VoteButton(post: p)
+                    Spacer()
+                }
                 Button { collectionBatch = PostBatch(posts: [p]) } label: { Image(systemName: "folder.badge.plus") }
                     .accessibilityLabel("Add to collection")
                 Spacer()

@@ -228,6 +228,9 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
                               sourceURLPath: "source", authStyle: .basic,
                               paginationStyle: .pageNumber, hasNextPagePath: "has_more")
         c.authCheckPath = "auth/check"
+        c.accountSettingsPath = "account.json"
+        c.registerURL = "register"
+        c.votePath = "posts/{id}/vote"
         c.sortOptions = ["newest", "oldest", "random"]
         return c
     }

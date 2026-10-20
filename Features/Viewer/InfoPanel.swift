@@ -8,6 +8,10 @@ struct InfoPanel: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = AppSettings.shared
 
+    @State private var infoTag: InfoTag?
+    struct InfoTag: Identifiable { let id = UUID(); let tag: String }
+    var adapter: GenericAdapter? { AdapterRegistry.shared.adapter(for: post.siteID) }
+
     func quickBlacklist(_ tag: String) {
         let t = tag.lowercased()
         guard !settings.blacklistSet.contains(t) else { return }
@@ -44,6 +48,20 @@ struct InfoPanel: View {
                     }
                     .padding(.vertical, 4)
                 }
+                // Shown only when the adapter has these addresses.
+                if let a = adapter, a.supportsRelated, let first = post.tags.first {
+                    RelatedTagsSection(adapter: a, tag: first, onTag: onTag)
+                }
+                if let a = adapter, a.supportsWiki || a.supportsAliases, !post.tags.isEmpty {
+                    Section("About a tag") {
+                        ForEach(post.tags, id: \.self) { t in
+                            Button { infoTag = InfoTag(tag: t) } label: {
+                                HStack { Text(t); Spacer(); Image(systemName: "info.circle") }
+                            }
+                            .accessibilityLabel("About tag \(t)")
+                        }
+                    }
+                }
                 Section("Links") {
                     if let s = post.sourceURL {
                         Text(s.absoluteString).font(.footnote).textSelection(.enabled)
@@ -61,6 +79,9 @@ struct InfoPanel: View {
                         ForEach(post.metadata.keys.sorted(), id: \.self) { k in row(k, post.metadata[k] ?? "") }
                     }
                 }
+            }
+            .sheet(item: $infoTag) { it in
+                if let a = adapter { TagInfoSheet(adapter: a, tag: it.tag, onSearch: onTag) }
             }
             .navigationTitle("Info")
             .navigationBarTitleDisplayMode(.inline)

@@ -88,6 +88,9 @@ final class SearchTabModel: ObservableObject, Identifiable {
     /// Sites that failed in a merged tab (site name → message), for the banner.
     @Published private(set) var siteErrors: [String: String] = [:]
     @Published var errorBannerDismissed = false
+    /// Signs the site is showing guests less (from the first page), for a banner.
+    @Published private(set) var guestNotes: [String] = []
+    @Published var guestBannerDismissed = false
     /// Media address → the site it was first seen on (cross-site duplicates only).
     private var seenMedia: [String: String] = [:]
 
@@ -221,6 +224,7 @@ final class SearchTabModel: ObservableObject, Identifiable {
             let result = try await adapter.search(tags: tags, options: options, page: page)
             guard gen == generation else { return }
             let fresh = result.posts.filter { seen.insert($0.key).inserted }
+            if posts.isEmpty { guestNotes = result.notes; guestBannerDismissed = false }
             posts.append(contentsOf: fresh)
             page += 1
             cursor = result.nextCursor

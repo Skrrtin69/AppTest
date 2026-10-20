@@ -133,6 +133,18 @@ struct AccountView: View {
     @State private var apiKey = ""
     @State private var loaded = false
     @State private var busy = false
+    @State private var webPage: WebPageRequest?
+    @ObservedObject private var sync = AccountSync.shared
+
+    struct WebPageRequest: Identifiable { let id = UUID(); let url: URL }
+
+    var currentConfig: AdapterConfig? { draft?() ?? AdapterRegistry.shared.config(for: adapterID) }
+
+    func pageURL(_ raw: String?) -> URL? {
+        guard let r = raw?.nonEmpty, let cfg = currentConfig else { return nil }
+        if r.lowercased().hasPrefix("http") { return URL(string: r) }
+        return URL(string: GenericAdapter.join(cfg.baseURL.absoluteString, r))
+    }
 
     var body: some View {
         Form {
@@ -158,11 +170,27 @@ struct AccountView: View {
                     } catch { ToastCenter.shared.error(error) }
                 }
             }
+            if pageURL(currentConfig?.apiKeyPageURL) != nil || pageURL(currentConfig?.registerURL) != nil {
+                Section {
+                    if let u = pageURL(currentConfig?.apiKeyPageURL) {
+                        Button { webPage = WebPageRequest(url: u) } label: { Label("Open my API key page", systemImage: "key") }
+                            .accessibilityIdentifier("openKeyPage")
+                    }
+                    if let u = pageURL(currentConfig?.registerURL) {
+                        Button { webPage = WebPageRequest(url: u) } label: { Label("Create an account", systemImage: "person.badge.plus") }
+                            .accessibilityIdentifier("openRegister")
+                    }
+                } footer: {
+                    Text("Opens the site's own page, styled to match MediaDeck. Log in there, press and hold your key to highlight it, tap Copy Selection, then paste it above.")
+                }
+            }
             Section("Status") {
                 Text(statusText).accessibilityIdentifier("acct-status")
             }
         }
         .keyboardDoneButton()
+        .sheet(item: $webPage) { req in ThemedWebPage(url: req.url, prefillUsername: username) }
+        .sheet(item: $sync.pending) { AccountImportSheet(pending: $0) }
         .navigationTitle("Account")
         .onAppear {
             guard !loaded else { return }
@@ -199,6 +227,8 @@ struct AccountView: View {
         defer { busy = false }
         do {
             try await auth.login(adapter: a)
+            // Offer the account's own hidden tags / defaults for review.
+            await AccountSync.shared.run(a)
             ToastCenter.shared.show("Logged in to \(displayName)", style: .success)
         } catch {
             ToastCenter.shared.error(error)

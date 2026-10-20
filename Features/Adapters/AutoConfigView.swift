@@ -22,6 +22,9 @@ struct AutoConfigView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var apiKey = ""
+    /// Revealed when the server's error asks for a user ID next to the key.
+    @State private var showUserID = false
+    @State private var authUserParam = ""
     @State private var running = false
     @State private var failure: AutoConfigFailure?
     @State private var proposal: AutoConfigProposal?
@@ -109,6 +112,8 @@ struct AutoConfigView: View {
                 Button("Demo Site B (nested, cursor)") { urlText = "\(o)/b/search?q={tags}&cursor={cursor}"; sampleTag = "red" }
                 Button("Demo Secure (needs a login)") { urlText = "\(o)/a/secure/posts.json?tags={tags}&page={page}"; sampleTag = "green" }
                 Button("Demo Site C (unclear field names)") { urlText = "\(o)/c/list.json?tags={tags}&page={page}"; sampleTag = "dots" }
+                Button("Demo Site K (key + user ID)") { urlText = "\(o)/k/posts.json?tags={tags}&page={page}"; sampleTag = "red" }
+                Button("Demo Members (guest limits)") { urlText = "\(o)/a/members/posts.json?tags={tags}&page={page}"; sampleTag = "red" }
             } label: { Label("Try a demo address", systemImage: "testtube.2") }
         } header: { Text("Search address") } footer: {
             Text("Paste the address the site's API uses for a search. Put {tags} where the search words go and {page} where the page number goes (or {cursor} if pages use a token). Analyze fills these in with your sample tag and page 1.")
@@ -134,8 +139,25 @@ struct AutoConfigView: View {
                         .focused($focused, equals: .keyName)
                         .accessibilityIdentifier("autoAuthParam")
                 }
-                if let s = authStyle, s != .none {
+                if authStyle == .basic {
                     CredentialFields(username: $username, password: $password, apiKey: $apiKey)
+                } else if let s = authStyle, s != .none {
+                    TextField("API key", text: $apiKey)
+                        .textInputAutocapitalization(.never).disableAutocorrection(true)
+                        .textContentType(.oneTimeCode)
+                        .accessibilityIdentifier("autoApiKey")
+                    if showUserID || !authUserParam.isEmpty {
+                        TextField("User ID", text: $username)
+                            .textInputAutocapitalization(.never).disableAutocorrection(true)
+                            .textContentType(.oneTimeCode)
+                            .accessibilityIdentifier("autoUserID")
+                        TextField("User ID name in the address (e.g. user_id)", text: $authUserParam)
+                            .textInputAutocapitalization(.never).disableAutocorrection(true)
+                            .accessibilityIdentifier("autoUserParam")
+                    } else {
+                        Button("The site also needs a user ID") { showUserID = true; if authUserParam.isEmpty { authUserParam = "user_id" } }
+                            .font(.footnote)
+                    }
                 }
             } label: {
                 Label("Headers & login (optional)", systemImage: "key")
@@ -157,6 +179,9 @@ struct AutoConfigView: View {
             default:
                 ErrorCard(title: f.title, message: f.message, next: f.nextAction)
             }
+            ForEach(AutoConfigurator.hints(for: f.message), id: \.self) { hint in
+                Label(hint, systemImage: "lightbulb").font(.footnote)
+            }
         }
     }
 
@@ -177,6 +202,12 @@ struct AutoConfigView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("autoSummary")
             }
+            ForEach(p.report, id: \.self) { line in
+                Label(line, systemImage: line.hasPrefix("Public") || line.hasPrefix("Requires auth") ? "person.crop.circle.badge.checkmark" : "exclamationmark.circle")
+                    .font(.footnote)
+                    .foregroundColor(line.hasPrefix("Public") || line.hasPrefix("Requires auth") ? .primary : .orange)
+            }
+            .accessibilityIdentifier("accessReport")
         } header: { Text("Proposal") } footer: {
             Text("Every field says why it was chosen. Red dots are guesses you should check — tap Edit fields to change anything.")
         }
@@ -253,6 +284,7 @@ struct AutoConfigView: View {
         let input = AutoConfigInput(urlTemplate: urlText, sampleTag: sampleTag,
                                     headers: AdapterEditorView.parsePairs(headersText),
                                     authStyle: authStyle, authParamName: authParamName.nonEmpty,
+                                    authUserParamName: (showUserID || !authUserParam.isEmpty) ? authUserParam.nonEmpty : nil,
                                     credentials: credentials)
         let result = await AutoConfigurator(existingIDs: Set(registry.configs.map { $0.id })).analyze(input)
         switch result {
@@ -264,6 +296,12 @@ struct AutoConfigView: View {
             failure = f
             Haptics.error()
             if case .needsLogin = f { showAdvanced = true }
+            // The server's own words asked for a user ID: show that field, named as the server said.
+            if let param = AutoConfigurator.userIDParam(in: f.message) {
+                showUserID = true
+                showAdvanced = true
+                if authUserParam.isEmpty { authUserParam = param }
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { withAnimation { proxy.scrollTo("failure", anchor: .top) } }
         }
     }

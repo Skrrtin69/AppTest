@@ -389,6 +389,7 @@ struct TabChip: View {
 struct SearchTabView: View {
     @ObservedObject var tab: SearchTabModel
     @ObservedObject var settings = AppSettings.shared
+    @State private var accountFor: AccountRequest?
     let onOpen: ([Post], Int) -> Void
     let onAddToCollection: ([Post]) -> Void
 
@@ -397,6 +398,11 @@ struct SearchTabView: View {
         VStack(spacing: 0) {
             if !tab.siteErrors.isEmpty && !tab.errorBannerDismissed && !visible.isEmpty {
                 PartialFailureBanner(errors: tab.siteErrors) { tab.errorBannerDismissed = true }
+            }
+            if !tab.guestNotes.isEmpty && !tab.guestBannerDismissed {
+                GuestLimitBanner(notes: tab.guestNotes, siteName: tab.siteName,
+                                 onLogin: { accountFor = AccountRequest(siteID: tab.siteID) },
+                                 onDismiss: { tab.guestBannerDismissed = true })
             }
             if visible.isEmpty && !tab.isLoading {
                 if let err = tab.error {
@@ -429,6 +435,13 @@ struct SearchTabView: View {
                 }
             }
             if tab.selecting { selectionBar }
+        }
+        .sheet(item: $accountFor) { req in
+            NavigationView {
+                AccountView(adapterID: req.siteID, displayName: AdapterRegistry.shared.displayName(for: req.siteID),
+                            authStyle: AdapterRegistry.shared.config(for: req.siteID)?.authStyle ?? .none)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { accountFor = nil } } }
+            }
         }
     }
 
@@ -482,6 +495,35 @@ struct SearchTabView: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(.thinMaterial)
+    }
+}
+
+struct AccountRequest: Identifiable { let id = UUID(); let siteID: String }
+
+/// The site is showing guests less; offers to add a login.
+struct GuestLimitBanner: View {
+    let notes: [String]
+    let siteName: String
+    let onLogin: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "person.crop.circle.badge.exclamationmark").foregroundColor(.orange)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("\(siteName) may be limiting guests").font(.caption.weight(.semibold))
+                ForEach(notes.prefix(2), id: \.self) { Text($0).font(.caption2).foregroundColor(.secondary).lineLimit(2) }
+                Button("Add a login", action: onLogin).font(.caption.weight(.semibold))
+            }
+            Spacer(minLength: 0)
+            Button(action: onDismiss) { Image(systemName: "xmark").font(.caption.weight(.bold)) }
+                .accessibilityLabel("Dismiss notice")
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.12))
+        .gesture(DragGesture(minimumDistance: 8).onEnded { v in if v.translation.height < -20 { onDismiss() } })
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("guestLimitBanner")
     }
 }
 

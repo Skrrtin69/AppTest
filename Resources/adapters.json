@@ -63,7 +63,12 @@
     "tagSpaceReplacement": "_",
     "autocompletePath": "tags/autocomplete.json?q={query}",
     "autocompleteResultsPath": "",
-    "autocompleteNameKey": "name"
+    "autocompleteNameKey": "name",
+    "relatedTagsPath": "tags/related.json?tag={tag}",
+    "wikiPath": "wiki/{tag}.json",
+    "tagAliasesPath": "aliases.json?tag={tag}",
+    "votePath": "posts/{id}/vote",
+    "registerURL": "register"
   },
   {
     "id": "demo-b",
@@ -188,6 +193,11 @@
     "tagSpaceReplacement": "_",
     "autocompletePath": null,
     "autocompleteResultsPath": "",
-    "autocompleteNameKey": "name"
+    "autocompleteNameKey": "name",
+    "relatedTagsPath": "tags/related.json?tag={tag}",
+    "wikiPath": "wiki/{tag}.json",
+    "tagAliasesPath": "aliases.json?tag={tag}",
+    "votePath": null,
+    "registerURL": null
   }
 ]

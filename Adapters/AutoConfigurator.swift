@@ -26,6 +26,8 @@ struct AutoConfigInput {
     var headers: [String: String] = [:]
     var authStyle: AuthStyle? = nil
     var authParamName: String? = nil
+    /// Name of the user-ID address parameter, for sites that want it next to the key.
+    var authUserParamName: String? = nil
     var credentials: Credentials? = nil
 }
 
@@ -36,6 +38,8 @@ struct AutoConfigProposal {
     var sampleNodes: [Any]
     /// Pretty-printed answer, so the Field Mapper can be opened on it.
     var rawJSON: String
+    /// Plain-English access summary and guest-limit hints from the normal search answer.
+    var report: [String] = []
 }
 
 /// Plain-English failure, each with exactly one next action.
@@ -126,6 +130,7 @@ struct AutoConfigurator {
         probe.tagSeparator = " "
         probe.authStyle = input.authStyle ?? .none
         probe.authParamName = AdapterConfig.sanitizeParamName(input.authParamName)
+        probe.authUserParamName = AdapterConfig.sanitizeParamName(input.authUserParamName)
         if (input.authStyle == .apiKeyQuery || input.authStyle == .apiKeyHeader), probe.authParamName == nil {
             return .failure(.badAddress("This login style needs the key's name (for example api_key or X-Api-Key). Fill in the Key name field."))
         }
@@ -153,7 +158,9 @@ struct AutoConfigurator {
         let bodyText = String(decoding: data.prefix(500), as: UTF8.self)
         if response.statusCode == 401 || response.statusCode == 403 {
             if input.authStyle != nil && input.authStyle != AuthStyle.none {
-                return .failure(.loginRejected("The server still answered \(response.statusCode) with the login you entered."))
+                let said = ErrorParser.message(from: data, contentType: response.value(forHTTPHeaderField: "Content-Type"))
+                return .failure(.loginRejected(said.map { "The server said: \($0) (HTTP \(response.statusCode))" }
+                                               ?? "The server still answered \(response.statusCode) with the login you entered."))
             }
             return .failure(.needsLogin(status: response.statusCode))
         }
@@ -191,7 +198,44 @@ struct AutoConfigurator {
         await builder.probeAutocomplete(adapter: adapter)
         builder.finish()
         return .success(AutoConfigProposal(config: builder.config, guesses: builder.guesses,
-                                           sampleNodes: Array(items.prefix(5)), rawJSON: raw))
+                                           sampleNodes: Array(items.prefix(5)), rawJSON: raw,
+                                           report: Self.accessReport(loggedIn: input.authStyle != nil && input.authStyle != AuthStyle.none,
+                                                                     style: input.authStyle, json: json, items: items,
+                                                                     config: builder.config)))
+    }
+
+    /// One normal search, read for: public vs login, and guest-limit hints (the site's own words).
+    static func accessReport(loggedIn: Bool, style: AuthStyle?, json: Any, items: [Any], config: AdapterConfig) -> [String] {
+        var lines: [String] = []
+        if loggedIn {
+            lines.append("Requires auth: searching worked with your login (\(AuthStylePicker.title(style ?? .none))).")
+        } else {
+            lines.append("Public: searching works without a login.")
+            lines += GuestLimits.check(json: json, items: items, adapter: GenericAdapter(config: config), listPath: config.searchResultsPath)
+        }
+        return lines
+    }
+
+    /// Friendly hints from a server error message (tag limits, user ID requests).
+    static func hints(for message: String) -> [String] {
+        let m = message.lowercased()
+        var out: [String] = []
+        if m.contains("tag") && (m.contains("limit") || m.contains("at most") || m.contains("up to") || m.contains("maximum")) {
+            out.append("This site limits how many tags you can search at once. Use fewer tags (logging in may raise the limit).")
+        }
+        if userIDParam(in: message) != nil {
+            out.append("The site wants your user ID together with the key. Fill in the User ID field below.")
+        }
+        if m.contains("rate") || m.contains("too many") || m.contains("slow down") {
+            out.append("The site is limiting how fast you can search. Lower Requests per second for this adapter.")
+        }
+        return out
+    }
+
+    /// e.g. "user_id is required" → "user_id".
+    static func userIDParam(in message: String) -> String? {
+        guard let r = message.range(of: #"\b[a-z]*_?(user_?id|uid)\b"#, options: [.regularExpression, .caseInsensitive]) else { return nil }
+        return String(message[r]).lowercased()
     }
 
     // MARK: - Address parts

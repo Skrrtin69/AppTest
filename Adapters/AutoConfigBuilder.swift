@@ -124,6 +124,7 @@ extension AutoConfigurator {
                 ? "You chose \(config.authStyle.rawValue), and the server accepted it."
                 : "No login needed, so none is set.")
             config.authParamName = AdapterConfig.sanitizeParamName(input.authParamName)
+            config.authUserParamName = AdapterConfig.sanitizeParamName(input.authUserParamName)
             set(.authParamName, config.authParamName == nil ? .medium : .high, config.authParamName == nil
                 ? "Only used by API-key logins; not needed here."
                 : "The key name you entered (\(config.authParamName!)).")
