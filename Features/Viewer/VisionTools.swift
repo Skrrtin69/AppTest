@@ -144,36 +144,44 @@ struct DuplicatesSheet: View {
 
     var body: some View {
         NavigationView {
-            List {
-                Section {
+            // A plain scroll view, not a List: several buttons inside one List row misfire.
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
                     Picker("Match", selection: $strictness) {
                         Text("Loose").tag(0); Text("Normal").tag(1); Text("Strict").tag(2)
                     }
                     .pickerStyle(.segmented)
-                } footer: { Text("Compares how the pictures look, on this phone. Loose finds more, including only-similar pictures.") }
-                if let g = groups {
-                    if g.isEmpty { Text("No look-alike favorites found.").foregroundColor(.secondary) }
-                    ForEach(g.indices, id: \.self) { i in
-                        Section("Group \(i + 1) · \(g[i].count) look alike") {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack {
-                                    ForEach(g[i], id: \.key) { p in
-                                        VStack(spacing: 4) {
-                                            CachedAsyncImage(url: p.thumbnailURL, maxPixel: 300)
-                                                .frame(width: 96, height: 96).clipShape(RoundedRectangle(cornerRadius: 6))
-                                            Text(AdapterRegistry.shared.displayName(for: p.siteID)).font(.caption2).lineLimit(1)
-                                            Button("Unfavorite") { LibraryStore.shared.toggleFavorite(p); remove(p) }
-                                                .font(.caption).buttonStyle(.bordered)
+                    Text("Compares how the pictures look, on this phone. Loose finds more, including only-similar pictures.")
+                        .font(.footnote).foregroundColor(.secondary)
+                    if let g = groups {
+                        if g.isEmpty { Text("No look-alike favorites found.").foregroundColor(.secondary) }
+                        ForEach(g.indices, id: \.self) { i in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Group \(i + 1) · \(g[i].count) look alike").font(.subheadline.weight(.semibold))
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 10) {
+                                        ForEach(g[i], id: \.key) { p in
+                                            VStack(spacing: 4) {
+                                                CachedAsyncImage(url: p.thumbnailURL, maxPixel: 300)
+                                                    .frame(width: 96, height: 96).clipShape(RoundedRectangle(cornerRadius: 6))
+                                                Text(AdapterRegistry.shared.displayName(for: p.siteID)).font(.caption2).lineLimit(1)
+                                                Button("Unfavorite") { LibraryStore.shared.toggleFavorite(p); remove(p) }
+                                                    .font(.caption).buttonStyle(.bordered)
+                                                    .accessibilityLabel("Unfavorite \(p.id)")
+                                            }
+                                            .frame(width: 100)
                                         }
-                                        .frame(width: 100)
                                     }
                                 }
                             }
+                            .padding(12)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(Color.gray.opacity(0.12)))
                         }
+                    } else {
+                        HStack { ProgressView(); Text("Comparing \(done) of \(posts.count)…").foregroundColor(.secondary) }
                     }
-                } else {
-                    HStack { ProgressView(); Text("Comparing \(done) of \(posts.count)…").foregroundColor(.secondary) }
                 }
+                .padding()
             }
             .navigationTitle("Look-alike Favorites")
             .navigationBarTitleDisplayMode(.inline)

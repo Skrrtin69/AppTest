@@ -98,6 +98,12 @@ enum MockCatalog {
     static func search(tagQuery: String, sort: String?, rating: String?) -> [MockItem] {
         let words = tagQuery.replacingOccurrences(of: "+", with: " ")
             .split(whereSeparator: { $0 == " " || $0 == "," }).map { String($0).lowercased() }
+        // "rotating": a demo search whose results change every minute (for testing
+        // "Watch for new posts" on saved searches).
+        if words == ["rotating"] {
+            let minute = Calendar.current.component(.minute, from: Date())
+            return items.filter { ($0.n + minute) % 5 == 0 }.sorted { $0.n > $1.n }
+        }
         let include = words.filter { !$0.hasPrefix("-") }
         let exclude = words.filter { $0.hasPrefix("-") }.map { String($0.dropFirst()) }
         var result = items.filter { item in
