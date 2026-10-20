@@ -172,3 +172,12 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
   - A live 19 MB WebM played in VLCKit.
 - The phone had a stored "off" from the speed tests, so it was switched on in Settings by hand. The new default only applies when nothing is stored.
 - **Not measured:** before/after timings for UI, parsing or image loading. The change is standard; the gains weren't benchmarked.
+
+## 25. VLCKit tap, background and layout
+- **Verified on the phone with the live 56 s 1080x1920 WebM:**
+  - **Tap:** a tap hid all the controls while the video kept playing; a second tap showed them again, still playing. Pause and Play on the bar worked.
+  - **Layout:** the bar (Pause, scrubber, time) is drawn above the bottom toolbar and the home indicator.
+  - **Background while playing:** left at 0:13 for 15 s; the log shows "Background: stopped at 14569 ms (was playing)" and "Foreground: reopened at 14569 ms, playing". The time went 0:16, then 0:20, with no error.
+  - **Background while paused:** left at 0:09; it came back paused, showing the frame at 0:10 (VLC resumes at the nearest keyframe), and Play continued from there.
+- **Found during testing:** the controls had been invisible under VLC's video since VLCKit was added; scenePhase never reached the viewer; and a Play/reopen race. All three are fixed.
+- **Not changed:** the web player (ogv.js) still pauses on tap, because it has no control bar. It's only used when VLCKit is off.
