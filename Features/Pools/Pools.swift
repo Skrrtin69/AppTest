@@ -67,6 +67,8 @@ struct PoolsView: View {
     @State private var loading = false
     @State private var error: String?
     @State private var endReached = false
+    /// Bumped by every reload, so answers from an older load are ignored.
+    @State private var generation = 0
 
     var sites: [AdapterConfig] { registry.enabledConfigs.filter { $0.poolsPath?.nonEmpty != nil } }
     var adapter: GenericAdapter? { siteID.flatMap { registry.adapter(for: $0) } }
@@ -120,16 +122,20 @@ struct PoolsView: View {
     }
 
     func reload() async {
-        page = 1; pools = []; endReached = false
+        generation += 1
+        page = 1; pools = []; endReached = false; loading = false
         await loadMore()
     }
 
     func loadMore() async {
         guard !loading, !endReached, let a = adapter else { return }
+        let gen = generation
         loading = true; error = nil
-        defer { loading = false }
+        defer { if gen == generation { loading = false } }
         do {
             let more = try await a.pools(page: page, query: query.trimmingCharacters(in: .whitespaces))
+            // A newer load (other site or search) started meanwhile: drop this answer.
+            guard gen == generation else { return }
             let have = Set(pools.map(\.id))
             let fresh = more.filter { !have.contains($0.id) }
             pools += fresh
