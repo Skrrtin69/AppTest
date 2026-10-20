@@ -33,33 +33,10 @@ struct VLCVideoView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            VLCSurface(model: model, url: Self.sourceURL(url, siteID: siteID))
-                .contentShape(Rectangle())
-                .onTapGesture { onTap?() }
-                .accessibilityLabel(model.isPlaying ? "Video playing, tap for controls" : "Video paused, tap for controls")
-            if model.started, !model.isPlaying {
-                Image(systemName: "play.circle.fill").font(.system(size: 64)).foregroundColor(.white.opacity(0.85))
-                    .allowsHitTesting(false)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            if showControls, model.duration > 0 {
-                HStack(spacing: 10) {
-                    Button { model.togglePause() } label: {
-                        Image(systemName: model.isPlaying ? "pause.fill" : "play.fill").font(.body.weight(.semibold))
-                    }
-                    .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
-                    Slider(value: Binding(get: { Double(model.position) }, set: { model.seek(to: Float($0)) }), in: 0...1)
-                        .accessibilityIdentifier("vlcScrubber")
-                    Text(model.timeText).font(.caption.monospacedDigit())
-                }
-                .foregroundColor(.white)
-                .tint(.white)
-                .padding(.horizontal, 16).padding(.vertical, 10)
-                .background(Capsule().fill(Color.black.opacity(0.5)))
-                .padding(.horizontal, 16).padding(.bottom, ScreenInsets.videoControlsBottom)
-            }
-        }
+        // The controls live inside the same UIKit container, above VLC's drawing view:
+        // VLC's video output draws over SwiftUI views placed next to it.
+        VLCSurface(model: model, url: Self.sourceURL(url, siteID: siteID),
+                   controls: VLCControls(model: model, showControls: showControls, onTap: onTap))
         .onAppear { sync() }
         // iOS closes the local server's connections while the app is away, so VLC's stream
         // would be dead on return: stop it in the background and reopen it at the same time.
@@ -101,19 +78,77 @@ struct VLCVideoView: View {
 }
 
 /// The view VLC draws into.
+/// The tap area, the paused icon and the control bar, drawn above the video.
+private struct VLCControls: View {
+    @ObservedObject var model: VLCPlayerModel
+    let showControls: Bool
+    let onTap: (() -> Void)?
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            // A tap shows or hides the controls; pausing is the Pause button's job.
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { onTap?() }
+                .accessibilityLabel(model.isPlaying ? "Video playing, tap for controls" : "Video paused, tap for controls")
+            if model.started, !model.isPlaying {
+                Image(systemName: "play.circle.fill").font(.system(size: 64)).foregroundColor(.white.opacity(0.85))
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            if showControls, model.duration > 0 {
+                HStack(spacing: 10) {
+                    Button { model.togglePause() } label: {
+                        Image(systemName: model.isPlaying ? "pause.fill" : "play.fill").font(.body.weight(.semibold))
+                            .frame(width: 32, height: 32)
+                    }
+                    .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
+                    Slider(value: Binding(get: { Double(model.position) }, set: { model.seek(to: Float($0)) }), in: 0...1)
+                        .accessibilityIdentifier("vlcScrubber")
+                    Text(model.timeText).font(.caption.monospacedDigit())
+                }
+                .foregroundColor(.white)
+                .tint(.white)
+                .padding(.horizontal, 16).padding(.vertical, 8)
+                .background(Capsule().fill(Color.black.opacity(0.55)))
+                .padding(.horizontal, 16).padding(.bottom, ScreenInsets.videoControlsBottom)
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+/// A container with VLC's drawing view at the back and the SwiftUI controls on top.
 private struct VLCSurface: UIViewRepresentable {
     let model: VLCPlayerModel
     let url: URL
+    let controls: VLCControls
+
+    final class Coordinator { var host: UIHostingController<VLCControls>? }
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> UIView {
-        let v = UIView()
-        v.backgroundColor = .black
-        v.accessibilityIdentifier = "vlcVideo"
-        model.load(url, into: v)
-        return v
+        let container = UIView()
+        container.backgroundColor = .black
+        let video = UIView(frame: container.bounds)
+        video.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        video.backgroundColor = .black
+        video.isUserInteractionEnabled = false
+        video.accessibilityIdentifier = "vlcVideo"
+        container.addSubview(video)
+        let host = UIHostingController(rootView: controls)
+        host.view.backgroundColor = .clear
+        host.view.frame = container.bounds
+        host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        container.addSubview(host.view)
+        context.coordinator.host = host
+        model.load(url, into: video)
+        return container
     }
 
-    func updateUIView(_ v: UIView, context: Context) {}
+    func updateUIView(_ v: UIView, context: Context) {
+        context.coordinator.host?.rootView = controls
+    }
 }
 
 final class VLCPlayerModel: NSObject, ObservableObject {
