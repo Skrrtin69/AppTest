@@ -11,6 +11,7 @@ struct MassReverseSheet: View {
     @State private var results: [String: Result] = [:]
     @State private var running = false
     @State private var done = 0
+    @State private var viewer: ViewerRequest?
 
     struct Result {
         var best: ReverseMatch?
@@ -51,6 +52,7 @@ struct MassReverseSheet: View {
                 }
                 if !results.isEmpty { report }
             }
+            .fullScreenCover(item: $viewer) { ViewerView(posts: $0.posts, startIndex: $0.index) }
             .navigationTitle("Reverse Search Selected")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -114,8 +116,11 @@ struct MassReverseSheet: View {
             }
             Spacer()
             if let s = r?.best?.source {
-                Button { if !LinkRouter.open(s) { UIApplication.shared.open(s) }; dismiss() } label: { Image(systemName: "arrow.up.right.square") }
-                    .buttonStyle(.borderless)
+                Button {
+                    Task { if let m = r?.best, let post = await MatchOpener.post(for: m) { viewer = ViewerRequest(posts: [post], index: 0) } else { UIApplication.shared.open(s) } }
+                } label: { Image(systemName: "eye") }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("View match")
             }
         }
     }

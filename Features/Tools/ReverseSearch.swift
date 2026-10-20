@@ -373,6 +373,8 @@ struct ReverseSearchSheet: View {
     @State private var matches: [ReverseMatch]?
     @State private var error: String?
     @State private var running = false
+    @State private var viewer: ViewerRequest?
+    @State private var opening = false
 
     var enabled: [ReverseEngine] { store.engines.filter(\.enabled) }
 
@@ -400,9 +402,9 @@ struct ReverseSearchSheet: View {
                 if let m = matches {
                     Section {
                         if m.isEmpty { Text("No matches.").foregroundColor(.secondary) }
-                        ForEach(m) { match in MatchRow(match: match) }
+                        ForEach(m) { match in MatchRow(match: match) { Task { await openMatch($0) } } }
                     } header: { Text("\(m.count) match\(m.count == 1 ? "" : "es")") } footer: {
-                        Text("Tap a match to open its page. If the page is on one of your sites, MediaDeck opens it there.")
+                        Text("Tap a match to view it: a match on one of your sites opens that post; others open their preview picture (⋯ › Open Source for the page). Hold a match for its page and link.")
                     }
                 }
             }
@@ -410,7 +412,16 @@ struct ReverseSearchSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .task { if enabled.count == 1, matches == nil { await run(enabled[0]) } }
+            .overlay { if opening { ProgressView().padding(24).background(RoundedRectangle(cornerRadius: 12).fill(.thinMaterial)) } }
+            .fullScreenCover(item: $viewer) { ViewerView(posts: $0.posts, startIndex: $0.index) }
         }
+    }
+
+    func openMatch(_ m: ReverseMatch) async {
+        opening = true
+        defer { opening = false }
+        if let p = await MatchOpener.post(for: m) { viewer = ViewerRequest(posts: [p], index: 0) }
+        else if let s = m.source { UIApplication.shared.open(s) }
     }
 
     func run(_ e: ReverseEngine) async {
@@ -421,13 +432,33 @@ struct ReverseSearchSheet: View {
     }
 }
 
+/// What tapping a match shows in the viewer.
+@MainActor
+enum MatchOpener {
+    /// The real post when the match links to a post on one of your sites; otherwise the
+    /// match's preview picture (which often survives when the page itself is gone).
+    static func post(for m: ReverseMatch) async -> Post? {
+        if let s = m.source, let site = LinkRouter.site(for: s), let id = LinkRouter.target(of: s).postID,
+           let adapter = AdapterRegistry.shared.adapter(for: site.id) {
+            do { return try await adapter.fetchPost(id: id) }
+            catch { DebugLog.log("Reverse", "open \(site.id):\(id) failed: \(error.localizedDescription)") }
+        }
+        guard let t = m.thumbnail else { return nil }
+        var meta: [String: String] = [:]
+        if let sim = m.similarity { meta["similarity"] = String(format: "%.1f%%", sim) }
+        if let title = m.title?.nonEmpty { meta["title"] = title }
+        return Post(id: "match-\(abs(t.absoluteString.hashValue) % 1_000_000)", siteID: "", thumbnailURL: t, mediaURL: t,
+                    mediaType: .image, tags: [], sourceURL: m.source, metadata: meta)
+    }
+}
+
 struct MatchRow: View {
     let match: ReverseMatch
+    var onOpen: (ReverseMatch) -> Void = { _ in }
 
     var body: some View {
         Button {
-            guard let s = match.source else { return }
-            if !LinkRouter.open(s) { UIApplication.shared.open(s) }
+            onOpen(match)
         } label: {
             HStack(spacing: 12) {
                 Group {
@@ -451,6 +482,7 @@ struct MatchRow: View {
         }
         .contextMenu {
             if let s = match.source {
+                Button { if !LinkRouter.open(s) { UIApplication.shared.open(s) } } label: { Label("Open Page", systemImage: "arrow.up.right.square") }
                 Button { UIPasteboard.general.string = s.absoluteString; ToastCenter.shared.show("Link copied") } label: { Label("Copy Link", systemImage: "doc.on.doc") }
                 Button { UIApplication.shared.open(s) } label: { Label("Open in Browser", systemImage: "safari") }
             }

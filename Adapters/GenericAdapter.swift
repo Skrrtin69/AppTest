@@ -173,6 +173,15 @@ final class GenericAdapter: SiteAdapter {
     }
 
     func fetchPost(id: String) async throws -> Post {
+        // No single-post address in the adapter: find the post through a normal search
+        // for "id:N" (the tag most sites use for one post), keeping only that exact ID.
+        guard config.postPath.nonEmpty != nil else {
+            let r = try await search(tags: ["id:\(id)"], options: SearchOptions(), page: config.firstPageIndex)
+            guard let p = r.posts.first(where: { $0.id == id }) else {
+                throw AppError.message("Post \(id) wasn't found on \(config.displayName).")
+            }
+            return p
+        }
         let json = try await fetchJSON(try postURL(id: id))
         let node = DottedPath.evaluate(config.postResultPath ?? "", in: json) ?? json
         guard let post = mapPost(node) else {
