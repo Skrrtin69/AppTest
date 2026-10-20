@@ -40,7 +40,13 @@ enum MockVault {
             <dl><dt>User ID</dt><dd>\(userID)</dd></dl>
             <p><label for="key">API Key</label><br><input id="key" type="text" readonly value="\(apiKey)" style="width:100%"></p>
             <p>Example request: <code>/v/posts.json?tags=blue&amp;api_key=\(apiKey)&amp;user_id=\(userID)</code></p>
-            <p><a href="/v/developer">Developer settings</a></p>
+            <p><a href="/v/developer">Developer settings</a> · <a href="/v/combined">API credentials</a></p>
+            """)
+        case "/combined":
+            // Key and user ID in one box, ready to paste after an address.
+            return html("API credentials", """
+            <h1>API credentials</h1>
+            <p><label>Your credentials<br><input type="text" readonly value="&api_key=\(apiKey)&user_id=\(userID)" style="width:100%"></label></p>
             """)
         case "/developer":
             return html("Developer settings", """

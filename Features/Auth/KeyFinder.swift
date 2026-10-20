@@ -5,7 +5,7 @@ import Foundation
 /// and input boxes labeled as keys. Nothing is guessed from random long strings.
 enum KeyFinder {
     struct Found: Identifiable, Hashable {
-        enum Source: Int { case input, label, param }
+        enum Source: Int { case selection, input, label, param }
         var value: String
         /// The label or parameter it was found next to, as written on the page.
         var label: String
@@ -16,6 +16,7 @@ enum KeyFinder {
 
         var context: String {
             switch source {
+            case .selection: return "From \(label)"
             case .input: return "In the box labeled '\(label)'"
             case .label: return "Found next to '\(label)'"
             case .param: return "Found in '\(label)=' in an example address"
@@ -50,7 +51,12 @@ enum KeyFinder {
       var inputs = [].slice.call(document.querySelectorAll('input,textarea')).filter(function(e){
         return e.value && skip.indexOf((e.type || '').toLowerCase()) < 0;
       }).map(function(e){ return { label: lab(e), value: String(e.value).slice(0, 300) }; });
-      return JSON.stringify({ text: document.body ? document.body.innerText : '', inputs: inputs });
+      var sel = String(window.getSelection ? window.getSelection() : '');
+      var a = document.activeElement;
+      if (!sel.trim() && a && typeof a.selectionStart === 'number' && a.selectionEnd > a.selectionStart) {
+        sel = String(a.value).slice(a.selectionStart, a.selectionEnd);
+      }
+      return JSON.stringify({ text: document.body ? document.body.innerText : '', inputs: inputs, selection: sel.slice(0, 2000) });
     })()
     """
 
@@ -61,7 +67,19 @@ enum KeyFinder {
             guard let l = i["label"] as? String, let v = i["value"] as? String else { return nil }
             return (l, v)
         }
-        return find(text: d["text"] as? String ?? "", inputs: inputs)
+        let page = find(text: d["text"] as? String ?? "", inputs: inputs)
+        // Highlighted text wins: parse it first, and use the page only for what it lacks.
+        if let sel = (d["selection"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !sel.isEmpty {
+            var picked = find(text: sel, inputs: [])
+            if picked.keys.isEmpty, isKey(sel) {
+                picked.keys = [Found(value: sel, label: "your highlighted text", source: .selection)]
+            }
+            if !picked.keys.isEmpty {
+                if picked.userID == nil { picked.userID = page.userID }
+                return picked
+            }
+        }
+        return page
     }
 
     static func find(text: String, inputs: [(label: String, value: String)]) -> Result {
@@ -71,6 +89,12 @@ enum KeyFinder {
         // 1. Text boxes labeled as a key / user ID.
         for i in inputs {
             let v = i.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let inBox = params(in: v)
+            if !inBox.keys.isEmpty || !inBox.users.isEmpty {
+                keys += inBox.keys
+                users += inBox.users
+                continue
+            }
             if let l = match(keyLabels, in: i.label), isKey(v) {
                 keys.append(Found(value: v, label: l, source: .input))
             } else if let l = match(userLabels, in: i.label), isUserID(v) {
@@ -106,24 +130,35 @@ enum KeyFinder {
             }
         }
 
-        // 3. Example addresses: api_key=… / user_id=…
-        let param = try! NSRegularExpression(pattern: "(?i)(?:^|[?&\\s])([a-z_]*(?:key|token)|user_?id)=([A-Za-z0-9_\\-.]+)")
-        let ns = text as NSString
-        for m in param.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
-            let name = ns.substring(with: m.range(at: 1))
-            let value = ns.substring(with: m.range(at: 2))
-            if name.lowercased().contains("user") {
-                if isUserID(value) { users.append(Found(value: value, label: name, source: .param, paramName: name)) }
-            } else if isKey(value) {
-                keys.append(Found(value: value, label: name, source: .param, paramName: name))
-            }
-        }
+        // 3. api_key=… / user_id=… anywhere (example addresses, "&api_key=…&user_id=…").
+        let found = params(in: text)
+        keys += found.keys
+        users += found.users
 
         var result = Result()
         result.keys = merge(keys)
         let userIDs = merge(users).filter { u in !result.keys.contains { $0.value == u.value } }
         result.userID = userIDs.first
         return result
+    }
+
+    /// Every `name=value` whose name ends in key/token or is a user ID. The name may follow
+    /// anything (`&`, `?`, a space, the start of a box); the value runs to the next `&`,
+    /// space or quote.
+    static func params(in text: String) -> (keys: [Found], users: [Found]) {
+        let re = try! NSRegularExpression(pattern: "(?i)(?<![A-Za-z0-9])([a-z_]*(?:key|token)|user_?id)\\s*=\\s*([^&\\s\"'<>#;,]+)")
+        let ns = text as NSString
+        var keys: [Found] = [], users: [Found] = []
+        for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let name = ns.substring(with: m.range(at: 1))
+            let value = ns.substring(with: m.range(at: 2)).trimmingCharacters(in: CharacterSet(charactersIn: ".)]}"))
+            if name.lowercased().contains("user") {
+                if isUserID(value) { users.append(Found(value: value, label: name, source: .param, paramName: name)) }
+            } else if isKey(value) {
+                keys.append(Found(value: value, label: name, source: .param, paramName: name))
+            }
+        }
+        return (keys, users)
     }
 
     /// One entry per value, keeping the clearest context and any parameter name seen.
