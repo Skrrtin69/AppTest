@@ -43,8 +43,12 @@ enum ThemePalette {
 struct ThemedWebPage: View {
     let url: URL
     var prefillUsername: String? = nil
+    /// When set, the toolbar offers "Find Key on Page"; called with the chosen key and the
+    /// user ID found on the same page (if any).
+    var onFindKey: ((KeyFinder.Found, KeyFinder.Found?) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model = Model()
+    @State private var choices: KeyFinder.Result?
 
     final class Model: ObservableObject {
         weak var webView: WKWebView?
@@ -63,14 +67,75 @@ struct ThemedWebPage: View {
                         Button { model.webView?.goBack() } label: { Image(systemName: "chevron.left") }
                             .accessibilityLabel("Back")
                         Spacer()
-                        Button { copySelection() } label: { Label("Copy Selection", systemImage: "doc.on.doc") }
-                            .accessibilityIdentifier("copySelection")
+                        if onFindKey != nil {
+                            Button { findKey() } label: { Label("Find Key on Page", systemImage: "key.viewfinder") }
+                                .labelStyle(.titleAndIcon)
+                                .accessibilityIdentifier("findKeyOnPage")
+                        } else {
+                            Button { copySelection() } label: { Label("Copy Selection", systemImage: "doc.on.doc") }
+                                .accessibilityIdentifier("copySelection")
+                        }
                         Spacer()
                         Button { model.webView?.reload() } label: { Image(systemName: "arrow.clockwise") }
                             .accessibilityLabel("Reload")
                     }
                 }
+                .sheet(isPresented: Binding(get: { choices != nil }, set: { if !$0 { choices = nil } })) {
+                    if let r = choices { keyPicker(r) }
+                }
         }
+    }
+
+    /// Several possible keys: the user picks one, each shown with where it was found.
+    func keyPicker(_ r: KeyFinder.Result) -> some View {
+        NavigationView {
+            List {
+                Section {
+                    ForEach(r.keys) { k in
+                        Button { choices = nil; deliver(k, r.userID) } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(k.context).font(.subheadline).foregroundColor(.secondary)
+                                Text(k.value).font(.callout.monospaced()).foregroundColor(.primary).lineLimit(2)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .accessibilityIdentifier("keyChoice")
+                    }
+                } footer: {
+                    if let u = r.userID { Text("User ID found too: \(u.value)") }
+                }
+            }
+            .navigationTitle("Which one is your API key?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { choices = nil } } }
+        }
+    }
+
+    /// Reads the page's visible text and text boxes and looks for the key by its label.
+    func findKey() {
+        guard let wv = model.webView else { return }
+        wv.evaluateJavaScript(KeyFinder.pageScript) { value, error in
+            guard let json = value as? String else {
+                ToastCenter.shared.show("Couldn't read this page: \(error?.localizedDescription ?? "no text")", style: .error)
+                return
+            }
+            let r = KeyFinder.find(json: json)
+            DebugLog.log("KeyFinder", "\(r.keys.count) key(s)\(r.userID != nil ? " + user ID" : "") on \(wv.url?.path ?? "")")
+            switch r.keys.count {
+            case 0:
+                ToastCenter.shared.show("No API key found on this page. Open the page that shows it (usually Account, Profile or Settings), then tap Find Key on Page.", style: .error)
+            case 1:
+                deliver(r.keys[0], r.userID)
+            default:
+                choices = r
+            }
+        }
+    }
+
+    func deliver(_ key: KeyFinder.Found, _ user: KeyFinder.Found?) {
+        onFindKey?(key, user)
+        dismiss()
+        ToastCenter.shared.show(user != nil ? "API key and user ID found and filled in." : "API key found and filled in.", style: .success)
     }
 
     func copySelection() {

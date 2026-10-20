@@ -33,6 +33,9 @@ struct AutoConfigView: View {
     /// Stored (not rebuilt on each render): a fresh Identifiable item per render made SwiftUI
     /// dismiss and re-present the sheet forever.
     @State private var mapperRequest: MapperRequest?
+    @State private var loginPage: LoginPage?
+    /// Bumped after a key is found on the site, to run Analyze again.
+    @State private var reanalyze = 0
     @FocusState private var focused: Field?
 
     enum Field: Hashable { case url, tag, headers, keyName, credentials }
@@ -67,6 +70,10 @@ struct AutoConfigView: View {
                 if let p = proposal { proposalSections(p) }
             }
             .safeAreaInset(edge: .bottom) { actionBar(proxy) }
+            .onChange(of: reanalyze) { _ in Task { await analyze(proxy) } }
+        }
+        .sheet(item: $loginPage) { page in
+            ThemedWebPage(url: page.url, onFindKey: { key, user in useFound(key, user) })
         }
         .navigationTitle("Auto-Configure")
         .navigationBarTitleDisplayMode(.inline)
@@ -88,6 +95,27 @@ struct AutoConfigView: View {
     }
 
     struct MapperRequest: Identifiable { let id = UUID(); let json: String }
+    struct LoginPage: Identifiable { let id = UUID(); let url: URL }
+
+    /// The site's home (the address up to its first folder), where its login usually starts.
+    var siteHome: URL? {
+        guard let parts = AutoConfigurator.splitTemplate(urlText.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+        return URL(string: parts.base + "/")
+    }
+
+    /// Fills the login fields with what Find Key on Page picked, then analyzes again.
+    func useFound(_ key: KeyFinder.Found, _ user: KeyFinder.Found?) {
+        if authStyle == nil || authStyle == AuthStyle.none || authStyle == .basic { authStyle = .apiKeyQuery }
+        if let name = key.paramName { authParamName = name } else if authParamName.isEmpty { authParamName = "api_key" }
+        apiKey = key.value
+        if let u = user {
+            username = u.value
+            showUserID = true
+            if let name = u.paramName { authUserParam = name } else if authUserParam.isEmpty { authUserParam = "user_id" }
+        }
+        showAdvanced = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { reanalyze += 1 }
+    }
 
     // MARK: Inputs
 
@@ -115,6 +143,7 @@ struct AutoConfigView: View {
                 Button("Demo Site K (key + user ID)") { urlText = "\(o)/k/posts.json?tags={tags}&page={page}"; sampleTag = "red" }
                 Button("Demo Members (guest limits)") { urlText = "\(o)/a/members/posts.json?tags={tags}&page={page}"; sampleTag = "red" }
                 Button("Demo Formats (zip, webp, apng, stream…)") { urlText = "\(o)/u/posts.json?tags={tags}&page={page}"; sampleTag = "" }
+                Button("Demo Vault (log in to find the key)") { urlText = "\(o)/v/posts.json?tags={tags}&page={page}"; sampleTag = "blue" }
                 Button("Demo Gallery (multi-page)") { urlText = "\(o)/g/posts.json?tags={tags}&page={page}"; sampleTag = "comic" }
             } label: { Label("Try a demo address", systemImage: "testtube.2") }
         } header: { Text("Search address") } footer: {
@@ -177,7 +206,26 @@ struct AutoConfigView: View {
             case .noList(let raw), .noMedia(let raw):
                 ErrorCard(title: f.title, message: f.message, next: f.nextAction, actionTitle: "Open Field Mapper") { mapperRequest = MapperRequest(json: raw) }
             case .needsLogin:
-                ErrorCard(title: f.title, message: f.message, next: f.nextAction, actionTitle: "Show login options") { showAdvanced = true }
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Requires Authentication", systemImage: "lock.fill")
+                        .font(.headline).foregroundColor(.white)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange))
+                        .accessibilityIdentifier("requiresAuth")
+                    Text("The address is right, but the site only answers after you log in. Log in on the site and MediaDeck will read your API key from the page and fill in the fields below.")
+                        .font(.subheadline).fixedSize(horizontal: false, vertical: true)
+                    if let home = siteHome {
+                        Button { loginPage = LoginPage(url: home) } label: {
+                            Label("Log in to find my key", systemImage: "person.badge.key")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("loginFindKey")
+                    }
+                    Text("Or type the key in the API key field below.").font(.footnote).foregroundColor(.secondary)
+                }
+                .padding(.vertical, 6)
             default:
                 ErrorCard(title: f.title, message: f.message, next: f.nextAction)
             }
@@ -299,7 +347,12 @@ struct AutoConfigView: View {
         case .failure(let f):
             failure = f
             Haptics.error()
-            if case .needsLogin = f { showAdvanced = true }
+            if case .needsLogin = f {
+                showAdvanced = true
+                // Show the API key fields straight away (most sites use a key in the address).
+                if authStyle == nil || authStyle == AuthStyle.none { authStyle = .apiKeyQuery }
+                if authParamName.isEmpty { authParamName = "api_key" }
+            }
             // The server's own words asked for a user ID: show that field, named as the server said.
             if let param = AutoConfigurator.userIDParam(in: f.message) {
                 showUserID = true
