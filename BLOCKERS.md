@@ -59,7 +59,6 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 - **Tested end to end on the phone with the demo Vault site:**
   1. Analyze showed "Requires Authentication" with the API key fields.
   2. Log in to find my key opened the themed page.
-  3. Find Key on Page before logging in found nothing.
-  4. After logging in (demo/demo), the account page gave one key plus user ID 4821, with the parameter names. The session code was ignored. The form filled in and the re-analysis succeeded ("searching worked with your login").
-  5. On Developer settings, the picker showed "Found next to 'API Key'" and "Found next to 'Secret'". Picking the first filled the form and analyzed again.
-- **Untested:** real sites lay out account pages in many ways. If a key isn't found, the page probably labels it with a word not in the list ("API Key", "API Token", "Secret", "Credentials", "Access Token/Key"). Type the key in by hand, or report the label so it can be added.
+  3. After logging in (demo/demo), the account page gave one key plus user ID 4821, with the parameter names. The session code was ignored. The form filled in and the re-analysis succeeded ("searching worked with your login").
+  4. On Developer settings, the picker showed "Found next to 'API Key'" and "Found next to 'Secret'". Picking the first filled the form and analyzed again.
+- **Untested:** the "no key on this page" message; the login form has no key, but that message was never seen on screen. Real sites lay out account pages in many ways. If a key isn't found, the page probably labels it with a word not in the list ("API Key", "API Token", "Secret", "Credentials", "Access Token/Key"). Type the key in by hand, or report the label so it can be added.
