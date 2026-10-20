@@ -19,6 +19,8 @@ struct MediaEditorView: View {
     @State private var brightness = 0.0
     @State private var contrast = 1.0
     @State private var saturation = 1.0
+    /// Export size: 1× (original), 2× or 3× (Lanczos upscaling plus light sharpening).
+    @State private var upscale = 1
     @State private var error: String?
 
     enum CropShape: String, CaseIterable, Identifiable {
@@ -71,7 +73,15 @@ struct MediaEditorView: View {
                     slider("Brightness", $brightness, -0.5...0.5)
                     slider("Contrast", $contrast, 0.5...1.5)
                     slider("Saturation", $saturation, 0...2)
-                    Button("Reset") { rotation = 0; flipped = false; crop = .original; brightness = 0; contrast = 1; saturation = 1 }
+                    Picker("Size when saved", selection: $upscale) {
+                        Text("Original").tag(1); Text("2× larger").tag(2); Text("3× larger").tag(3)
+                    }
+                    .accessibilityIdentifier("editorUpscale")
+                    if let size = outputSize {
+                        Text("Saved size: \(Int(size.width)) × \(Int(size.height))").font(.footnote).foregroundColor(.secondary)
+                            .accessibilityIdentifier("editorOutputSize")
+                    }
+                    Button("Reset") { rotation = 0; flipped = false; crop = .original; brightness = 0; contrast = 1; saturation = 1; upscale = 1 }
                 }
             }
             .navigationTitle("Edit Picture")
@@ -91,6 +101,17 @@ struct MediaEditorView: View {
             .task { await loadSource() }
             .onChange(of: settingsKey) { _ in renderPreview() }
         }
+    }
+
+    /// Size of the saved picture: the preview's shape at the source's resolution × upscale
+    /// (never above 8192 px on the long side).
+    var outputSize: CGSize? {
+        guard let s = source?.cgImage, let p = preview else { return nil }
+        let long = CGFloat(max(s.width, s.height)) * CGFloat(upscale)
+        let r = p.size.width / max(p.size.height, 1)
+        var w = r >= 1 ? long : long * r, h = r >= 1 ? long / r : long
+        let cap = min(1, 8192 / max(w, h)); w *= cap; h *= cap
+        return CGSize(width: w.rounded(), height: h.rounded())
     }
 
     var settingsKey: String { "\(rotation)-\(flipped)-\(crop.rawValue)-\(brightness)-\(contrast)-\(saturation)" }
@@ -136,7 +157,19 @@ struct MediaEditorView: View {
         f.brightness = Float(brightness)
         f.contrast = Float(contrast)
         f.saturation = Float(saturation)
-        guard let out = f.outputImage, let rendered = Self.context.createCGImage(out, from: out.extent) else { return nil }
+        guard var out = f.outputImage else { return nil }
+        // Upscaling (saved file only; the preview stays small): Lanczos resampling, then a
+        // little sharpening to offset the softness of enlarging.
+        if maxSide == nil, upscale > 1 {
+            let long = max(out.extent.width, out.extent.height)
+            let scale = min(CGFloat(upscale), 8192 / long)
+            let l = CIFilter.lanczosScaleTransform()
+            l.inputImage = out; l.scale = Float(scale); l.aspectRatio = 1
+            let sharpen = CIFilter.sharpenLuminance()
+            sharpen.inputImage = l.outputImage; sharpen.sharpness = 0.4
+            if let up = sharpen.outputImage { out = up.cropped(to: up.extent.integral) }
+        }
+        guard let rendered = Self.context.createCGImage(out, from: out.extent) else { return nil }
         return UIImage(cgImage: rendered)
     }
 

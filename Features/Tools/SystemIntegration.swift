@@ -46,10 +46,24 @@ enum ShareInbox {
         top?.present(vc, animated: true)
     }
 
-    /// mediadeck://inbox, mediadeck://favorites
+    /// mediadeck://inbox, mediadeck://favorites,
+    /// mediadeck://search?tag=X[&site=Y], mediadeck://post?id=Y[&site=Z]
     static func handle(_ url: URL) {
         guard url.scheme == "mediadeck" else { return }
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        func q(_ names: String...) -> String? { items.first { names.contains($0.name.lowercased()) }?.value?.nonEmpty }
+        // "site" may be an adapter id or its display name; without it the open site is used.
+        let site = q("site")
         switch url.host {
+        case "search":
+            let tags = q("tag", "tags", "q") ?? ""
+            AppRouter.shared.queueSearch(tags: tags, siteName: site)
+            DebugLog.log("Link", "search \"\(tags)\" on \(site ?? "current site")")
+        case "post":
+            guard let id = q("id") else { ToastCenter.shared.show("That link has no post id.", style: .error); return }
+            // A numbers-only search opens that post directly.
+            AppRouter.shared.queueSearch(tags: id, siteName: site)
+            DebugLog.log("Link", "post \(id) on \(site ?? "current site")")
         // Wait for the share sheet to finish closing before showing anything.
         case "inbox": DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { process() }
         case "favorites": AppRouter.shared.tab = .favorites
