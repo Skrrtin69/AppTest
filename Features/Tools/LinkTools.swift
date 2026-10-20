@@ -71,13 +71,32 @@ final class ClipboardWatcher {
         guard pb.changeCount != lastChange else { return }
         lastChange = pb.changeCount
         UserDefaults.standard.set(lastChange, forKey: "clipboardLastChange")
+        // Give the app a moment to become fully active: asking too early is refused.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.detect(attempt: 1) }
+    }
+
+    private func detect(attempt: Int) {
+        let pb = UIPasteboard.general
         pb.detectPatterns(for: [.probableWebURL]) { result in
-            guard case .success(let found) = result, found.contains(.probableWebURL) else { return }
             Task { @MainActor in
-                ToastCenter.shared.show("You copied a link. Open it in MediaDeck?", actionTitle: "Open") {
-                    Task { @MainActor in self.openClipboard() }
+                switch result {
+                case .success(let found):
+                    if found.contains(.probableWebURL) { self.offer() }
+                case .failure:
+                    if attempt < 2 {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.detect(attempt: attempt + 1) }
+                    } else if pb.hasURLs {
+                        // Detection unavailable: a copied link (from Safari, Share › Copy) is still marked as one.
+                        self.offer()
+                    }
                 }
             }
+        }
+    }
+
+    private func offer() {
+        ToastCenter.shared.show("You copied a link. Open it in MediaDeck?", actionTitle: "Open") {
+            Task { @MainActor in self.openClipboard() }
         }
     }
 
