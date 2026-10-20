@@ -324,7 +324,11 @@ final class SearchTabModel: ObservableObject, Identifiable {
 @MainActor
 final class SuggestionModel: ObservableObject {
     @Published private(set) var suggestions: [String] = []
+    /// Post counts from the site, by lowercased tag (only for tags the site reported).
+    @Published private(set) var counts: [String: Int] = [:]
     private var task: Task<Void, Never>?
+
+    func count(for tag: String) -> Int? { counts[tag.lowercased()] }
 
     /// Waits 300 ms after the last keystroke, then combines suggestions from the site (every
     /// site for an All Sites tab) with tags you already know: favorites, Read Later, open
@@ -343,12 +347,15 @@ final class SuggestionModel: ObservableObject {
         task = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
-            let remote: [String] = await withTaskGroup(of: [String].self) { group in
-                for a in sites.prefix(6) { group.addTask { (try? await a.suggest(token)) ?? [] } }
-                var all: [String] = []
+            let detailed: [GenericAdapter.TagSuggestion] = await withTaskGroup(of: [GenericAdapter.TagSuggestion].self) { group in
+                for a in sites.prefix(6) { group.addTask { (try? await a.suggestDetailed(token)) ?? [] } }
+                var all: [GenericAdapter.TagSuggestion] = []
                 for await r in group { all += r }
                 return all
             }
+            let remote = detailed.map(\.name)
+            var counts: [String: Int] = [:]
+            for d in detailed { if let c = d.count { counts[d.name.lowercased()] = max(counts[d.name.lowercased()] ?? 0, c) } }
             guard !Task.isCancelled else { return }
             let local = await MainActor.run { LocalTagIndex.matches(token) }
             var seen = Set<String>()
@@ -358,13 +365,17 @@ final class SuggestionModel: ObservableObject {
                 seen.insert(k)
                 return true
             }
-            await MainActor.run { self?.suggestions = Array(merged.prefix(10)) }
+            await MainActor.run {
+                self?.counts = counts
+                self?.suggestions = Array(merged.prefix(10))
+            }
         }
     }
 
     func clear() {
         task?.cancel()
         suggestions = []
+        counts = [:]
     }
 }
 

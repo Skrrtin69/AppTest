@@ -9,6 +9,8 @@ struct InfoPanel: View {
     @ObservedObject private var settings = AppSettings.shared
 
     @State private var infoTag: InfoTag?
+    /// "Tag Info" answer: title and lines.
+    @State private var tagInfo: (tag: String, text: String)?
     @State private var translating: String?
     @State private var translation = ""
     @ObservedObject private var translations = TagTranslations.shared
@@ -31,6 +33,25 @@ struct InfoPanel: View {
         currentQuery.isEmpty ? term : currentQuery + " " + term
     }
 
+    /// Asks the site's suggestions for this exact tag and shows its post count.
+    func showTagInfo(_ tag: String) async {
+        guard let a = adapter else { return }
+        let category = post.tagCategories?[tag]
+        do {
+            let found = try await a.tagStats(tag)
+            var lines = ["Tag: \(tag)"]
+            if let f = found {
+                lines.append("Posts: \(f.count.map(TagCount.format) ?? "not given by the site")")
+            } else {
+                lines.append("Posts: 0 (\(a.displayName) doesn't list this tag)")
+            }
+            lines.append("Category: \((category ?? TagCount.categoryName(found?.category) ?? "Unknown").capitalized)")
+            tagInfo = (tag, lines.joined(separator: "\n"))
+        } catch {
+            ToastCenter.shared.error(error, prefix: "Couldn't look up \(tag)")
+        }
+    }
+
     /// Long-press actions on a tag.
     @ViewBuilder
     func tagMenu(_ tag: String, hidden: Bool) -> some View {
@@ -49,6 +70,9 @@ struct InfoPanel: View {
             UIPasteboard.general.string = tag
             ToastCenter.shared.show("Copied \"\(tag)\"")
         } label: { Label("Copy Tag", systemImage: "doc.on.doc") }
+        if adapter?.supportsAutocomplete == true {
+            Button { Task { await showTagInfo(tag) } } label: { Label("Tag Info", systemImage: "number") }
+        }
         if adapter?.supportsWiki == true || adapter?.supportsAliases == true {
             Button { infoTag = InfoTag(tag: tag) } label: { Label("About This Tag", systemImage: "info.circle") }
         }
@@ -130,6 +154,12 @@ struct InfoPanel: View {
                         }
                     }
                     .padding(.vertical, 4)
+                    .alert("Tag Info", isPresented: Binding(get: { tagInfo != nil }, set: { if !$0 { tagInfo = nil } })) {
+                        Button("Search") { if let t = tagInfo?.tag { onTag(t) } }
+                        Button("OK", role: .cancel) {}
+                    } message: {
+                        Text(tagInfo?.text ?? "")
+                    }
                 }
                 // Shown only when the adapter has these addresses.
                 if let a = adapter, a.supportsRelated, let first = post.tags.first {

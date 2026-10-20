@@ -203,12 +203,19 @@ struct BrowseView: View {
                         suggester.clear()
                         Haptics.tap()
                     } label: {
-                        Label(s, systemImage: "text.badge.plus").font(.subheadline)
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                        let count = suggester.count(for: s)
+                        HStack(spacing: 4) {
+                            Label(s, systemImage: "text.badge.plus")
+                            if let c = count { Text("(\(TagCount.format(c)))").foregroundColor(.secondary) }
+                        }
+                        .font(.subheadline)
+                        // No posts use it: dimmed.
+                        .opacity(count == 0 ? 0.4 : 1)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Capsule().fill(Color.accentColor.opacity(count == 0 ? 0.06 : 0.15)))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Suggestion \(s)")
+                    .accessibilityLabel("Suggestion \(s)\(suggester.count(for: s).map { ", \(TagCount.format($0)) posts" } ?? "")")
                 }
             }
             .padding(.horizontal, 10)

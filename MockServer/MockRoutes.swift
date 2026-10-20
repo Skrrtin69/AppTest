@@ -108,7 +108,11 @@ enum MockRoutes {
     static func siteA(_ sub: String, req: HTTPRequest, origin: String, guestLimited: Bool = false) -> HTTPResponse {
         if sub == "/auth/check" { return .json(["ok": true, "user": demoUser]) }
         if sub == "/tags/autocomplete.json" {
-            return .json(MockCatalog.suggestions(req.query["q"] ?? "").map { ["name": $0.tag, "count": $0.count] })
+            let q = (req.query["q"] ?? "").lowercased()
+            var list: [[String: Any]] = MockCatalog.suggestions(q).map { ["name": $0.tag, "post_count": $0.count] }
+            // A tag nobody uses any more (0 posts), so the dimmed style can be seen.
+            if !list.isEmpty || q.count >= 2 { list.append(["name": "\(q)_unused", "post_count": 0]) }
+            return .json(list)
         }
         if sub == "/posts.json" {
             if let forced = forcedError(req.query["tags"] ?? "") { return forced }

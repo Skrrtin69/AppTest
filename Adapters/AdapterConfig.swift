@@ -62,6 +62,11 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
     var autocompleteResultsPath: String?
     /// For suggestion objects: which key holds the tag name (default "name").
     var autocompleteNameKey: String?
+    /// For suggestion objects: path to the tag name (overrides autocompleteNameKey).
+    var tagNamePath: String? = nil
+    /// For suggestion objects: path to the tag's post count (e.g. post_count, count).
+    /// Empty = the usual keys are looked for.
+    var tagCountPath: String? = nil
     /// Tag that asks the site for random order, for sites without a "random" sort choice.
     var randomTag: String?
 
@@ -119,7 +124,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         case videoExtensions, gifExtensions, authStyle, authParamName, paginationStyle, hasNextPagePath, cursorPath
         case sampleURLPath, postResultPath, metadataPaths, authCheckPath, tagSeparator, firstPageIndex
         case sortOptions, ratingOptions, userAgent, proxyHost, proxyPort, timeoutSeconds, headers
-        case alternateMediaURLPaths, tagSpaceReplacement, autocompletePath, autocompleteResultsPath, autocompleteNameKey, randomTag
+        case alternateMediaURLPaths, tagSpaceReplacement, autocompletePath, autocompleteResultsPath, autocompleteNameKey, tagNamePath, tagCountPath, randomTag
         case relatedTagsPath, wikiPath, tagAliasesPath, votePath, accountSettingsPath, registerURL
         case authUserParamName, apiKeyPageURL, favoritePath, tagCategoryKey, galleryPath, galleryURLKey, zipExtensions, zipFramesPath, externalArchiveURL, poolsPath, poolsResultsPath, poolIDPath, poolNamePath, poolCountPath, poolPostIDsPath, poolSearchTemplate
     }
@@ -188,6 +193,8 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         autocompletePath = try c.decodeIfPresent(String.self, forKey: .autocompletePath)
         autocompleteResultsPath = try c.decodeIfPresent(String.self, forKey: .autocompleteResultsPath)
         autocompleteNameKey = try c.decodeIfPresent(String.self, forKey: .autocompleteNameKey)
+        tagNamePath = try c.decodeIfPresent(String.self, forKey: .tagNamePath)
+        tagCountPath = try c.decodeIfPresent(String.self, forKey: .tagCountPath)
         randomTag = try c.decodeIfPresent(String.self, forKey: .randomTag)
         relatedTagsPath = try c.decodeIfPresent(String.self, forKey: .relatedTagsPath)
         wikiPath = try c.decodeIfPresent(String.self, forKey: .wikiPath)
@@ -239,6 +246,8 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         try c.encode(autocompletePath, forKey: .autocompletePath)
         try c.encode(autocompleteResultsPath, forKey: .autocompleteResultsPath)
         try c.encode(autocompleteNameKey, forKey: .autocompleteNameKey)
+        try c.encode(tagNamePath, forKey: .tagNamePath)
+        try c.encode(tagCountPath, forKey: .tagCountPath)
         try c.encode(randomTag, forKey: .randomTag)
         try c.encode(relatedTagsPath, forKey: .relatedTagsPath)
         try c.encode(wikiPath, forKey: .wikiPath)

@@ -415,6 +415,14 @@ extension AutoConfigurator {
                     config.autocompletePath = base == parts.base ? pattern : GenericAdapter.join(base, pattern)
                     config.autocompleteResultsPath = found.path
                     config.autocompleteNameKey = found.nameKey
+                    let items = (DottedPath.evaluate(found.path, in: json) ?? json) as? [Any] ?? []
+                    let first = items.first as? [String: Any] ?? [:]
+                    let countKey = GenericAdapter.countKeys.first { GenericAdapter.count(in: first, path: $0) != nil }
+                    config.tagCountPath = countKey
+                    set(.tagCountPath, countKey == nil ? .medium : .high, countKey == nil
+                        ? "Suggestions don't include a post count."
+                        : "Each suggestion's post count is under '\(countKey!)'.")
+                    set(.tagNamePath, .medium, "Not needed: the suggestion name key is used.")
                     set(.autocompletePath, .high, "\(GenericAdapter.join(base, filled)) answered with \(found.count) tag suggestions for '\(query)'.")
                     set(.autocompleteResultsPath, .high, found.path.isEmpty ? "The suggestion answer is itself the list." : "Suggestions are listed under '\(found.path)'.")
                     set(.autocompleteNameKey, found.nameKey == nil ? .medium : .high, found.nameKey == nil
@@ -427,6 +435,8 @@ extension AutoConfigurator {
             set(.autocompletePath, .medium, "None of the usual suggestion addresses answered, so the search bar won't suggest tags. Add one if the site has it.")
             set(.autocompleteResultsPath, .medium, "Not needed without suggestions.")
             set(.autocompleteNameKey, .medium, "Not needed without suggestions.")
+            set(.tagNamePath, .medium, "Not needed without suggestions.")
+            set(.tagCountPath, .medium, "Not needed without suggestions.")
         }
 
         /// A list of strings, or of objects with a name-like key, at the root or nested in objects.

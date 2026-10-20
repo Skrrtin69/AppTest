@@ -48,22 +48,61 @@ final class GenericAdapter: SiteAdapter {
 
     var supportsAutocomplete: Bool { config.autocompletePath?.nonEmpty != nil }
 
+    /// One tag suggestion: its name and, when the site says, how many posts use it.
+    struct TagSuggestion: Hashable {
+        let name: String
+        let count: Int?
+        let category: String?
+    }
+
+    /// Keys looked for when the adapter has no tagCountPath.
+    static let countKeys = ["post_count", "count", "posts", "postCount", "total", "use_count"]
+
     /// Tag suggestions for what's being typed, using autocompletePath. Empty when unsupported.
     func suggest(_ query: String) async throws -> [String] {
+        try await suggestDetailed(query).map(\.name)
+    }
+
+    /// Suggestions with post counts (tagCountPath, else the usual count keys).
+    func suggestDetailed(_ query: String) async throws -> [TagSuggestion] {
         guard let path = config.autocompletePath?.nonEmpty else { return [] }
         let q = query.trimmingCharacters(in: .whitespaces)
         guard q.count >= 1 else { return [] }
         let url = try buildURL(path: path, vars: ["query": Self.encode(prepareTag(q))])
         let json = try await fetchJSON(url)
         let list = DottedPath.evaluate(config.autocompleteResultsPath ?? "", in: json) ?? json
-        let key = config.autocompleteNameKey?.nonEmpty ?? "name"
-        var out: [String] = []
+        let namePath = config.tagNamePath?.nonEmpty ?? config.autocompleteNameKey?.nonEmpty ?? "name"
+        var out: [TagSuggestion] = []
         for item in (list as? [Any]) ?? [] {
-            if let s = item as? String { out.append(s) }
-            else if let d = item as? [String: Any], let s = DottedPath.stringValue(d[key]) { out.append(s) }
+            if let s = item as? String { out.append(TagSuggestion(name: s, count: nil, category: nil)); continue }
+            guard let d = item as? [String: Any], let name = DottedPath.string(namePath, in: d)?.nonEmpty else { continue }
+            out.append(TagSuggestion(name: name, count: Self.count(in: d, path: config.tagCountPath?.nonEmpty),
+                                     category: DottedPath.stringValue(d["category"] ?? d["type"])))
         }
         var seen = Set<String>()
-        return out.filter { seen.insert($0).inserted }
+        return out.filter { seen.insert($0.name.lowercased()).inserted }
+    }
+
+    static func count(in item: [String: Any], path: String?) -> Int? {
+        let paths = path.map { [$0] } ?? countKeys
+        for p in paths {
+            switch DottedPath.evaluate(p, in: item) {
+            case let n as Int: return n
+            case let n as Double: return Int(n)
+            case let n as NSNumber: return n.intValue
+            case let s as String: if let n = Int(s.replacingOccurrences(of: ",", with: "")) { return n }
+            default: continue
+            }
+        }
+        return nil
+    }
+
+    /// One tag's suggestion entry (exact name match), for its post count. nil when the
+    /// site doesn't list it.
+    func tagStats(_ tag: String) async throws -> TagSuggestion? {
+        func norm(_ s: String) -> String { s.lowercased().replacingOccurrences(of: " ", with: "_") }
+        let want = norm(tag)
+        return try await suggestDetailed(tag).first { norm($0.name) == want }
     }
 
     func postURL(id: String) throws -> URL {
