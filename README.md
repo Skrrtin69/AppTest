@@ -295,8 +295,8 @@ Failures are explained in plain English with one next step: bad address, unreach
 - **Volume and brightness swipes:**
   - Drag up or down along the right edge (volume) or left edge (brightness). The change is relative to where the drag started: the full screen height is 100%, so a drag of a tenth of the screen changes about 10%.
   - The app lets go of the volume when the drag ends, so the side buttons work normally again right away.
-  - Turn the swipes off in Settings › **Enable Volume/Brightness Swipes** (on by default).
-- **Start videos muted:** a Settings switch. It applies to every player: the built-in one, Picture in Picture, and the web player used for WebM.
+  - Turn the swipes off in Settings › Reading & Viewer › **Enable Volume/Brightness Swipes** (on by default).
+- **Start videos muted:** a switch in Settings › Reading & Viewer. It applies to every player: the built-in one, Picture in Picture, and the web player used for WebM.
 - **Web player:**
   - A spinner shows until the video can play. After 10 seconds it switches to a **Retry** button.
   - The web player's process and decoder files are started off screen at launch.
@@ -304,7 +304,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ## Cloudflare and other ways sites ask for keys
 
-- **Cloudflare checks:** when a site answers with a Cloudflare check page instead of its data, Auto-Configure no longer shows "Requires Authentication". It shows **This site is protected by Cloudflare. Tap to verify.** Complete the check on the page that opens. The app then keeps the site's clearance cookie and the browser's User-Agent (added to the adapter's headers, since the clearance only works with the same browser identity), and tries again on its own.
+- **Cloudflare checks:** when a site answers with a Cloudflare check page instead of its data, Auto-Configure no longer shows "Requires Authentication". It shows **This site is protected by Cloudflare. Tap to verify.** The check opens the site's home page (`https://site/`), never the API address, because an API address isn't a web page and would show the site's 404. Error pages don't close it, so you can tap the site's own "Return to homepage" link. It closes by itself once the site hands out a *new* pass (cf_clearance cookie). **Done** closes it straight away when the site had already let you in. The app then keeps the site's clearance cookie and the browser's User-Agent (added to the adapter's headers, since the clearance only works with the same browser identity), and tries again on its own.
 - **`Authorization: Key <key>`:** this is now one of the ways Test Connection tries to send a key. For sites with no login page, paste the key and tap Test Connection.
 - **More addresses tried:**
   - Older suggestion addresses: `index.php?page=autocomplete2&q=` and `autocomplete.php?q=`.

@@ -113,3 +113,14 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
   - the older suggestion addresses, the gallery-style endpoints and the automatic `*` for name_matches.
 
   The two new switches are in Settings › Appearance, next to "Autoplay videos in viewer".
+
+## 20. Cloudflare check on live sites
+- **Fixed:**
+  - The check page opened the API address (for example `/api/galleries/search…`), so a real site showed its 404 page instead of the check. It now opens only `scheme://host/`.
+  - It closed as soon as any cf_clearance cookie existed. An old pass therefore closed it before the user could do anything, and on first open the cookie store can read as empty until a page loads. Now it records the passes present once the first page has loaded, and closes only for a new one. Error pages never close it, and **Done** closes it on request.
+- **Verified on the phone with the demo site:**
+  - The check opened `http://127.0.0.1:8765/` (the root).
+  - It stayed open for 8 seconds even though an old demo pass was stored, and stayed open on the 403 check page.
+  - "Verify you are human" set a new pass, and the sheet closed on its own: "Verified. Trying the site again…", then a successful analysis.
+  - The demo pass now changes on every launch so this can be repeated.
+- **Settings:** Autoplay, Start videos muted and Enable Volume/Brightness Swipes are now in a new **Reading & Viewer** section (checked on the phone).
