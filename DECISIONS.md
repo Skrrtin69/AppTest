@@ -117,3 +117,10 @@ Choices made while building MediaDeck, and why.
 - **Picture in Picture** reuses the existing AVPlayerLayer. While PiP runs, the controller is kept in `VideoController.floating`, so closing the viewer doesn't stop the video. It's torn down when PiP ends.
 - **The scroll-to-top button** watches a lazy marker at the top of the grid (it disappears once scrolled away). A scroll-offset preference was unreliable, because the grid next to the marker kept reporting the default value.
 - **EXIF demo:** every third full-size demo picture is served as a JPEG with made-up camera data, and every sixth also has a made-up location.
+
+## Phase 15
+- **Masonry** is laid out in code: each post goes to the currently shortest column, using its known width × height (square if unknown), with one lazy column per stack. Pagination still uses each post's overall index, so loading more works the same as in the normal grid.
+- **Read Later lives in UserDefaults** (JSON), not Core Data, to avoid changing the code-defined model. It hides in decoy mode and is included in backups.
+- **Tag translations are display-only plus a reverse lookup on search.** Adapters, the blacklist and saved data always keep the site's real tags; only chips show your name, and search words are mapped back before the request.
+- **Buttons inside a grid's scroll view didn't respond** (Read Later's Clear Viewed), so headers with buttons sit above the scroll view.
+- **The search builder edits the current tab** (query, sort, rating), and the search bar refreshes when the builder closes.

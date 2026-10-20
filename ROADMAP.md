@@ -78,7 +78,7 @@ Status per item is tracked in commits and in BLOCKERS.md.
 ## Phase 14: iOS System Integration ✅
 - Share Extension; Picture-in-Picture; Random Favorite widget; audio mixing; EXIF viewer; floating scroll-to-top button.
 
-## Phase 15: Advanced Data, Layouts, and Workflows
+## Phase 15: Advanced Data, Layouts, and Workflows ✅
 - iCloud sync; masonry grid; Read Later queue; visual query builder; download swipe actions; tag translation.
 
 ## Phase 16: Advanced Frameworks & Customization

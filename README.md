@@ -247,7 +247,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ---
 
-## What's new (Phases 1–14)
+## What's new (Phases 1–15)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -324,6 +324,14 @@ Failures are explained in plain English with one next step: bad address, unreach
 - **Play alongside other audio** (Settings › Appearance): video sound mixes with music or podcasts instead of stopping them.
 - **Photo details (EXIF):** the Info panel shows camera, lens, shutter, aperture, ISO, date, software and color profile when the file has them, and warns if it contains the place where it was taken.
 - **Back to top:** a floating ↑ button appears after scrolling a long way down a grid.
+
+**Layouts and workflows (Phase 15)**
+- **Masonry grid:** Settings › Appearance › Thumbnail shape › Masonry (staggered). Thumbnails keep their shape in staggered columns.
+- **Read Later:** long-press a thumbnail (or ⋯ in the viewer) › Read Later. Find them in Favorites › Later; **Clear Viewed** removes the ones you've opened.
+- **Build a Search** (Browse › ⋯ menu): add tags as "Must have" or "Leave out" with suggestions from the site, pick sort and rating, and see the exact search text it will use.
+- **Downloads:** swipe a row right for Pause / Resume / Retry, or left to Cancel.
+- **Tag translations:** hold a tag › Translate Tag…, or Settings › Browsing › Tag Translations. Your name is shown on the tag, and typing it in a search sends the site's tag. They're stored in `tag_translations.json` as `{"site tag": "your name"}`.
+- No iCloud sync, as requested: use Settings › Data › Back Up Everything (backups also include Read Later and tag translations).
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 
