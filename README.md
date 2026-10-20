@@ -221,7 +221,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ---
 
-## What's new (Phases 1–10)
+## What's new (Phases 1–11)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -265,6 +265,15 @@ Failures are explained in plain English with one next step: bad address, unreach
 - Very tall pictures are decoded at screen width, not shrunk by their height, so they stay sharp without using too much memory.
 - Vertical reading mode shows every page of every gallery one after another.
 - Auto-Configure notices a list of page addresses in each result and fills in `galleryPath` / `galleryURLKey`.
+
+**Reading comfort (Phase 11)**
+- **Right-to-left** page order for manga: swipe right for the next post.
+- **Tap the edges to turn pages:** the outer third of a picture goes back or forward (mirrored in right-to-left mode), and the middle shows or hides the controls.
+- **Viewer toolbar:** Settings › Reading › Viewer toolbar picks which buttons sit in the bar. The others are in the bar's ⋯ (sliders) menu, so nothing is lost.
+- **Battery Saver** (Settings › Battery): Off, With Low Power Mode (default), or Always on. It stops GIF animation in grids, doesn't start videos by itself, shows the lighter file when the site has one, and doesn't preload neighbouring posts.
+- **Cache expiry:** Settings › Cache can delete cached files you haven't opened in 7, 14 or 30 days (default: never).
+- **Switch sites by swiping** the site name at the top of Browse (the small arrows show it's swipeable).
+- **Rotation lock** for the viewer, in Settings › Reading and in the viewer's ⋯ menu.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

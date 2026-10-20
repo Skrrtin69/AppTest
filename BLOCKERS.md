@@ -25,3 +25,11 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 ## 5. Dropped on purpose
 - iCloud sync: needs real Apple signing and an iCloud container, which a fakesigned TrollStore app doesn't have. Use Settings › Data backups instead.
 - Automatic API discovery, capability probing, automatic key-location testing, scraping keys or results from web pages, and CAPTCHA-backed web search engines.
+
+## 6. Phase 11: viewer rotation lock doesn't rotate yet
+- The setting is saved, and on opening the viewer the scene reports "landscape", but the viewer's layout stays portrait.
+- Two fixes have been tried so far:
+  - asking the scene for a geometry update
+  - refreshing every presented screen's allowed orientations
+- Next step: give the viewer its own hosting controller with fixed allowed orientations.
+- Locking to portrait while the phone is held upright works trivially.

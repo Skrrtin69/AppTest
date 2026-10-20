@@ -83,3 +83,10 @@ Choices made while building MediaDeck, and why.
 - **Galleries** keep the post model flat: `Post.pages` is an optional list of URLs, and `mediaURL` stays the first page. Favorites, downloads and the Info panel keep working unchanged. Each page becomes a temporary single-picture post (`post.page(i)`) only for display.
 - **Tall images:** when a picture is more than 2.5× taller than wide, the requested size is used as its *width*. No decode goes above about 24 megapixels, so a 720×6000 strip stays sharp, and a huge scan can't exhaust memory.
 - **Gestures in galleries:** swipe-down-to-close and the edge brightness/volume sliders are off on gallery posts, because the gallery scrolls vertically itself. Close with ✕.
+
+## Phase 11
+- **Right-to-left** reverses the pager's page order instead of mirroring the layout. Mirroring also flipped the UIKit zoom view inside each page, so pictures showed zoomed and off-centre, and swiping stopped working.
+- **Tap zones** use the tap position reported by the zoom view's own single-tap recognizer, so double-tap-to-zoom keeps working. Taps are ignored while zoomed in.
+- **Battery Saver** is computed, not stored: `savingPower` = "on", or "auto" plus iOS Low Power Mode. It updates live through the power-state notification. Grid images reload when animation is switched, so GIFs stop or start at once.
+- **Cache expiry** uses the file's modification date, which the cache refreshes on every read, so the setting means "not opened in N days". It runs at launch, when the setting changes, and before each size trim.
+- **Toolbar customization** stores the buttons moved into the menu (`hiddenViewerButtons`). Close, the counter and Info are always shown. A new button defaults to the menu, so the bar never overflows.
