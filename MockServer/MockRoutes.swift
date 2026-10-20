@@ -41,6 +41,9 @@ enum MockRoutes {
             return MockExtras.rootPage(port: port)
         case p == "/health":
             return .text("MediaDeck demo server OK")
+        case p == "/a/secure/register":
+            // A sign-up page never needs a login.
+            return .text(MockExtras.signUpPage(title: "Create a demo account"), type: "text/html; charset=utf-8")
         case p.hasPrefix("/a/secure/"):
             guard isAuthorized(req) else {
                 var r = HTTPResponse.json(["error": "login required"], status: 401)
