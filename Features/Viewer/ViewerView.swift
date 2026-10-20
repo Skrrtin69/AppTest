@@ -45,12 +45,16 @@ struct ViewerView: View {
                                        aspect: settings.viewerAspect, showControls: chrome,
                                        onFinished: { if i == index { advance() } },
                                        onZoom: { zoomed = $0 },
-                                       onTap: { withAnimation { chrome.toggle() } },
+                                       onTap: handleTap,
                                        onSize: { sizes[posts[i].key] = $0 })
+                                .environment(\.layoutDirection, .leftToRight)
                                 .tag(i)
                         }
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
+                    // Right-to-left: the pager lays pages out mirrored, so the next post is on the left.
+                    .environment(\.layoutDirection, settings.readingRTL ? .rightToLeft : .leftToRight)
+                    .id(settings.readingRTL)
                     .simultaneousGesture(verticalDrag)
                 }
             }
@@ -71,9 +75,11 @@ struct ViewerView: View {
                 .transition(.opacity)
             }
         }
+        .onDisappear { if settings.rotationLock != "auto" { OrientationLock.apply("auto") } }
         .statusBar(hidden: !chrome)
         .modifier(HideHomeIndicator(hidden: !chrome))
         .onAppear {
+            if settings.rotationLock != "auto" { OrientationLock.apply(settings.rotationLock) }
             prefetchNeighbors()
             if let p = current { ViewedStore.shared.markViewed(p) }
         }
@@ -165,36 +171,63 @@ struct ViewerView: View {
     // MARK: Bars
 
     var topBar: some View {
-        HStack(spacing: 14) {
+        let inBar = ViewerButton.allCases.filter { settings.showsInToolbar($0) }
+        let inMenu = ViewerButton.allCases.filter { !settings.showsInToolbar($0) }
+        return HStack(spacing: 12) {
             Button { dismiss() } label: { Image(systemName: "xmark").font(.title3.weight(.semibold)) }
                 .accessibilityLabel("Close viewer")
             Text("\(index + 1) / \(posts.count)").font(.subheadline.monospacedDigit())
+                .lineLimit(1).fixedSize()
                 .accessibilityIdentifier("viewerIndex")
-            Spacer()
-            Menu {
-                ForEach([2, 3, 5, 8, 10, 15, 20, 30], id: \.self) { s in
-                    Button {
-                        settings.slideshowInterval = Double(s)
-                    } label: {
-                        if Int(settings.slideshowInterval) == s { Label("\(s) seconds", systemImage: "checkmark") } else { Text("\(s) seconds") }
-                    }
-                }
+            Spacer(minLength: 4)
+            ForEach(inBar) { barButton($0) }
+            if !inMenu.isEmpty {
+                Menu {
+                    ForEach(inMenu) { menuItem($0) }
+                } label: { Image(systemName: "slider.horizontal.3").font(.title3) }
+                .accessibilityLabel("More viewer options")
+            }
+            Button { showInfo = true } label: { Image(systemName: "info.circle").font(.title3) }
+                .accessibilityLabel("Info")
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 18).padding(.vertical, 12)
+        .padding(.top, 34)
+        .background(LinearGradient(colors: [.black.opacity(0.7), .clear], startPoint: .top, endPoint: .bottom))
+    }
+
+    var intervalChoices: some View {
+        ForEach([2, 3, 5, 8, 10, 15, 20, 30], id: \.self) { s in
+            Button {
+                settings.slideshowInterval = Double(s)
             } label: {
+                if Int(settings.slideshowInterval) == s { Label("\(s) seconds", systemImage: "checkmark") } else { Text("\(s) seconds") }
+            }
+        }
+    }
+
+    /// One top-bar button.
+    @ViewBuilder
+    func barButton(_ b: ViewerButton) -> some View {
+        switch b {
+        case .interval:
+            Menu { intervalChoices } label: {
                 Text("\(Int(settings.slideshowInterval))s").font(.caption.monospacedDigit())
                     .padding(.horizontal, 6).padding(.vertical, 3)
                     .overlay(Capsule().stroke(Color.white.opacity(0.6)))
             }
             .accessibilityLabel("Slideshow interval \(Int(settings.slideshowInterval)) seconds")
-            Button { settings.autoAdvance.toggle(); Haptics.tap()
-                ToastCenter.shared.show(settings.autoAdvance ? "Auto-advance: videos and GIFs move on when done, pictures after \(Int(settings.slideshowInterval)) s" : "Loop: each post repeats")
-            } label: {
+        case .advance:
+            Button(action: toggleAdvance) {
                 Image(systemName: settings.autoAdvance ? "forward.end.alt.fill" : "repeat.1").font(.title3)
             }
             .accessibilityLabel(settings.autoAdvance ? "End of media: auto-advance" : "End of media: loop")
+        case .slideshow:
             Button { slideshow.toggle(); Haptics.tap() } label: {
                 Image(systemName: slideshow ? "pause.circle.fill" : "play.circle").font(.title3)
             }
             .accessibilityLabel(slideshow ? "Pause slideshow" : "Start slideshow")
+        case .aspect:
             if !settings.verticalReading {
                 Button { settings.viewerAspect = settings.viewerAspect.next; Haptics.tap() } label: {
                     Text(settings.viewerAspect.label).font(.caption.weight(.bold))
@@ -203,19 +236,95 @@ struct ViewerView: View {
                 }
                 .accessibilityLabel("Image size \(settings.viewerAspect.label)")
             }
+        case .vertical:
             Button { settings.verticalReading.toggle(); Haptics.tap() } label: {
                 Image(systemName: settings.verticalReading ? "rectangle.split.1x2.fill" : "rectangle.split.1x2").font(.title3)
             }
             .accessibilityLabel(settings.verticalReading ? "Vertical reading on" : "Vertical reading off")
+        case .direction:
+            Button(action: toggleDirection) {
+                Text(settings.readingRTL ? "RTL" : "LTR").font(.caption.weight(.bold))
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .overlay(Capsule().stroke(Color.white.opacity(0.6)))
+            }
+            .accessibilityLabel(settings.readingRTL ? "Reading direction right to left" : "Reading direction left to right")
+        case .tapZones:
+            Button(action: toggleTapZones) {
+                Image(systemName: settings.tapZones ? "hand.tap.fill" : "hand.tap").font(.title3)
+            }
+            .accessibilityLabel(settings.tapZones ? "Tap edges to turn: on" : "Tap edges to turn: off")
+        case .rotation:
+            Button(action: toggleRotation) {
+                Image(systemName: settings.rotationLock == "auto" ? "lock.rotation.open" : "lock.rotation").font(.title3)
+            }
+            .accessibilityLabel(OrientationLock.label(settings.rotationLock))
+        case .background:
             Button { settings.cycleViewerBackground(); Haptics.tap() } label: { Image(systemName: "circle.lefthalf.filled").font(.title3) }
                 .accessibilityLabel("Background \(settings.viewerBackground)")
-            Button { showInfo = true } label: { Image(systemName: "info.circle").font(.title3) }
-                .accessibilityLabel("Info")
         }
-        .foregroundColor(.white)
-        .padding(.horizontal, 18).padding(.vertical, 12)
-        .padding(.top, 34)
-        .background(LinearGradient(colors: [.black.opacity(0.7), .clear], startPoint: .top, endPoint: .bottom))
+    }
+
+    /// The same control as an entry of the ⋯ menu, with its current state in words.
+    @ViewBuilder
+    func menuItem(_ b: ViewerButton) -> some View {
+        switch b {
+        case .interval:
+            Menu { intervalChoices } label: { Label("Slideshow every \(Int(settings.slideshowInterval)) s", systemImage: b.icon) }
+        case .advance:
+            Button(action: toggleAdvance) { Label(settings.autoAdvance ? "End of media: auto-advance" : "End of media: loop", systemImage: settings.autoAdvance ? "forward.end.alt" : "repeat.1") }
+        case .slideshow:
+            Button { slideshow.toggle() } label: { Label(slideshow ? "Pause slideshow" : "Start slideshow", systemImage: slideshow ? "pause.circle" : "play.circle") }
+        case .aspect:
+            Button { settings.viewerAspect = settings.viewerAspect.next } label: { Label("Image size: \(settings.viewerAspect.label)", systemImage: b.icon) }
+        case .vertical:
+            Button { settings.verticalReading.toggle() } label: { Label(settings.verticalReading ? "Vertical reading: on" : "Vertical reading: off", systemImage: b.icon) }
+        case .direction:
+            Button(action: toggleDirection) { Label(settings.readingRTL ? "Direction: right to left" : "Direction: left to right", systemImage: b.icon) }
+        case .tapZones:
+            Button(action: toggleTapZones) { Label(settings.tapZones ? "Tap edges to turn: on" : "Tap edges to turn: off", systemImage: b.icon) }
+        case .rotation:
+            Button(action: toggleRotation) { Label(OrientationLock.label(settings.rotationLock), systemImage: settings.rotationLock == "auto" ? "lock.rotation.open" : "lock.rotation") }
+        case .background:
+            Button { settings.cycleViewerBackground() } label: { Label("Background: \(settings.viewerBackground)", systemImage: b.icon) }
+        }
+    }
+
+    func toggleAdvance() {
+        settings.autoAdvance.toggle(); Haptics.tap()
+        ToastCenter.shared.show(settings.autoAdvance ? "Auto-advance: videos and GIFs move on when done, pictures after \(Int(settings.slideshowInterval)) s" : "Loop: each post repeats")
+    }
+
+    func toggleDirection() {
+        settings.readingRTL.toggle(); Haptics.tap()
+        ToastCenter.shared.show(settings.readingRTL ? "Right to left: swipe right for the next post" : "Left to right: swipe left for the next post")
+    }
+
+    func toggleTapZones() {
+        settings.tapZones.toggle(); Haptics.tap()
+        ToastCenter.shared.show(settings.tapZones ? "Tap the left or right edge of a picture to turn the page" : "Tapping a picture shows or hides the controls")
+    }
+
+    func toggleRotation() {
+        settings.rotationLock = OrientationLock.toggled(from: settings.rotationLock)
+        OrientationLock.apply(settings.rotationLock)
+        Haptics.tap()
+        ToastCenter.shared.show(OrientationLock.label(settings.rotationLock))
+    }
+
+    /// A tap on a picture: with tap zones on, the outer 30% on each side turns the page
+    /// (mirrored in right-to-left mode); otherwise it shows or hides the controls.
+    func handleTap(_ x: CGFloat) {
+        guard settings.tapZones, !zoomed, x < 0.3 || x > 0.7 else {
+            withAnimation { chrome.toggle() }
+            return
+        }
+        let forward = (x > 0.7) != settings.readingRTL
+        let target = index + (forward ? 1 : -1)
+        guard posts.indices.contains(target) else {
+            ToastCenter.shared.show(forward ? "Last post" : "First post")
+            return
+        }
+        withAnimation { index = target }
     }
 
     var bottomBar: some View {
@@ -267,7 +376,7 @@ struct ViewerView: View {
     }
 
     func prefetchNeighbors() {
-        guard !posts.isEmpty else { return }
+        guard !posts.isEmpty, !settings.savingPower else { return }
         let range = max(0, index - 2)...min(posts.count - 1, index + 2)
         let urls = range.filter { $0 != index }.map { posts[$0] }.filter { $0.mediaType != .video }.map { $0.mediaURL }
         ImagePipeline.shared.prefetch(urls, client: current.flatMap { AdapterRegistry.shared.adapter(for: $0.siteID)?.client })
@@ -283,7 +392,8 @@ struct ViewerPage: View {
     var showControls: Bool = true
     var onFinished: () -> Void = {}
     var onZoom: (Bool) -> Void
-    var onTap: () -> Void
+    /// Horizontal tap position 0…1 (0.5 when unknown).
+    var onTap: (CGFloat) -> Void
     var onSize: (CGSize) -> Void
 
     var body: some View {
@@ -291,7 +401,7 @@ struct ViewerPage: View {
             if !isNear {
                 Color.black
             } else if post.isGallery {
-                GalleryPage(post: post, isActive: isActive, onTap: onTap, onFinished: onFinished)
+                GalleryPage(post: post, isActive: isActive, onTap: { onTap(0.5) }, onFinished: onFinished)
             } else if post.mediaType == .video {
                 MediaVideoView(url: post.mediaURL, isActive: isActive, showControls: showControls, siteID: post.siteID,
                                onFinished: onFinished)
@@ -312,7 +422,7 @@ struct FullImagePage: View {
     var onFinished: () -> Void = {}
     @ObservedObject private var settings = AppSettings.shared
     var onZoom: (Bool) -> Void
-    var onTap: () -> Void
+    var onTap: (CGFloat) -> Void
     var onSize: (CGSize) -> Void
     @StateObject private var model = ImageLoadModel()
 
@@ -350,7 +460,7 @@ struct FullImagePage: View {
     func load(force: Bool) async {
         let client = AdapterRegistry.shared.adapter(for: post.siteID)?.client
         // Prefer lighter: the site's medium-size file when there is one.
-        let url = AppSettings.shared.preferLighter ? (post.sampleURL ?? post.mediaURL) : post.mediaURL
+        let url = AppSettings.shared.viewerPrefersLighter ? (post.sampleURL ?? post.mediaURL) : post.mediaURL
         await model.load(url, maxPixel: 4096, animate: true, client: client, onLoad: { img in
             onSize(CGSize(width: img.size.width * img.scale, height: img.size.height * img.scale))
         }, force: force)

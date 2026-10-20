@@ -54,6 +54,37 @@ struct SettingsView: View {
                     }
                 }
 
+                Section {
+                    Toggle("Right-to-left page order", isOn: $settings.readingRTL)
+                    Toggle("Tap picture edges to turn pages", isOn: $settings.tapZones)
+                    Picker("Rotation in the viewer", selection: $settings.rotationLock) {
+                        Text("Automatic").tag("auto")
+                        Text("Lock portrait").tag("portrait")
+                        Text("Lock landscape").tag("landscape")
+                    }
+                    NavigationLink(destination: ViewerToolbarSettingsView()) {
+                        Text("Viewer toolbar")
+                    }
+                    .accessibilityIdentifier("viewerToolbarSettings")
+                    Toggle("Swipe the site name to switch sites", isOn: $settings.swipeSites)
+                } header: { Text("Reading") } footer: {
+                    Text("Right-to-left suits manga: swipe right for the next post. With edge taps on, tapping the outer third of a picture turns the page and the middle shows the controls.")
+                }
+
+                Section {
+                    Picker("Battery Saver", selection: $settings.batterySaver) {
+                        Text("Off").tag("off")
+                        Text("With Low Power Mode").tag("auto")
+                        Text("Always on").tag("on")
+                    }
+                    .accessibilityIdentifier("batterySaverPicker")
+                    if settings.savingPower {
+                        Label("Battery Saver is on now", systemImage: "battery.25").foregroundColor(.orange)
+                    }
+                } header: { Text("Battery") } footer: {
+                    Text("Battery Saver stops GIF animation in grids, doesn't start videos by itself, shows the lighter file in the viewer when the site has one, and doesn't preload the next posts.")
+                }
+
                 Section("Browsing") {
                     NavigationLink(destination: BlacklistView()) {
                         HStack {
@@ -114,6 +145,23 @@ struct SettingsView: View {
                         Text("Cache size limit: \(settings.cacheLimitMB) MB")
                         Slider(value: intBinding($settings.cacheLimitMB), in: 50...2000, step: 50)
                             .accessibilityLabel("Cache size limit")
+                    }
+                    Picker("Delete cached files not opened in", selection: $settings.cacheExpiryDays) {
+                        Text("Never").tag(0)
+                        Text("7 days").tag(7)
+                        Text("14 days").tag(14)
+                        Text("30 days").tag(30)
+                    }
+                    .accessibilityIdentifier("cacheExpiryPicker")
+                    .onChange(of: settings.cacheExpiryDays) { days in
+                        guard days > 0 else { return }
+                        Task {
+                            let freed = await ImageCache.shared.expire()
+                            await refreshCache()
+                            if freed > 0 {
+                                ToastCenter.shared.show("Removed \(ByteCountFormatter.string(fromByteCount: Int64(freed), countStyle: .file)) not opened in \(days) days", style: .success)
+                            }
+                        }
                     }
                     HStack {
                         Text("Cache used")

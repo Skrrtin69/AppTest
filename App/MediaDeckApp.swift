@@ -30,6 +30,10 @@ struct MediaDeckApp: App {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        OrientationLock.mask
+    }
+
     func application(_ application: UIApplication,
                      handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
@@ -60,6 +64,8 @@ final class BootModel: ObservableObject {
         BrowseModel.shared.ensureTab()
         AppRouter.shared.markReady()
         ready = true
+        // Cached files not opened within the chosen number of days.
+        Task.detached(priority: .background) { await ImageCache.shared.expire() }
         if let e = CoreDataStack.shared.loadError {
             ToastCenter.shared.show("Your saved library couldn't be read and was reset: \(e.localizedDescription)", style: .error)
         }

@@ -80,7 +80,7 @@ struct GridCell: View {
             .aspectRatio(max(0.4, min(ratio, 2.5)), contentMode: .fit)
             .overlay(
                 CachedAsyncImage(url: post.thumbnailURL, maxPixel: 420,
-                                 animate: settings.animateGridGIFs,
+                                 animate: settings.gridGIFsAnimate,
                                  client: AdapterRegistry.shared.adapter(for: post.siteID)?.client,
                                  onLoad: { img in
                                      if img.size.height > 0 { loadedRatio = img.size.width / img.size.height }

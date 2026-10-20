@@ -48,6 +48,7 @@ struct BrowseView: View {
             .navigationTitle(model.current?.siteName ?? "Browse")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) { siteTitle }
                 ToolbarItem(placement: .navigationBarLeading) { siteMenu }
                 ToolbarItem(placement: .navigationBarTrailing) { optionsMenu }
             }
@@ -242,6 +243,44 @@ struct BrowseView: View {
             .padding(.horizontal, 10)
             .padding(.bottom, 6)
         }
+    }
+
+    /// The site name; swipe it sideways to go to the next or previous site.
+    var siteTitle: some View {
+        HStack(spacing: 6) {
+            if settings.swipeSites && registry.enabledConfigs.count > 1 {
+                Image(systemName: "chevron.left").font(.caption2).foregroundColor(.secondary)
+            }
+            Text(model.current?.siteName ?? "Browse").font(.headline).lineLimit(1)
+            if settings.swipeSites && registry.enabledConfigs.count > 1 {
+                Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 6).padding(.horizontal, 10)
+        .contentShape(Rectangle())
+        .gesture(DragGesture(minimumDistance: 20).onEnded { v in
+            guard settings.swipeSites, abs(v.translation.width) > 40, abs(v.translation.width) > abs(v.translation.height) else { return }
+            switchSite(by: v.translation.width < 0 ? 1 : -1)
+        })
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(model.current?.siteName ?? "Browse")
+        .accessibilityHint(settings.swipeSites ? "Swipe left or right to switch sites" : "")
+        .accessibilityIdentifier("siteTitle")
+        .accessibilityAction(named: "Next site") { switchSite(by: 1) }
+        .accessibilityAction(named: "Previous site") { switchSite(by: -1) }
+    }
+
+    /// Moves the current tab to the next (+1) or previous (-1) enabled site, wrapping around.
+    func switchSite(by step: Int) {
+        let sites = registry.enabledConfigs
+        guard let t = model.current, sites.count > 1 else { return }
+        let i = sites.firstIndex { $0.id == t.siteID } ?? (step > 0 ? -1 : 0)
+        let next = sites[(i + step + sites.count) % sites.count]
+        t.siteID = next.id
+        model.objectWillChange.send()
+        t.applySticky()
+        Haptics.tap()
+        Task { await t.search(recordHistory: false) }
     }
 
     var siteMenu: some View {

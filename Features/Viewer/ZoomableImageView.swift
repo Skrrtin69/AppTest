@@ -24,7 +24,8 @@ struct ZoomableImageView: UIViewRepresentable {
     let image: UIImage
     var aspect: ViewerAspect = .fit
     var onZoomChange: ((Bool) -> Void)? = nil
-    var onSingleTap: (() -> Void)? = nil
+    /// Called with the tap's horizontal position, 0 (left edge) … 1 (right edge).
+    var onSingleTap: ((CGFloat) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -49,7 +50,7 @@ struct ZoomableImageView: UIViewRepresentable {
         let double = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.doubleTap(_:)))
         double.numberOfTapsRequired = 2
         sv.addGestureRecognizer(double)
-        let single = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.singleTap))
+        let single = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.singleTap(_:)))
         single.require(toFail: double)
         sv.addGestureRecognizer(single)
         return sv
@@ -142,6 +143,12 @@ struct ZoomableImageView: UIViewRepresentable {
             }
         }
 
-        @objc func singleTap() { parent.onSingleTap?() }
+        @objc func singleTap(_ g: UITapGestureRecognizer) {
+            guard let v = g.view, v.bounds.width > 0 else { parent.onSingleTap?(0.5); return }
+            // Position on screen, not inside the (possibly zoomed) content.
+            let offset = (v as? UIScrollView)?.contentOffset.x ?? 0
+            let x = g.location(in: v).x - offset
+            parent.onSingleTap?(min(1, max(0, x / v.bounds.width)))
+        }
     }
 }

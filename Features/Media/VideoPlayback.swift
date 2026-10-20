@@ -259,10 +259,10 @@ private struct NativeVideoContent: View {
                 .padding(.bottom, 90)
             }
         }
-        .onAppear { if isActive && AppSettings.shared.autoplayVideos { controller.play() } }
+        .onAppear { if isActive && AppSettings.shared.videosAutoplay { controller.play() } }
         .onChange(of: isActive) { active in
             controller.isActivePage = active
-            if active { if AppSettings.shared.autoplayVideos { controller.play() } } else { controller.pause() }
+            if active { if AppSettings.shared.videosAutoplay { controller.play() } } else { controller.pause() }
         }
         .onDisappear { controller.pause() }
         .onChange(of: controller.failed) { f in if f { onFailure() } }

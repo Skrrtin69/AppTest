@@ -120,6 +120,7 @@ actor ImageCache {
     func trim() {
         let limitMB = UserDefaults.standard.object(forKey: AppSettings.K.cacheLimitMB) as? Int ?? 300
         let limit = limitMB * 1024 * 1024
+        expire()
         var files = entries()
         var total = files.reduce(0) { $0 + $1.size }
         guard total > limit else { return }
@@ -131,6 +132,24 @@ actor ImageCache {
             total -= f.size
             if total <= Int(Double(limit) * 0.9) { break }
         }
+    }
+
+    /// Deletes files not opened for the number of days chosen in Settings (reading a file
+    /// refreshes its date). Returns the bytes freed.
+    @discardableResult
+    func expire() -> Int {
+        let days = UserDefaults.standard.object(forKey: AppSettings.K.cacheExpiryDays) as? Int ?? 0
+        guard days > 0 else { return 0 }
+        let cutoff = Date().addingTimeInterval(-Double(days) * 86_400)
+        var freed = 0
+        for f in entries() where f.date < cutoff {
+            try? FileManager.default.removeItem(at: f.url)
+            siteIndex[f.url.lastPathComponent] = nil
+            indexDirty = true
+            freed += f.size
+        }
+        if freed > 0 { saveIndex() }
+        return freed
     }
 
     private func entries() -> [(url: URL, size: Int, date: Date)] {
