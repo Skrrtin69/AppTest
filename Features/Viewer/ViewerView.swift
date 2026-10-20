@@ -39,21 +39,21 @@ struct ViewerView: View {
                                    onOpenPaged: { i in settings.verticalReading = false; index = i },
                                    onTap: { withAnimation { chrome.toggle() } })
                 } else {
-                    TabView(selection: $index) {
-                        ForEach(posts.indices, id: \.self) { i in
+                    // Right-to-left: the pages are laid out in reverse, so the next post is on
+                    // the left. (Mirroring the layout instead would also mirror the zoom views.)
+                    TabView(selection: pagerSelection) {
+                        ForEach(posts.indices, id: \.self) { slot in
+                            let i = postIndex(atSlot: slot)
                             ViewerPage(post: posts[i], isActive: i == index, isNear: abs(i - index) <= 2,
                                        aspect: settings.viewerAspect, showControls: chrome,
                                        onFinished: { if i == index { advance() } },
                                        onZoom: { zoomed = $0 },
                                        onTap: handleTap,
                                        onSize: { sizes[posts[i].key] = $0 })
-                                .environment(\.layoutDirection, .leftToRight)
-                                .tag(i)
+                                .tag(slot)
                         }
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
-                    // Right-to-left: the pager lays pages out mirrored, so the next post is on the left.
-                    .environment(\.layoutDirection, settings.readingRTL ? .rightToLeft : .leftToRight)
                     .id(settings.readingRTL)
                     .simultaneousGesture(verticalDrag)
                 }
@@ -109,6 +109,13 @@ struct ViewerView: View {
             }
         }
         .sheet(item: $collectionBatch) { CollectionPickerSheet(posts: $0.posts) }
+    }
+
+    /// Pager position ↔ post index (reversed in right-to-left mode).
+    func postIndex(atSlot slot: Int) -> Int { settings.readingRTL ? posts.count - 1 - slot : slot }
+
+    var pagerSelection: Binding<Int> {
+        Binding(get: { postIndex(atSlot: index) }, set: { index = postIndex(atSlot: $0) })
     }
 
     /// Next post; after the last one, back to the first.
@@ -215,6 +222,7 @@ struct ViewerView: View {
                 Text("\(Int(settings.slideshowInterval))s").font(.caption.monospacedDigit())
                     .padding(.horizontal, 6).padding(.vertical, 3)
                     .overlay(Capsule().stroke(Color.white.opacity(0.6)))
+                    .fixedSize()
             }
             .accessibilityLabel("Slideshow interval \(Int(settings.slideshowInterval)) seconds")
         case .advance:
@@ -233,6 +241,7 @@ struct ViewerView: View {
                     Text(settings.viewerAspect.label).font(.caption.weight(.bold))
                         .padding(.horizontal, 6).padding(.vertical, 3)
                         .overlay(Capsule().stroke(Color.white.opacity(0.6)))
+                        .fixedSize()
                 }
                 .accessibilityLabel("Image size \(settings.viewerAspect.label)")
             }
@@ -246,6 +255,7 @@ struct ViewerView: View {
                 Text(settings.readingRTL ? "RTL" : "LTR").font(.caption.weight(.bold))
                     .padding(.horizontal, 6).padding(.vertical, 3)
                     .overlay(Capsule().stroke(Color.white.opacity(0.6)))
+                    .fixedSize()
             }
             .accessibilityLabel(settings.readingRTL ? "Reading direction right to left" : "Reading direction left to right")
         case .tapZones:
