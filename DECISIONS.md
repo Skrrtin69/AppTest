@@ -91,3 +91,13 @@ Choices made while building MediaDeck, and why.
 - **Cache expiry** uses the file's modification date, which the cache refreshes on every read, so the setting means "not opened in N days". It runs at launch, when the setting changes, and before each size trim.
 - **Toolbar customization** stores the buttons moved into the menu (`hiddenViewerButtons`). Close, the counter and Info are always shown. A new button defaults to the menu, so the bar never overflows.
 - **Rotation lock** has to refresh every controller in the presentation chain, because the viewer is a SwiftUI full-screen cover over the root. The request is sent after the cover finishes appearing, and closing the viewer goes back to automatic.
+
+## Phase 12
+- **Reverse search engines are user-defined JSON** (`reverse_search.json`), the same idea as adapters. No real service is named or built in: the only bundled engine talks to the demo server. Only JSON APIs are supported, with no reading of web pages meant for browsers. API keys live in the Keychain.
+- **Uploads vs links:** a picture on 127.0.0.1 can't be fetched by an outside service, so it's always uploaded (multipart), whatever the engine's mode.
+- **Copied-link detection** first only asks iOS *whether* the clipboard holds a link (`detectPatterns`), which needs no permission. The text is read only after the user taps Open. Asking right at activation is refused, so the check waits 0.8 s and retries once. If detection stays unavailable, it falls back to the clipboard's "contains a link" flag.
+- **Link → site:** the site's whole base path must be a prefix of the link's path, longest first (so `/a/view/52` isn't sent to the `/a/secure` site). If no path fits, any site on the same host is used, and the open site wins ties. Post IDs come from `id=`, or from the last path part containing a digit.
+- **Muted uploaders are blacklist entries** (`uploader:name`), so there's one list to manage and one filter. No new adapter field: the uploader is an ordinary `metadataPaths` entry.
+- **Viewer pages are transparent** now: each page used to paint black, which hid the white/checker/color backdrop in paged mode.
+- **Toasts:** tap-to-dismiss sits on the message text only. On the whole row it swallowed taps on Undo/Open, so Undo had silently stopped working.
+- **Deploy script** sends the app to the background before killing it, so iOS saves recent settings changes first.

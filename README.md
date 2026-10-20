@@ -187,6 +187,32 @@ This is the login-protected demo area. It is also available in the app under Add
 
 ---
 
+## Adding a reverse search engine
+
+Settings › Tools › Reverse Search › Add Engine (or **Edit all as JSON**). The demo engine looks like this:
+
+```json
+{
+  "id": "demo-reverse",
+  "name": "Demo Reverse Search",
+  "enabled": true,
+  "mode": "upload",
+  "requestURL": "http://127.0.0.1:8765/rs/search?api_key={api_key}",
+  "uploadField": "file",
+  "resultsPath": "results",
+  "similarityPath": "header.similarity",
+  "thumbnailPath": "header.thumbnail",
+  "sourceURLPath": "data.urls[0]",
+  "titlePath": "data.title",
+  "minSimilarity": 0
+}
+```
+
+- `mode`: `"url"` sends the picture's address in place of `{url}`; `"upload"` posts the file in the form field `uploadField`. Pictures that are only on this phone are always uploaded.
+- `{api_key}` is filled from the key you type in the engine's form. Keys are stored in the Keychain, never in the JSON file.
+- The paths work like adapter paths. `resultsPath` is the list of matches; the other paths are read inside each match.
+- Use the engine's own JSON API. MediaDeck doesn't read web pages meant for browsers.
+
 ## Project layout
 
 ```
@@ -221,7 +247,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ---
 
-## What's new (Phases 1–11)
+## What's new (Phases 1–12)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -275,9 +301,17 @@ Failures are explained in plain English with one next step: bad address, unreach
 - **Switch sites by swiping** the site name at the top of Browse (the small arrows show it's swipeable).
 - **Rotation lock** for the viewer, in Settings › Reading and in the viewer's ⋯ menu.
 
+**Workflow (Phase 12)**
+- **Reverse search:** viewer ⋯ › Reverse Search finds where a picture comes from. Engines are described in JSON, just like adapters (Settings › Tools › Reverse Search, or `reverse_search.json` in Files). See "Adding a reverse search engine" below. A match on one of your sites opens right in MediaDeck.
+- **Copied links:** copy a link to a post or search on one of your sites, come back to MediaDeck, and tap **Open** on the message.
+- **Picture-color background:** the viewer's background button now also cycles to a dark version of each picture's main color.
+- **Data Saver** (Settings › Battery and data): pictures open in their smaller version first, with a **Load Full Resolution** button. Choose Off, On mobile data, or Always.
+- **Swipe up on a post** (or ⋯ › Hide Posts Like This) to hide every post with one of its tags, or mute its uploader. Each one can be undone from the message.
+- **Mute uploaders:** the Info panel shows the uploader with a Mute button when the adapter maps one. Add `"uploader": "<path>"` to `metadataPaths`; Auto-Configure does this when it sees a field like `uploader` or `author`. Muted uploaders appear in the Tag Blacklist as `uploader:name`.
+
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 
 ### New adapters.json fields (all optional)
-`alternateMediaURLPaths`, `tagSpaceReplacement`, `autocompletePath`, `autocompleteResultsPath`, `autocompleteNameKey`, `randomTag`, `relatedTagsPath`, `wikiPath`, `tagAliasesPath`, `votePath`, `accountSettingsPath`, `registerURL`, `authUserParamName`, `apiKeyPageURL`, `favoritePath`, `tagCategoryKey`, `galleryPath`, `galleryURLKey`, and the `bearer` login style.
+`alternateMediaURLPaths`, `tagSpaceReplacement`, `autocompletePath`, `autocompleteResultsPath`, `autocompleteNameKey`, `randomTag`, `relatedTagsPath`, `wikiPath`, `tagAliasesPath`, `votePath`, `accountSettingsPath`, `registerURL`, `authUserParamName`, `apiKeyPageURL`, `favoritePath`, `tagCategoryKey`, `galleryPath`, `galleryURLKey`, and the `bearer` login style. `metadataPaths` can also hold an `uploader` entry.
 
 Each is explained in Settings › Sites & Adapters › Field Guide. Features whose field is empty don't appear in the app.

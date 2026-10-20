@@ -67,7 +67,7 @@ Status per item is tracked in commits and in BLOCKERS.md.
 ## Phase 11: Reader Ergonomics & Customization ✅
 - RTL mode; tap-to-turn zones; orientation lock; Battery Saver; cache expiration; customizable viewer toolbar; swipe to switch sites.
 
-## Phase 12: Ultimate Workflow QoL
+## Phase 12: Ultimate Workflow QoL ✅
 - Clipboard link detection.
 - Reverse image search: configurable native and inline-web engines.
 - Dominant-color background; data saver (low-res first); swipe-to-blacklist; mute uploader.
