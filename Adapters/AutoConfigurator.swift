@@ -172,6 +172,12 @@ struct AutoConfigurator {
             }
             return .failure(.needsLogin(status: response.statusCode))
         }
+        // Legacy APIs often answer "Missing authentication" as text or HTML, even with 200 OK.
+        let isJSONBody = (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) is [String: Any]
+            || (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) is [Any]
+        if !isJSONBody, Self.mentionsAuth(data) {
+            return Self.authFailure(input: input, status: response.statusCode, data: data)
+        }
         guard (200...299).contains(response.statusCode) else {
             return .failure(.http(status: response.statusCode,
                                   body: ErrorParser.message(from: data, contentType: response.value(forHTTPHeaderField: "Content-Type")) ?? String(bodyText.prefix(500))))
@@ -193,6 +199,8 @@ struct AutoConfigurator {
             .map { String(decoding: $0, as: UTF8.self) } ?? bodyText
 
         guard let list = Self.findResultArray(json) else {
+            // {"success": false, "message": "Missing authentication"} and the like.
+            if Self.mentionsAuth(data) { return Self.authFailure(input: input, status: response.statusCode, data: data) }
             if let empty = Self.findEmptyList(json) { return .failure(.emptyList(path: empty)) }
             return .failure(.noList(rawJSON: raw))
         }
@@ -444,7 +452,38 @@ extension AutoConfigurator {
     static func isBareAddress(_ t: String) -> Bool {
         let s = t.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.contains("{"), !s.contains("?"), let parts = splitTemplate(s) else { return false }
-        return parts.rest.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
+        let rest = parts.rest.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        // The site itself, or a folder it lives in (example.org/board): no file name at the end.
+        return rest.isEmpty || !(rest.split(separator: "/").last ?? "").contains(".")
+    }
+
+    /// Phrases servers use when a request needs a login or key.
+    static let authPhrases = [
+        "missing authentication", "authentication required", "requires authentication", "authentication failed",
+        "not authenticated", "unauthorized", "unauthorised", "api key required", "api_key required",
+        "missing api key", "missing api_key", "invalid api key", "api key is invalid", "login required",
+        "log in required", "must be logged in", "please log in", "403 forbidden", "access denied",
+    ]
+
+    /// A short answer (an error message, not a whole webpage) that asks for a login.
+    static func mentionsAuth(_ data: Data) -> Bool {
+        var text = String(decoding: data.prefix(20_000), as: UTF8.self)
+        text = text.replacingOccurrences(of: "<(script|style)[^>]*>[\\s\\S]*?</\\1>", with: " ", options: [.regularExpression, .caseInsensitive])
+        text = text.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+        let visible = text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        guard !visible.isEmpty, visible.count <= 3000 else { return false }
+        let lower = visible.lowercased()
+        return authPhrases.contains { lower.contains($0) }
+    }
+
+    static func authFailure(input: AutoConfigInput, status: Int, data: Data) -> Result<AutoConfigProposal, AutoConfigFailure> {
+        if let style = input.authStyle, style != AuthStyle.none {
+            let said = String(decoding: data.prefix(300), as: UTF8.self)
+                .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return .failure(.loginRejected("The server said: \(said) (HTTP \(status))"))
+        }
+        return .failure(.needsLogin(status: status))
     }
 
     /// Analyzes the address; a bare site address is first completed with each common API
@@ -464,6 +503,17 @@ extension AutoConfigurator {
         }
         var origin = input.urlTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
         while origin.hasSuffix("/") { origin.removeLast() }
+        // A folder address (example.org/api) may itself be the API: try it first.
+        if let parts = Self.splitTemplate(origin), !parts.rest.isEmpty {
+            var asIs = input
+            asIs.quickProbe = true
+            asIs.urlTemplate = origin
+            let r = await analyze(asIs)
+            switch r {
+            case .failure(.notJSON), .failure(.http), .failure(.network): break
+            default: return (r, origin)
+            }
+        }
         var httpsMayFail = guessedScheme
         for t in Self.apiTemplates {
             var attempt = input

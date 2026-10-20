@@ -66,6 +66,8 @@ enum MockRoutes {
                          type: "text/html; charset=utf-8")
         case p == "/api/v1/posts":
             return siteA("/posts.json", req: req, origin: origin)
+        case p == "/legacy" || p.hasPrefix("/legacy/"):
+            return MockVault.legacy(String(p.dropFirst("/legacy".count)), req: req, origin: origin)
         case p.hasPrefix("/h/"):
             return MockVault.headerSite(String(p.dropFirst(2)), req: req, origin: origin)
         case p == "/v" || p.hasPrefix("/v/"):

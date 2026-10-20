@@ -60,6 +60,23 @@ enum MockVault {
         }
     }
 
+    /// /legacy: an old-style board. /legacy/index.php?page=dapi… answers plain text
+    /// "Missing authentication…" with 200 OK unless the Vault key and user ID are sent;
+    /// /legacy/ is the Vault login page.
+    static func legacy(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
+        switch sub {
+        case "/index.php" where req.query["page"] == "dapi":
+            guard req.query["api_key"] == apiKey, req.query["user_id"] == userID else {
+                return .text("Missing authentication. Go to the account options page to get an API key and user ID.")
+            }
+            return MockRoutes.siteA("/posts.json", req: req, origin: origin)
+        case "", "/":
+            return respond("/", req: req, origin: origin)
+        default:
+            return .json(["error": "not found"], status: 404)
+        }
+    }
+
     /// /h/posts.json: the same key, but only accepted in an X-Api-Key header.
     static func headerSite(_ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
         guard sub == "/posts.json" else { return .json(["error": "not found"], status: 404) }
