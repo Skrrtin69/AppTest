@@ -10,8 +10,12 @@ enum LinkRouter {
         guard let host = url.host?.lowercased() else { return nil }
         func strip(_ h: String) -> String { h.hasPrefix("www.") ? String(h.dropFirst(4)) : h }
         let configs = AdapterRegistry.shared.enabledConfigs
-        let matching = configs.filter { c in
-            [c.baseURL, c.mediaBaseURL].compactMap { $0.host?.lowercased() }.contains { strip($0) == strip(host) }
+        func hosts(_ c: AdapterConfig) -> [String] { [c.baseURL, c.mediaBaseURL].compactMap { $0.host?.lowercased() }.map(strip) }
+        var matching = configs.filter { hosts($0).contains(strip(host)) }
+        // e.g. a link on "img.example.org" for a site at "example.org" (never for IP addresses).
+        if matching.isEmpty, host.rangeOfCharacter(from: .letters) != nil {
+            let h = strip(host)
+            matching = configs.filter { c in hosts(c).contains { $0.contains(".") && (h.hasSuffix("." + $0) || $0.hasSuffix("." + h)) } }
         }
         // Several sites on one host (the demo server): the one whose whole address path the
         // link starts with, longest first (/a/secure beats /a only for /a/secure/... links).

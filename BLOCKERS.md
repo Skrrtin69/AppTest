@@ -46,3 +46,8 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 
 ## 10. Reverse search against the real service
 - The upload fix was tested on the demo engine, using an address shaped like the real one (`?output_type=2&api_key={api_key}&url={url}`, upload mode): a picture, an MP4, a WebM-only video and a ZIP animation, plus the cleaned error message. It wasn't run against the real service, to avoid sending demo pictures with the owner's key; one search from the app will confirm it.
+
+## 11. Reverse search: opening matches natively and the dead-link banner
+- **Fixed:** the demo server answered every `/a/view/<n>` (and `/b/view/<n>`) source page with 200, even for posts that don't exist. Because of that, the dead-link check thought the deleted demo post (999) was still there and never showed "Source deleted. Showing cached preview." Pages for posts that don't exist now answer 404, the way a deleted page does on a real site.
+- **Routing:** a match link routes to one of your sites when its host matches the site's address or media address. A subdomain of either (for example `img.<site>`) now matches too. Each decision is written to the Debug Console under "Reverse": which site and post was picked, or that the link isn't on your sites and whether its page is gone. A link only opens in the app when the matching site is in your adapter list and switched on. Otherwise you get the preview, with the banner if the page is gone.
+- **Dead-link checks:** a site match whose post can't be fetched (deleted, or no file) shows the banner. For other links, a page that answers 404/410, times out, or whose host no longer exists shows the banner too.

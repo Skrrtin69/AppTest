@@ -483,6 +483,7 @@ enum MatchOpener {
         var dead = false
         if let s = m.source, let site = LinkRouter.site(for: s), let id = LinkRouter.target(of: s).postID,
            let adapter = AdapterRegistry.shared.adapter(for: site.id) {
+            DebugLog.log("Reverse", "match \(s.absoluteString) → \(site.id) post \(id)")
             do { return try await adapter.fetchPost(id: id) }
             catch {
                 DebugLog.log("Reverse", "open \(site.id):\(id) failed: \(error.localizedDescription)")
@@ -490,6 +491,7 @@ enum MatchOpener {
             }
         } else if let s = m.source {
             dead = await isGone(s)
+            DebugLog.log("Reverse", "match \(s.absoluteString): not on your sites, page \(dead ? "gone" : "still there")")
         }
         guard let t = m.thumbnail else { return nil }
         var meta: [String: String] = [:]
@@ -508,7 +510,7 @@ enum MatchOpener {
             let (_, resp) = try await URLSession.shared.data(for: r)
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 200
             return code == 404 || code == 410
-        } catch let e as URLError where e.code == .timedOut || e.code == .cannotFindHost {
+        } catch let e as URLError where [.timedOut, .cannotFindHost, .dnsLookupFailed].contains(e.code) {
             return true
         } catch {
             return false

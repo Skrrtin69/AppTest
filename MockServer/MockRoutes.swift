@@ -140,7 +140,11 @@ enum MockRoutes {
                          type: "text/html; charset=utf-8")
         }
         if sub.hasPrefix("/view/") {
-            return .text("<html><body style='font:20px -apple-system;padding:40px'><h1>Demo post \(sub.dropFirst(6))</h1><p>This is the demo server's \"source\" page.</p></body></html>",
+            // A post that doesn't exist (e.g. 999) acts like a deleted page.
+            guard let n = Int(sub.dropFirst(6)), (1...MockCatalog.count).contains(n) else {
+                return .text("<html><body><h1>This post was deleted.</h1></body></html>", status: 404, type: "text/html; charset=utf-8")
+            }
+            return .text("<html><body style='font:20px -apple-system;padding:40px'><h1>Demo post \(n)</h1><p>This is the demo server's \"source\" page.</p></body></html>",
                          type: "text/html; charset=utf-8")
         }
         return .json(["error": "not found"], status: 404)
@@ -217,6 +221,9 @@ enum MockRoutes {
             return .json(["data": ["item": ["post": siteBPost(MockCatalog.items[n - 1], origin: origin)]]])
         }
         if sub.hasPrefix("/view/") {
+            guard let n = Int(sub.dropFirst(6)), (1...MockCatalog.count).contains(n) else {
+                return .text("<html><body><h1>This item was deleted.</h1></body></html>", status: 404, type: "text/html; charset=utf-8")
+            }
             return .text("<html><body style='font:20px -apple-system;padding:40px'><h1>Demo B item \(sub.dropFirst(6))</h1></body></html>",
                          type: "text/html; charset=utf-8")
         }
