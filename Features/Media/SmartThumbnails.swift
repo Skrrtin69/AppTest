@@ -52,7 +52,9 @@ enum SmartCrop {
         if let p = known, p.count == 2 { return CGPoint(x: p[0], y: p[1]) }
         let vision = Task.detached(priority: .utility) { () -> CGPoint? in
             let request = VNGenerateAttentionBasedSaliencyImageRequest()
-            request.preferBackgroundProcessing = true
+            // Low-priority (preferBackgroundProcessing) requests never finished on the test
+            // device while the app was in use, so the request runs normally on a utility task.
+            request.preferBackgroundProcessing = false
             let handler = VNImageRequestHandler(cgImage: cg, options: [:])
             do { try handler.perform([request]) } catch {
                 NSLog("[SmartCrop] Vision failed: %@", error.localizedDescription)
@@ -69,6 +71,7 @@ enum SmartCrop {
         let result = await vision.value
         timeout.cancel()
         guard let point = result else { return CGPoint(x: 0.5, y: 0.5) }
+        NSLog("[SmartCrop] focus %.2f,%.2f", point.x, point.y)
         lock.lock(); focusPoints[key] = [Double(point.x), Double(point.y)]; lock.unlock()
         scheduleSave()
         return point
