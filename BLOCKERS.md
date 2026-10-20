@@ -32,3 +32,7 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 - **iPad Split View:** there's no iPad to test on. The settings and layout rules are in place.
 - **Random Favorite widget:** adding a widget changes the Home Screen layout, so the tester didn't do it. The app writes the widget's pictures and list (checked on the device: 4 thumbnails + feed.json); please add the widget once to see it.
 - **Play alongside other audio:** whether two sounds mix can't be heard by automation.
+
+## 7. Phase 16: separate picture on an external display
+- Giving a connected TV its own scene requires the app delegate to supply scene configurations. In this SwiftUI app, that turned the phone's own window black on launch (two approaches tried, both reverted).
+- iOS mirrors the phone to an external screen instead. A future attempt would need a UIKit scene manifest for the app window.

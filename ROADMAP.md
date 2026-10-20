@@ -81,7 +81,7 @@ Status per item is tracked in commits and in BLOCKERS.md.
 ## Phase 15: Advanced Data, Layouts, and Workflows ✅
 - iCloud sync; masonry grid; Read Later queue; visual query builder; download swipe actions; tag translation.
 
-## Phase 16: Advanced Frameworks & Customization
+## Phase 16: Advanced Frameworks & Customization ✅ (external display: see BLOCKERS)
 - Vision smart thumbnails; smart collections; global autocomplete; gesture remapping; media editor (trim/crop); external display.
 
 ## Phase 17: Machine Learning, Background Tasks, and Advanced Reading

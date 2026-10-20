@@ -247,7 +247,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ---
 
-## What's new (Phases 1–15)
+## What's new (Phases 1–16)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -332,6 +332,13 @@ Failures are explained in plain English with one next step: bad address, unreach
 - **Downloads:** swipe a row right for Pause / Resume / Retry, or left to Cancel.
 - **Tag translations:** hold a tag › Translate Tag…, or Settings › Browsing › Tag Translations. Your name is shown on the tag, and typing it in a search sends the site's tag. They're stored in `tag_translations.json` as `{"site tag": "your name"}`.
 - No iCloud sync, as requested: use Settings › Data › Back Up Everything (backups also include Read Later and tag translations).
+
+**Smarter and more personal (Phase 16)**
+- **Smart square thumbnails** (Settings › Appearance, on by default): square thumbnails are cropped around the most eye-catching part of the picture instead of always the middle. The analysis runs on the phone in the background, and each result is remembered.
+- **Smart collections** (Favorites › Collections › New Smart Collection): rules such as has all / any / none of some tags, from certain sites, of a type, by an uploader, or added recently. Matching favorites appear by themselves.
+- **Suggestions everywhere:** while typing, suggestions come from the site (every site in an All Sites tab) plus tags already on your phone: favorites, Read Later, open results, history and your translations.
+- **Gestures** (Settings › Reading): choose what a double tap (Zoom, Favorite, Info, Next post, Read Later, Nothing), a swipe up (Hide posts like this, Info, Favorite, Download, Read Later, Nothing) and a swipe down (Close / Nothing) do.
+- **Edit Picture** (viewer ⋯): rotate, flip, crop to 1:1 / 4:5 / 16:9, plus brightness, contrast and saturation. Share the result, or save it to Photos or Files. The original is never changed.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

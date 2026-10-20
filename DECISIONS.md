@@ -124,3 +124,10 @@ Choices made while building MediaDeck, and why.
 - **Tag translations are display-only plus a reverse lookup on search.** Adapters, the blacklist and saved data always keep the site's real tags; only chips show your name, and search words are mapped back before the request.
 - **Buttons inside a grid's scroll view didn't respond** (Read Later's Clear Viewed), so headers with buttons sit above the scroll view.
 - **The search builder edits the current tab** (query, sort, rating), and the search bar refreshes when the builder closes.
+
+## Phase 16
+- **Vision runs on its own serial utility queue** (with `preferBackgroundProcessing`), not in a Swift `Task.detached`. On the device, detached Vision tasks never got a thread while the grid loaded, so thumbnails stayed blank. The plain thumbnail shows at once and the smart crop replaces it. Focus points are cached in memory and in `Caches/SmartCropFocus.json`, and animated GIFs are never cropped.
+- **Smart collections are rules stored in UserDefaults** and evaluated against favorites each time, so they never go stale. They're included in backups.
+- **Local suggestions** are weighted: favorites ×3, Read Later and history ×2, open results ×1, and translated names ×5 (suggesting the site's tag).
+- **Gesture remapping:** double tap goes through the zoom view's own recognizer, so single taps still wait for it as before. Swipe up/down reuse the viewer's drag gesture.
+- **External display was removed.** A separate scene for a TV needs `application(_:configurationForConnecting:)`, and implementing it (returning either the session's configuration or a fresh default for the app window) left the app's own SwiftUI window black on launch. Without it, iOS simply mirrors the phone to the TV.
