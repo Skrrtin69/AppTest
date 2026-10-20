@@ -62,3 +62,13 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
   3. After logging in (demo/demo), the account page gave one key plus user ID 4821, with the parameter names. The session code was ignored. The form filled in and the re-analysis succeeded ("searching worked with your login").
   4. On Developer settings, the picker showed "Found next to 'API Key'" and "Found next to 'Secret'". Picking the first filled the form and analyzed again.
 - **Untested:** the "no key on this page" message; the login form has no key, but that message was never seen on screen. Real sites lay out account pages in many ways. If a key isn't found, the page probably labels it with a word not in the list ("API Key", "API Token", "Secret", "Credentials", "Access Token/Key"). Type the key in by hand, or report the label so it can be added.
+
+## 14. Connection wizard
+- **Fixed:** the first device run of `127.0.0.1:8765` changed it to `https://127.0.0.1:8765` and hung on "Analyzing". The demo server only speaks http, so each of the seven paths waited for the full timeout plus retries. Local addresses now use http, and probes take at most 5 seconds with no retries. On the phone, `127.0.0.1:8765` resolved to `http://127.0.0.1:8765/api/v1/posts?tags={tags}&page={page}` in about a second.
+- **Not yet run on the phone:**
+  - the background auth tester (Demo Vault needs key + user ID, so the 4th way; Demo Header Key accepts only X-Api-Key, so the 3rd);
+  - the "Key rejected" hint;
+  - the manual fallback after Find Key on Page finds nothing;
+  - the https→http fallback for a non-local site.
+
+  A successful test saves an adapter, so running it adds demo adapters to the list.

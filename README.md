@@ -238,7 +238,31 @@ See `DECISIONS.md` for design choices and `BLOCKERS.md` for open issues.
 
 Settings → Sites & Adapters → **Auto-configure from URL** (or the **Auto-configure from URL** button inside the adapter form, which fills that form in place).
 
-**Just the site's address works too.** If you paste only a site's address (for example `https://example.org`, with no path), Auto-Configure tries three common API address shapes in order: `/index.php?page=dapi&s=post&q=index&json=1&tags={tags}&pid={page}`, `/posts.json?tags={tags}&page={page}` and `/api/v1/posts?tags={tags}&page={page}`. It uses the first one that answers with JSON and puts that address in the field. A webpage or an error (such as 404) moves on to the next shape. If none works, you see: "Couldn't automatically resolve the API address. Please paste the full JSON API URL manually."
+**Just the site's address works too, even without `https://`.**
+- **Adding the scheme:** type `example.org` and Auto-Configure adds `https://` for you. Local addresses (`127.0.0.1…`, `192.168.…`, `10.…`, `localhost`) get `http://`.
+- **Finding the API:** with only a site's address, it tries seven common API shapes in order:
+  - `/index.php?page=dapi&s=post&q=index&json=1&tags={tags}&pid={page}`
+  - the same without `json=1`
+  - `/posts.json?tags={tags}&page={page}`
+  - `/api/v1/posts?tags={tags}&page={page}`
+  - `/post.json?…`
+  - `/post/index.json?…`
+  - `/api/posts?…`
+
+  It uses the first that answers with JSON (an XML answer is skipped, since adapters read JSON).
+- **Fast probes:** each probe gets 5 seconds and no retries. When `https://` was only assumed and can't connect, the same path is tried over `http://` before moving on.
+- **If nothing answers:** the field is filled with `…/posts.json?tags={tags}&page={page}`, and you see "Couldn't auto-resolve. Please check this default address."
+
+
+**Logging in: Test Connection.** There is no login style to choose. Open **Login (optional)**, paste your API key (and a user ID if the site gave you one), and tap **Test Connection**. It also runs when you tap Analyze with a key filled in. MediaDeck quietly tries, in order:
+1. `api_key=` in the address
+2. `Authorization: Bearer <key>`
+3. an `X-Api-Key` header
+4. `api_key=` plus `user_id=` in the address
+
+The first one the site accepts is kept: the adapter is saved, the wizard closes, and a message says how it connected. If the page reader saw different parameter names (for example `login=`), those are used instead. If every way is refused, you see: "Key rejected. Check if it requires a User ID alongside it, or if the key has expired." For sites with a username and password, switch on **The site uses a username and password**.
+
+**If Find Key on Page finds nothing:** the web page closes and the key fields open with "We couldn't find your key automatically. You can find it in your Account Settings or Profile page under 'API' or 'Integrations'." **Take me to the settings page** reopens the site where you left it, so you can highlight the key and use Copy Selection.
 
 **Sites that need a login: let the app find your key.** When Analyze gets an authorization error, the address is kept and a **Requires Authentication** banner appears. The API key fields open below it (key in the address, named `api_key` until the site shows otherwise).
 1. Tap **Log in to find my key**. The site opens in a page styled like the app, and you log in there yourself.
@@ -248,7 +272,7 @@ Settings → Sites & Adapters → **Auto-configure from URL** (or the **Auto-con
    - `api_key=…` / `user_id=…` in example addresses, which also gives the parameter names;
    - a text box labeled as the key.
    A user ID is found the same way.
-4. With one key, the form is filled in, the page closes with a confirmation, and Analyze runs again on its own. With several, a picker shows each one with where it was found (for example "Found next to 'API Key'"). If none is found, you're told which page to open.
+4. With one key, the form is filled in, the page closes with a confirmation, and Test Connection runs on its own. With several, a picker shows each one with where it was found (for example "Found next to 'API Key'"). If none is found, you're told which page to open.
 
 Try it with **Try a demo address › Demo Vault (log in to find the key)**: log in with demo / demo. The account page has a single key. Its **Developer settings** page has two, so you can try the picker.
 

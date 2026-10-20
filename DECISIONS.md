@@ -170,3 +170,9 @@ Choices made while building MediaDeck, and why.
 - **Values the reader skips:** hidden inputs are skipped (they're usually form tokens), and so are password boxes (the user's own password must never be read). A value counts as a key only if it has 8+ characters with a digit, or 20+ characters.
 - **No automatic login:** the user logs in on the site themselves; the app never fills in or reads their password.
 - **Re-analyze:** after a key is picked, Analyze runs again on its own so the adapter is ready to save. Nothing is saved without tapping Save.
+
+## Connection wizard
+- **No login style picker:** Test Connection tries the four usual ways of sending a key (address, Bearer, X-Api-Key, key + user ID) in a fixed order and keeps the first that the site accepts. A success saves the adapter right away, as asked. Username and password logins stay available behind a switch, because some sites (the demo Secure site among them) only accept those.
+- **Probe speed:** probing uses a separate network client with a 5-second timeout and no retries. Without this, a single https attempt against a plain-http server waited for the normal timeout and retried three times, which the user saw as a hang on "Analyzing". Adapters keep their own timeout and retries.
+- **Scheme guessing:** https is assumed for typed addresses, except local ones (127., 192.168., 10., localhost), which use http. Only a guessed https falls back to http; a typed `https://` is never downgraded.
+- **Default address:** when nothing resolves, the field gets `/posts.json?tags={tags}&page={page}`, the most common shape, for the user to check.
