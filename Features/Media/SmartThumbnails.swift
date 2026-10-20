@@ -10,6 +10,7 @@ enum SmartCrop {
     private static let lock = NSLock()
     private static var focusPoints: [String: [Double]] = load()
     private static var saveWork: DispatchWorkItem?
+    private static let visionQueue = DispatchQueue(label: "smartcrop.vision", qos: .utility)
 
     private static var file: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("SmartCropFocus.json")
@@ -33,7 +34,7 @@ enum SmartCrop {
     /// A square crop of `image` around its most eye-catching area.
     static func square(_ image: UIImage, key: String) async -> UIImage {
         if let c = images.object(forKey: key as NSString) { return c }
-        guard image.images == nil, let cg = image.cgImage else { NSLog("[SmartCrop] no CGImage"); return image }
+        guard image.images == nil, let cg = image.cgImage else { return image }
         let focus = await focusPoint(cg, key: key)
         let w = CGFloat(cg.width), h = CGFloat(cg.height)
         let side = min(w, h)
@@ -50,30 +51,29 @@ enum SmartCrop {
     static func focusPoint(_ cg: CGImage, key: String) async -> CGPoint {
         lock.lock(); let known = focusPoints[key]; lock.unlock()
         if let p = known, p.count == 2 { return CGPoint(x: p[0], y: p[1]) }
-        NSLog("[SmartCrop] start %@", key)
-        let vision = Task.detached(priority: .utility) { () -> CGPoint? in
-            NSLog("[SmartCrop] vision begin %dx%d", cg.width, cg.height)
-            let request = VNGenerateAttentionBasedSaliencyImageRequest()
-            // Low-priority (preferBackgroundProcessing) requests never finished on the test
-            // device while the app was in use, so the request runs normally on a utility task.
-            request.preferBackgroundProcessing = false
-            let handler = VNImageRequestHandler(cgImage: cg, options: [:])
-            do { try handler.perform([request]); NSLog("[SmartCrop] vision done") } catch {
-                NSLog("[SmartCrop] Vision failed: %@", error.localizedDescription)
-                return nil
+        // Vision runs on its own serial queue, outside Swift's shared task pool (a detached
+        // task there never got a thread while the grid was loading).
+        let result: CGPoint? = await withCheckedContinuation { cont in
+            visionQueue.async {
+                let request = VNGenerateAttentionBasedSaliencyImageRequest()
+                request.preferBackgroundProcessing = true
+                let handler = VNImageRequestHandler(cgImage: cg, options: [:])
+                do { try handler.perform([request]) } catch {
+                    NSLog("[SmartCrop] Vision failed: %@", error.localizedDescription)
+                    cont.resume(returning: nil)
+                    return
+                }
+                guard let obs = request.results?.first as? VNSaliencyImageObservation,
+                      let boxes = obs.salientObjects, !boxes.isEmpty else {
+                    cont.resume(returning: CGPoint(x: 0.5, y: 0.5))
+                    return
+                }
+                // Union of the salient areas; Vision's origin is bottom-left.
+                let u = boxes.map(\.boundingBox).reduce(boxes[0].boundingBox) { $0.union($1) }
+                cont.resume(returning: CGPoint(x: u.midX, y: 1 - u.midY))
             }
-            guard let obs = request.results?.first as? VNSaliencyImageObservation,
-                  let boxes = obs.salientObjects, !boxes.isEmpty else { return CGPoint(x: 0.5, y: 0.5) }
-            // Union of the salient areas; Vision's origin is bottom-left.
-            let u = boxes.map(\.boundingBox).reduce(boxes[0].boundingBox) { $0.union($1) }
-            return CGPoint(x: u.midX, y: 1 - u.midY)
         }
-        // Never keep a thumbnail waiting: after 4 s the middle is used (and not remembered).
-        let timeout = Task { try? await Task.sleep(nanoseconds: 4_000_000_000); vision.cancel() }
-        let result = await vision.value
-        timeout.cancel()
         guard let point = result else { return CGPoint(x: 0.5, y: 0.5) }
-        NSLog("[SmartCrop] focus %.2f,%.2f", point.x, point.y)
         lock.lock(); focusPoints[key] = [Double(point.x), Double(point.y)]; lock.unlock()
         scheduleSave()
         return point
