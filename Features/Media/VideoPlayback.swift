@@ -118,6 +118,8 @@ struct MediaVideoView: View {
     var showControls: Bool = true
     var siteID: String? = nil
     var onFinished: (() -> Void)? = nil
+    /// A single tap on the video: shows or hides the viewer's controls (never pauses).
+    var onTap: (() -> Void)? = nil
     @ObservedObject private var settings = AppSettings.shared
 
     @State private var path: PlaybackPath?
@@ -137,7 +139,7 @@ struct MediaVideoView: View {
             case .none:
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             case .some(.native):
-                NativeVideoView(url: nativeURL ?? url, isActive: isActive, showControls: showControls, onFinished: onFinished) {
+                NativeVideoView(url: nativeURL ?? url, isActive: isActive, showControls: showControls, onFinished: onFinished, onTap: onTap) {
                     Task {
                         await PlaybackRouter.shared.markFailed(url)
                         path = .web
@@ -145,7 +147,7 @@ struct MediaVideoView: View {
                 }
             case .some(.vlc):
                 VLCVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
-                             loop: !settings.autoAdvance, showControls: showControls, onFinished: onFinished,
+                             loop: !settings.autoAdvance, showControls: showControls, onFinished: onFinished, onTap: onTap,
                              onReady: { webReady = true; webError = nil },
                              onError: { webError = $0 }, onStatus: { engine = $0 })
                     .id(webAttempt)
@@ -241,6 +243,15 @@ extension MediaVideoView {
         .background(RoundedRectangle(cornerRadius: 14).fill(Color.black.opacity(0.75)))
         .padding(24)
     }
+}
+
+/// Where video controls sit: above the viewer's bottom toolbar and the home indicator.
+enum ScreenInsets {
+    static var safeBottom: CGFloat {
+        UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets.bottom ?? 0
+    }
+    /// The viewer's bottom toolbar is about 76 pt tall above the safe area; 14 pt gap.
+    static var videoControlsBottom: CGFloat { safeBottom + 90 }
 }
 
 // MARK: - Native (AVPlayer + AVPlayerLayer)
@@ -375,6 +386,7 @@ struct NativeVideoView: View {
     let isActive: Bool
     var showControls: Bool = true
     var onFinished: (() -> Void)? = nil
+    var onTap: (() -> Void)? = nil
     var onFailure: () -> Void
 
     @StateObject private var holder = ControllerHolder()
@@ -386,7 +398,7 @@ struct NativeVideoView: View {
     var body: some View {
         ZStack {
             if let c = holder.controller {
-                NativeVideoContent(controller: c, isActive: isActive, showControls: showControls, onFailure: onFailure)
+                NativeVideoContent(controller: c, isActive: isActive, showControls: showControls, onTap: onTap, onFailure: onFailure)
             } else {
                 Color.black
             }
@@ -415,15 +427,17 @@ private struct NativeVideoContent: View {
     @ObservedObject private var settings = AppSettings.shared
     let isActive: Bool
     let showControls: Bool
+    var onTap: (() -> Void)? = nil
     let onFailure: () -> Void
 
     var body: some View {
         ZStack(alignment: .bottom) {
             PlayerLayerView(player: controller.player, onLayer: { controller.attach(layer: $0) })
                 .contentShape(Rectangle())
-                .onTapGesture { controller.toggle() }
+                // A tap shows or hides the controls; pausing is the Pause button's job.
+                .onTapGesture { onTap?() }
                 .accessibilityIdentifier("videoSurface")
-                .accessibilityLabel(controller.isPlaying ? "Video playing, tap to pause" : "Video paused, tap to play")
+                .accessibilityLabel(controller.isPlaying ? "Video playing, tap for controls" : "Video paused, tap for controls")
             if !controller.isPlaying {
                 Image(systemName: "play.circle.fill").font(.system(size: 64)).foregroundColor(.white.opacity(0.85))
                     .allowsHitTesting(false)
@@ -462,7 +476,7 @@ private struct NativeVideoContent: View {
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 .background(Color.black.opacity(0.45))
-                .padding(.bottom, 90)
+                .padding(.bottom, ScreenInsets.videoControlsBottom)
             }
         }
         .onAppear { if isActive && AppSettings.shared.videosAutoplay { controller.play() } }

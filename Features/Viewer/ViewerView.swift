@@ -548,7 +548,7 @@ struct ViewerPage: View {
                 }
             } else if post.mediaType == .video {
                 MediaVideoView(url: post.mediaURL, isActive: isActive, showControls: showControls, siteID: post.siteID,
-                               onFinished: onFinished)
+                               onFinished: onFinished, onTap: { onTap(0.5) })
             } else {
                 FullImagePage(post: post, aspect: aspect, isActive: isActive, onFinished: onFinished,
                               onZoom: onZoom, onTap: onTap, onDoubleTap: onDoubleTap, onSize: onSize)

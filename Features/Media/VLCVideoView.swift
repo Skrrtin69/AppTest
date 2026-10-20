@@ -15,11 +15,14 @@ struct VLCVideoView: View {
     var loop: Bool = true
     var showControls: Bool = true
     var onFinished: (() -> Void)? = nil
+    /// A single tap shows or hides the viewer's controls; it never pauses.
+    var onTap: (() -> Void)? = nil
     var onReady: (() -> Void)? = nil
     var onError: ((String) -> Void)? = nil
     var onStatus: ((String) -> Void)? = nil
 
     @StateObject private var model = VLCPlayerModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     static var available: Bool {
         #if canImport(MobileVLCKit)
@@ -33,7 +36,13 @@ struct VLCVideoView: View {
         ZStack(alignment: .bottom) {
             VLCSurface(model: model, url: Self.sourceURL(url, siteID: siteID))
                 .contentShape(Rectangle())
-                .onTapGesture { model.togglePause() }
+                .onTapGesture { onTap?() }
+                .accessibilityLabel(model.isPlaying ? "Video playing, tap for controls" : "Video paused, tap for controls")
+            if model.started, !model.isPlaying {
+                Image(systemName: "play.circle.fill").font(.system(size: 64)).foregroundColor(.white.opacity(0.85))
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
             if showControls, model.duration > 0 {
                 HStack(spacing: 10) {
                     Button { model.togglePause() } label: {
@@ -48,10 +57,25 @@ struct VLCVideoView: View {
                 .tint(.white)
                 .padding(.horizontal, 16).padding(.vertical, 10)
                 .background(Capsule().fill(Color.black.opacity(0.5)))
-                .padding(.horizontal, 16).padding(.bottom, 96)
+                .padding(.horizontal, 16).padding(.bottom, ScreenInsets.videoControlsBottom)
             }
         }
         .onAppear { sync() }
+        // iOS closes the local server's connections while the app is away, so VLC's stream
+        // would be dead on return: stop it in the background and reopen it at the same time.
+        .onChange(of: scenePhase) { phase in
+            switch phase {
+            case .inactive: model.pauseForInactive()
+            case .background: model.suspend()
+            case .active:
+                Task {
+                    await MockServer.shared.ensureReady()
+                    // Rebuilt: the server may be on a different port after the app was away.
+                    model.resume(from: Self.sourceURL(url, siteID: siteID))
+                }
+            @unknown default: break
+            }
+        }
         .onChange(of: isActive) { _ in sync() }
         .onChange(of: speed) { _ in sync() }
         .onChange(of: loop) { _ in sync() }
@@ -97,6 +121,8 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     @Published var duration: Double = 0
     @Published var isPlaying = false
     @Published var timeText = ""
+    /// Playback has begun at least once (the paused icon only shows after that).
+    @Published var started = false
 
     var loop = true
     var onFinished: (() -> Void)?
@@ -107,6 +133,11 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     private var active = false
     private var loaded = false
     private var opened: Date?
+    /// Background handling: where to pick up, whether it was playing, and whether the
+    /// stream was closed.
+    private var resumeAtMs: Int32 = 0
+    private var wasPlaying = false
+    private var suspended = false
 
     #if canImport(MobileVLCKit)
     private let player = VLCMediaPlayer()
@@ -150,7 +181,44 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         player.delegate = nil
         player.stop()
     }
+
+    /// Control Center, a notification, the app switcher: pause, remember to carry on.
+    func pauseForInactive() {
+        guard loaded, !suspended, player.isPlaying else { return }
+        wasPlaying = true
+        player.pause()
+    }
+
+    /// The app went to the background: note the time and close the stream.
+    func suspend() {
+        guard loaded, !suspended else { return }
+        if player.isPlaying { wasPlaying = true }
+        resumeAtMs = max(0, player.time.intValue)
+        suspended = true
+        player.stop()
+        DebugLog.log("VLC", "Background: stopped at \(resumeAtMs) ms (was \(wasPlaying ? "playing" : "paused"))")
+    }
+
+    /// Back in the foreground: reopen the stream at the saved time (a new connection to the
+    /// local server), and play again if it was playing.
+    func resume(from url: URL) {
+        guard loaded else { return }
+        defer { wasPlaying = false }
+        guard suspended else {
+            if wasPlaying, active { player.play() }
+            return
+        }
+        suspended = false
+        let media = VLCMedia(url: url)
+        media.addOptions(["network-caching": 1000, "start-time": Double(resumeAtMs) / 1000])
+        player.media = media
+        if wasPlaying, active { player.play() }
+        DebugLog.log("VLC", "Foreground: reopened at \(resumeAtMs) ms\(wasPlaying && active ? ", playing" : ", paused")")
+    }
     #else
+    func pauseForInactive() {}
+    func suspend() {}
+    func resume(from url: URL) {}
     func load(_ url: URL, into view: UIView) { onError?("VLCKit isn't included in this build.") }
     func setActive(_ on: Bool) {}
     func togglePause() {}
@@ -160,6 +228,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     #endif
 
     fileprivate func markReady() {
+        started = true
         guard !readySent else { return }
         readySent = true
         let ms = opened.map { Int(Date().timeIntervalSince($0) * 1000) } ?? 0
@@ -179,6 +248,8 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
             case .playing:
                 markReady()
             case .error:
+                // Errors from the stream being closed for the background don't count.
+                guard !suspended else { return }
                 DebugLog.log("VLC", "Playback error")
                 onError?("VLC couldn't play this video.")
             case .ended:
