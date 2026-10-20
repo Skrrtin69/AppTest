@@ -30,3 +30,5 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 ## 6. Not verifiable by automation (Phases 12–13)
 - **Wi-Fi-only media and "Data Saver: On mobile data":** the test phone is on Wi-Fi. "Data Saver: Always" was tested and uses the same code path.
 - **iPad Split View:** there's no iPad to test on. The settings and layout rules are in place.
+- **Random Favorite widget:** adding a widget changes the Home Screen layout, so the tester didn't do it. The app writes the widget's pictures and list (checked on the device: 4 thumbnails + feed.json); please add the widget once to see it.
+- **Play alongside other audio:** whether two sounds mix can't be heard by automation.

@@ -247,7 +247,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ---
 
-## What's new (Phases 1–13)
+## What's new (Phases 1–14)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -316,6 +316,14 @@ Failures are explained in plain English with one next step: bad address, unreach
 - **Full-size media only on Wi-Fi** (Settings › Battery and data): on mobile data, only thumbnails load until you tap **Load on Mobile Data** or **Play on Mobile Data**.
 - **Back Up Everything / Restore from Backup** (Settings › Data): one JSON file with settings, adapters, favorites, collections, history, saved searches, themes and reverse search engines. Passwords, API keys and the passcode are never included. Restoring only adds what's missing.
 - **iPad:** works in Split View and Slide Over; the grid adds columns only when the window is wide.
+
+**iOS integration (Phase 14)**
+- **Share to MediaDeck:** in any app's share sheet, tap More › MediaDeck once to add it to the row. A shared link to one of your sites opens that post or search. A shared picture opens with **Find Where It Comes From** (reverse search).
+- **Picture in Picture:** the PiP button in the video controls, or just go to the Home Screen while a video plays. The floating video keeps playing after you close the viewer.
+- **Random Favorite widget:** long-press the Home Screen › + › MediaDeck. It shows one of your favorites and changes every hour; tapping it opens Favorites.
+- **Play alongside other audio** (Settings › Appearance): video sound mixes with music or podcasts instead of stopping them.
+- **Photo details (EXIF):** the Info panel shows camera, lens, shutter, aperture, ISO, date, software and color profile when the file has them, and warns if it contains the place where it was taken.
+- **Back to top:** a floating ↑ button appears after scrolling a long way down a grid.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

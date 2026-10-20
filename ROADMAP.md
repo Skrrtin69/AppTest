@@ -75,7 +75,7 @@ Status per item is tracked in commits and in BLOCKERS.md.
 ## Phase 13: Premium Privacy, Management, and Shortcuts ✅
 - Decoy vault; storage breakdown chart; long-press tag actions; Wi-Fi-only media; database backup/restore; iPad split screen.
 
-## Phase 14: iOS System Integration
+## Phase 14: iOS System Integration ✅
 - Share Extension; Picture-in-Picture; Random Favorite widget; audio mixing; EXIF viewer; floating scroll-to-top button.
 
 ## Phase 15: Advanced Data, Layouts, and Workflows

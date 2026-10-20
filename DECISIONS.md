@@ -109,3 +109,11 @@ Choices made while building MediaDeck, and why.
 - **Charts** is iOS 16-only, so it's weak-linked (`-weak_framework Charts`) and iOS 15 gets simple drawn bars.
 - **Tag actions use `Menu` with a primary action**, not `.contextMenu`. Inside a List row, SwiftUI gives the whole row the first context menu, so every tag showed the first tag's actions.
 - **iPad multitasking:** `UIRequiresFullScreen = false`, plus columns based on the horizontal size class, so a narrow Split View pane gets the phone layout.
+
+## Phase 14
+- **Two app extensions** (widget, share) share files with the app through the app group `group.com.skrrtin69.mediadeck`. The build script fakesigns each extension with its own entitlements before the app. Nothing is shared but files: an `Inbox/` folder from the share sheet, and a `Widget/` folder with up to 24 favorite thumbnails plus `feed.json`. The widget never touches the network or the database.
+- **The share extension opens MediaDeck** by calling the application object's `openURL:options:completionHandler:` through the responder chain, because extensions can't use `UIApplication.shared`. If that ever stops working, items wait in the inbox until the next launch.
+- **Shared pictures are presented from the topmost screen, retrying while the share sheet is still closing.** A SwiftUI sheet on the root silently fails while the viewer covers the screen.
+- **Picture in Picture** reuses the existing AVPlayerLayer. While PiP runs, the controller is kept in `VideoController.floating`, so closing the viewer doesn't stop the video. It's torn down when PiP ends.
+- **The scroll-to-top button** watches a lazy marker at the top of the grid (it disappears once scrolled away). A scroll-offset preference was unreliable, because the grid next to the marker kept reporting the default value.
+- **EXIF demo:** every third full-size demo picture is served as a JPEG with made-up camera data, and every sixth also has a made-up location.
