@@ -7,7 +7,7 @@ enum ViewerButton: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     /// Shown in the ⋯ menu until the user moves them into the bar.
-    static let defaultHidden = [ViewerButton.direction, .tapZones, .rotation].map(\.rawValue)
+    static let defaultHidden = [ViewerButton.interval, .direction, .tapZones, .rotation].map(\.rawValue)
 
     var title: String {
         switch self {

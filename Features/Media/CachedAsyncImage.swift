@@ -31,7 +31,8 @@ struct CachedAsyncImage: View {
                     .overlay(ProgressView())
             }
         }
-        .task(id: url) {
+        // Also reloads when animation is switched (e.g. Battery Saver) so GIFs stop or start.
+        .task(id: "\(url.absoluteString)|\(animate)") {
             await model.load(url, maxPixel: maxPixel, animate: animate, client: client, onLoad: onLoad)
         }
         // Off-screen cells drop their image so long sessions don't pile up memory;
@@ -45,10 +46,11 @@ final class ImageLoadModel: ObservableObject {
     @Published var image: UIImage?
     @Published var error: String?
     private var loadedURL: URL?
+    private var loadedAnimate: Bool?
 
     func load(_ url: URL, maxPixel: CGFloat, animate: Bool, client: NetworkClient?,
               onLoad: ((UIImage) -> Void)?, force: Bool = false) async {
-        if !force, loadedURL == url, image != nil { return }
+        if !force, loadedURL == url, loadedAnimate == animate, image != nil { return }
         if loadedURL != url { image = nil }
         error = nil
         // Fast-scroll throttle: a cell that scrolls past within 150 ms is cancelled (this task
@@ -62,6 +64,7 @@ final class ImageLoadModel: ObservableObject {
             guard !Task.isCancelled else { return }
             image = img
             loadedURL = url
+            loadedAnimate = animate
             onLoad?(img)
         } catch is CancellationError {
         } catch let e as URLError where e.code == .cancelled {
