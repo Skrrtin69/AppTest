@@ -28,9 +28,22 @@ enum ShareInbox {
                 let copy = FileManager.default.temporaryDirectory.appendingPathComponent("shared-\(UUID().uuidString).\(f.pathExtension)")
                 guard (try? FileManager.default.copyItem(at: f, to: copy)) != nil else { continue }
                 // Presented from the topmost screen, so it also appears over the viewer or a sheet.
-                Presenter.present(UIHostingController(rootView: SharedImageSheet(shared: SharedImage(url: copy))))
+                presentWhenReady(UIHostingController(rootView: SharedImageSheet(shared: SharedImage(url: copy))))
             }
         }
+    }
+
+    /// The share sheet is still closing when the app hears about a shared item; presenting
+    /// over it then fails silently. Wait until the topmost screen is settled.
+    static func presentWhenReady(_ vc: UIViewController, attempt: Int = 0) {
+        let top = Presenter.topController()
+        let busy = top == nil || top!.isBeingDismissed || top!.isBeingPresented || top is UIActivityViewController
+            || top!.presentingViewController?.isBeingDismissed == true
+        if busy && attempt < 15 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { presentWhenReady(vc, attempt: attempt + 1) }
+            return
+        }
+        top?.present(vc, animated: true)
     }
 
     /// mediadeck://inbox, mediadeck://favorites
