@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import AVFoundation
 
 /// A reverse image search service the user describes in JSON, like an adapter: where to send
 /// the picture, and where the matches are in the answer. No service is built in; the demo
@@ -117,42 +118,46 @@ enum ReverseSearch {
         let template = engine.requestURL.replacingOccurrences(of: "127.0.0.1:\(MockServer.defaultPort)", with: "127.0.0.1:\(MockServer.shared.port)")
         let picture = post.mediaType == .video ? post.thumbnailURL : (post.sampleURL ?? post.mediaURL)
         let pictureIsLocal = ["127.0.0.1", "localhost"].contains(picture.host ?? "") || picture.isFileURL
-        let upload = engine.mode == "upload" || pictureIsLocal
-        let encodedPicture = picture.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
-        let address = template
-            .replacingOccurrences(of: "{api_key}", with: key.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")
-            .replacingOccurrences(of: "{url}", with: encodedPicture)
-        guard let url = URL(string: address), url.scheme?.hasPrefix("http") == true else {
-            throw AppError.message("The engine's request address isn't a valid http(s) address.")
-        }
-        var req = URLRequest(url: url, timeoutInterval: 60)
+        // Videos and animations are never sent as they are: a still frame is uploaded instead.
+        let needsStill = post.mediaType != .image || isArchive(post.mediaURL)
+        let upload = engine.mode == "upload" || pictureIsLocal || needsStill
+        let url = try requestURL(template, key: key, picture: picture, upload: upload)
+        var req = URLRequest(url: url, timeoutInterval: 90)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if upload {
-            guard let field = engine.uploadField?.nonEmpty else {
-                throw AppError.message("This picture is only on this phone, so it has to be uploaded, but the engine has no upload field name.")
-            }
-            let data = try await ImagePipeline.shared.data(for: picture)
-            let boundary = "MD-\(UUID().uuidString)"
+            let field = engine.uploadField?.nonEmpty ?? "file"
+            let jpeg = try await stillJPEG(for: post)
+            let boundary = "MediaDeck-\(UUID().uuidString)"
             var body = Data()
-            body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(field)\"; filename=\"image.\(picture.pathExtension.nonEmpty ?? "jpg")\"\r\nContent-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
-            body.append(data)
-            body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+            body.append(Data("--\(boundary)\r\n".utf8))
+            body.append(Data("Content-Disposition: form-data; name=\"\(field)\"; filename=\"image.jpg\"\r\n".utf8))
+            body.append(Data("Content-Type: image/jpeg\r\n\r\n".utf8))
+            body.append(jpeg)
+            body.append(Data("\r\n--\(boundary)--\r\n".utf8))
             req.httpMethod = "POST"
             req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            req.setValue(String(body.count), forHTTPHeaderField: "Content-Length")
             req.httpBody = body
+            DebugLog.log("Reverse", "upload \(jpeg.count) B as \(field) to \(DebugLog.redact(url))")
         }
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await uploadSession.data(for: req)
         let http = response as? HTTPURLResponse
         let type = http?.value(forHTTPHeaderField: "Content-Type")
+        let parsed = try? JSONSerialization.jsonObject(with: data)
+        // Engines report failures as a negative header.status (often with HTTP 200) or as an
+        // HTTP error; either way show their own message, cleaned of HTML.
+        if let msg = engineError(parsed) {
+            throw AppError.message("\(engine.name): \(msg)")
+        }
         guard let status = http?.statusCode, (200..<300).contains(status) else {
             let code = http?.statusCode ?? 0
-            throw AppError.http(status: code, url: url, message: ErrorParser.describe(status: code, data: data, contentType: type))
+            throw AppError.http(status: code, url: url, message: clean(ErrorParser.describe(status: code, data: data, contentType: type)))
         }
-        guard let json = try? JSONSerialization.jsonObject(with: data) else {
-            throw AppError.message(ErrorParser.message(from: data, contentType: type) ?? "The engine didn't answer with JSON.")
+        guard let json = parsed else {
+            throw AppError.message(ErrorParser.message(from: data, contentType: type).map(clean) ?? "The engine didn't answer with JSON.")
         }
         guard let list = DottedPath.evaluate(engine.resultsPath, in: json) as? [Any] else {
-            throw AppError.message(ErrorParser.message(from: data, contentType: type)
+            throw AppError.message(ErrorParser.message(from: data, contentType: type).map(clean)
                                    ?? "No list of matches at '\(engine.resultsPath)' in the engine's answer.")
         }
         let minimum = engine.minSimilarity ?? 0
@@ -166,6 +171,141 @@ enum ReverseSearch {
                                 title: engine.titlePath.flatMap { DottedPath.string($0, in: node) })
         }
         .sorted { ($0.similarity ?? 0) > ($1.similarity ?? 0) }
+    }
+}
+
+extension ReverseSearch {
+    static func isArchive(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        return ext == "zip" || AdapterRegistry.shared.configs.contains { $0.zipExtensions.map { $0.lowercased() }.contains(ext) }
+    }
+
+    /// The request address. {api_key} is filled in, and when the picture is uploaded any
+    /// query item that carries {url} is dropped: an address parameter would make the engine
+    /// fetch that address instead of reading the uploaded file. Everything else in the
+    /// template (e.g. output_type=2&api_key=…) stays in the query.
+    static func requestURL(_ template: String, key: String, picture: URL, upload: Bool) throws -> URL {
+        let encodedKey = key.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+        var text = template.replacingOccurrences(of: "{api_key}", with: encodedKey)
+        if upload, var c = URLComponents(string: text.replacingOccurrences(of: "{url}", with: "MDURLPLACEHOLDER")) {
+            c.queryItems = c.queryItems?.filter { !($0.value ?? "").contains("MDURLPLACEHOLDER") }
+            if c.queryItems?.isEmpty == true { c.queryItems = nil }
+            text = c.string ?? text
+        } else {
+            let encodedPicture = picture.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            text = text.replacingOccurrences(of: "{url}", with: encodedPicture)
+        }
+        guard let url = URL(string: text), url.scheme?.hasPrefix("http") == true else {
+            throw AppError.message("The engine's request address isn't a valid http(s) address.")
+        }
+        return url
+    }
+
+    /// A still JPEG of the post (max 2000 px): the picture itself, the first frame of a GIF,
+    /// WebP/APNG or ZIP animation, or the first frame of a video (its thumbnail if the frame
+    /// can't be read, e.g. WebM).
+    static func stillJPEG(for post: Post) async throws -> Data {
+        let client = AdapterRegistry.shared.adapter(for: post.siteID)?.client
+        var still: UIImage?
+        if post.mediaType == .video {
+            still = await firstVideoFrame(post.mediaURL)
+            if still == nil {
+                still = try? await ImagePipeline.shared.image(for: post.thumbnailURL, maxPixel: 2000, animate: false, client: client)
+            }
+        } else {
+            // animate: false gives the first frame of any animation.
+            let source = isArchive(post.mediaURL) ? post.mediaURL : (post.sampleURL ?? post.mediaURL)
+            still = try await ImagePipeline.shared.image(for: source, maxPixel: 2000, animate: false, client: client)
+        }
+        guard let img = still, let jpeg = flattened(img).jpegData(compressionQuality: 0.9) else {
+            throw AppError.message("Couldn't make a still picture of this post to search with.")
+        }
+        return jpeg
+    }
+
+    /// The first frame of a video, read with AVAssetImageGenerator (with the site's headers).
+    static func firstVideoFrame(_ url: URL) async -> UIImage? {
+        let gen = AVAssetImageGenerator(asset: AVURLAsset.withSiteHeaders(url))
+        gen.appliesPreferredTrackTransform = true
+        gen.maximumSize = CGSize(width: 2000, height: 2000)
+        gen.requestedTimeToleranceBefore = .zero
+        gen.requestedTimeToleranceAfter = CMTime(seconds: 1, preferredTimescale: 600)
+        return await withCheckedContinuation { cont in
+            gen.generateCGImagesAsynchronously(forTimes: [NSValue(time: .zero)]) { _, cg, _, _, error in
+                if let e = error { DebugLog.log("Reverse", "first frame: \(e.localizedDescription)") }
+                cont.resume(returning: cg.map { UIImage(cgImage: $0) })
+            }
+        }
+    }
+
+    /// JPEG has no transparency: draw on white so transparent areas don't turn black.
+    static func flattened(_ img: UIImage) -> UIImage {
+        let size = CGSize(width: img.size.width * img.scale, height: img.size.height * img.scale)
+        let fmt = UIGraphicsImageRendererFormat()
+        fmt.scale = 1
+        fmt.opaque = true
+        return UIGraphicsImageRenderer(size: size, format: fmt).image { ctx in
+            UIColor.white.setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
+            img.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+
+    /// A negative header.status (or status) in the answer → the engine's message, cleaned.
+    static func engineError(_ json: Any?) -> String? {
+        guard let root = json as? [String: Any] else { return nil }
+        let header = root["header"] as? [String: Any] ?? root
+        let raw = header["status"] ?? root["status"]
+        let status = (raw as? NSNumber)?.intValue ?? (raw as? String).flatMap { Int($0) }
+        guard let s = status, s < 0 else { return nil }
+        let msg = (header["message"] ?? root["message"] ?? root["error"]) as? String
+        return clean(msg ?? "The engine reported an error (status \(s)).")
+    }
+
+    /// Plain text: literal \uXXXX escapes decoded, HTML tags removed, entities decoded,
+    /// spaces tidied.
+    static func clean(_ text: String) -> String {
+        var s = text
+        if let r = try? NSRegularExpression(pattern: "\\\\u([0-9a-fA-F]{4})") {
+            let ns = s as NSString
+            var out = ""
+            var last = 0
+            for m in r.matches(in: s, range: NSRange(location: 0, length: ns.length)) {
+                out += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+                if let v = UInt32(ns.substring(with: m.range(at: 1)), radix: 16), let u = Unicode.Scalar(v) {
+                    out.unicodeScalars.append(u)
+                }
+                last = m.range.location + m.range.length
+            }
+            out += ns.substring(from: last)
+            s = out
+        }
+        s = s.replacingOccurrences(of: "<br\\s*/?>", with: " ", options: [.regularExpression, .caseInsensitive])
+        s = s.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        for (e, c) in ["&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&apos;": "'", "&nbsp;": " "] {
+            s = s.replacingOccurrences(of: e, with: c)
+        }
+        s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Keeps the method and uploaded body if the engine redirects (URLSession would otherwise
+    /// turn the POST into an empty GET, and the engine would see no picture).
+    static let uploadSession = URLSession(configuration: .default, delegate: RedirectKeeper(), delegateQueue: nil)
+
+    final class RedirectKeeper: NSObject, URLSessionTaskDelegate {
+        func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                        newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+            guard let original = task.originalRequest, original.httpMethod == "POST", let to = request.url else {
+                completionHandler(request)
+                return
+            }
+            var r = URLRequest(url: to, timeoutInterval: original.timeoutInterval)
+            r.httpMethod = "POST"
+            r.httpBody = original.httpBody
+            r.allHTTPHeaderFields = original.allHTTPHeaderFields
+            completionHandler(r)
+        }
     }
 }
 
