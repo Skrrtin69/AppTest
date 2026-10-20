@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import AVKit
 
 /// Which player handles a given file. Decided at runtime per URL: AVFoundation is asked
 /// whether it can play the asset; if not (WebM, usually) the WKWebView player is used.
