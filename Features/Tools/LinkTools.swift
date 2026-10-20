@@ -11,11 +11,11 @@ enum LinkRouter {
         func strip(_ h: String) -> String { h.hasPrefix("www.") ? String(h.dropFirst(4)) : h }
         let configs = AdapterRegistry.shared.enabledConfigs
         let matching = configs.filter { c in
-            [c.baseURL, c.mediaBaseURL].compactMap { URL(string: $0)?.host?.lowercased() }.contains { strip($0) == strip(host) }
+            [c.baseURL, c.mediaBaseURL].compactMap { $0.host?.lowercased() }.contains { strip($0) == strip(host) }
         }
         // Several sites on one host (the demo server): prefer the one whose path matches too.
         return matching.max { a, b in
-            commonPrefix(url.path, URL(string: a.baseURL)?.path ?? "") < commonPrefix(url.path, URL(string: b.baseURL)?.path ?? "")
+            commonPrefix(url.path, a.baseURL.path) < commonPrefix(url.path, b.baseURL.path)
         }
     }
 
