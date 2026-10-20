@@ -79,7 +79,11 @@ struct ViewerView: View {
         .statusBar(hidden: !chrome)
         .modifier(HideHomeIndicator(hidden: !chrome))
         .onAppear {
-            if settings.rotationLock != "auto" { OrientationLock.apply(settings.rotationLock) }
+            // Wait for the full-screen presentation to finish: a rotation requested while it's
+            // still animating in is dropped by iOS.
+            if settings.rotationLock != "auto" {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { OrientationLock.apply(settings.rotationLock) }
+            }
             prefetchNeighbors()
             if let p = current { ViewedStore.shared.markViewed(p) }
         }
