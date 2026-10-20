@@ -18,6 +18,15 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Cache MobileVLCKit
+        uses: actions/cache@v4
+        with:
+          path: Vendor/MobileVLCKit.framework
+          key: mobilevlckit-3.7.4-arm64
+
+      - name: Fetch MobileVLCKit
+        run: bash scripts/fetch_vlckit.sh
+
       - name: Generate Xcode project
         run: xcodegen generate
 

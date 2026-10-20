@@ -121,7 +121,7 @@ final class MockServer {
                     let from = buf.index(buf.startIndex, offsetBy: bodyStart)
                     request.body = Data(buf[from..<buf.index(from, offsetBy: min(length, buf.count - bodyStart))])
                 }
-                if request.path == "/proxy" {
+                if request.path == "/proxy" || request.path.hasPrefix("/proxy/") {
                     Task { await self.streamProxy(request, on: conn) }
                     return
                 }
@@ -143,6 +143,11 @@ final class MockServer {
         headers["Accept-Ranges"] = "bytes"
         headers["Connection"] = "close"
         headers["Access-Control-Allow-Origin"] = "*"
+        // Cross-origin isolation for the web player, so ogv.js can use threads.
+        if request.path.hasPrefix("/player/") {
+            headers["Cross-Origin-Opener-Policy"] = "same-origin"
+            headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+        }
 
         // Byte ranges: "bytes=a-b", "bytes=a-", "bytes=-n"
         if status == 200, let range = request.headers["range"], let r = Self.parseRange(range, length: body.count) {
@@ -188,7 +193,7 @@ final class MockServer {
                 return
             }
             var headers: [String: String] = [
-                "Content-Type": http.value(forHTTPHeaderField: "Content-Type") ?? MockMedia.contentType(url.path),
+                "Content-Type": request.query["type"] ?? http.value(forHTTPHeaderField: "Content-Type") ?? MockMedia.contentType(url.path),
                 "Content-Length": String(length),
                 "Accept-Ranges": "bytes",
                 "Connection": "close",

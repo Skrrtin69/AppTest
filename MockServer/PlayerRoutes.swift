@@ -66,7 +66,7 @@ enum PlayerRoutes {
                 r.setValue(range, forHTTPHeaderField: "Range")
             }
         }
-        let client = req.query["site"].flatMap { AdapterRegistry.shared.adapter(for: $0)?.client } ?? NetworkClient.shared
+        let client = req.query["site"].flatMap { AdapterRegistry.shared.adapter(for: $0)?.client } ?? NetworkClient.forMedia(url)
         for (k, v) in client.mediaHeaders { r.setValue(v, forHTTPHeaderField: k) }
         return (r, client)
     }
@@ -78,7 +78,7 @@ enum PlayerRoutes {
         do {
             let (data, resp) = try await client.session.data(for: r)
             guard let http = resp as? HTTPURLResponse else { return .json(["error": "bad response"], status: 502) }
-            let type = http.value(forHTTPHeaderField: "Content-Type") ?? MockMedia.contentType(url.path)
+            let type = req.query["type"] ?? http.value(forHTTPHeaderField: "Content-Type") ?? MockMedia.contentType(url.path)
             var out = HTTPResponse(status: http.statusCode, contentType: type, body: data)
             if let cr = http.value(forHTTPHeaderField: "Content-Range") { out.headers["Content-Range"] = cr }
             if http.statusCode == 200, req.headers["range"] != nil {
@@ -131,21 +131,47 @@ enum PlayerRoutes {
     function fail(why){stage.innerHTML='<div id="msg">This video can\\'t be played on this device.<br>('+why+')</div>';post('error: '+why);}
     // Loads ogv.js's WebM demuxer and every decoder it may need, and waits for them to
     // start, so the stream begins only once the decoder is ready (8 s at most).
+    // WebAssembly SIMD (WebKit 16.4+) roughly doubles VP9 decoding speed; threads need
+    // SharedArrayBuffer, which needs this page to be cross-origin isolated (the local server
+    // sends COOP/COEP for /player/). Each is used only where this WebKit supports it.
+    var simdOK=false;
+    try{ simdOK=WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11])); }catch(e){}
+    var threadsOK=!!window.crossOriginIsolated && typeof SharedArrayBuffer!=='undefined' && q.get('ogv')!=='single';
+    var cores=navigator.hardwareConcurrency||1;
     var ogvLoaded=false, ogvWaiting=[];
     function ogvPreload(done){
       if(ogvLoaded){done();return;}
       ogvWaiting.push(done);
       if(ogvWaiting.length>1) return;
-      var names=['OGVDemuxerWebMW','OGVDecoderVideoVP8W','OGVDecoderVideoVP9W','OGVDecoderAudioOpusW','OGVDecoderAudioVorbisW'];
+      var mt=threadsOK?'MT':'';
+      var names=['OGVDemuxerWebMW','OGVDecoderVideoVP8'+mt+'W','OGVDecoderVideoVP9'+(simdOK?'SIMD':'')+mt+'W','OGVDecoderAudioOpusW','OGVDecoderAudioVorbisW'];
       var left=names.length, t0=Date.now();
       function finish(how){ if(ogvLoaded) return; ogvLoaded=true; post('ogv '+how+' in '+(Date.now()-t0)+' ms'); var w=ogvWaiting; ogvWaiting=[]; w.forEach(function(f){f();}); }
       function one(){ if(--left<=0) finish('ready'); }
       setTimeout(function(){ finish('preload timeout'); }, 8000);
       OGVLoader.base='/player/ogv';
       names.forEach(function(n){
-        try{ OGVLoader.loadClass(n,function(factory){ try{ var p=factory({}); if(p&&p.then){p.then(one,one);}else{one();} }catch(e){one();} },{worker:false}); }catch(e){one();}
+        // Load the script, and fetch its .wasm into the cache; nothing is started yet.
+        var parts=2; function part(){ if(--parts===0) one(); }
+        try{ OGVLoader.loadClass(n,function(){ part(); },{worker:false}); }catch(e){part();}
+        fetch('/player/ogv/'+ogvFile(n)).then(part,part);
       });
     }
+    function ogvFile(n){
+      var m=n.match(/^OGV(Demuxer|Decoder)(Video|Audio)?(.*?)(SIMD)?(MT)?W$/); if(!m) return '';
+      var kind=m[1]==='Demuxer'?'demuxer':'decoder-'+m[2].toLowerCase();
+      return 'ogv-'+kind+'-'+m[3].toLowerCase()+(m[4]?'-simd':'')+(m[5]?'-mt':'')+'-wasm.wasm';
+    }
+    var lastFrames=0;
+    function postStats(){
+      if(!usingOgv||!player||!player.getPlaybackStats||player.paused) return;
+      try{
+        var s=player.getPlaybackStats(), f=s.framesProcessed-lastFrames; lastFrames=s.framesProcessed;
+        if(f>0) post('stats '+f+' frames · decode '+(s.videoDecodingTime/f).toFixed(1)+' ms/frame · late '+(s.lateFrames||0)+' · '+(simdOK?'SIMD':'no SIMD')+' · '+(threadsOK?cores+' threads':'1 thread'));
+        if(player.resetPlaybackStats) player.resetPlaybackStats();
+      }catch(e){}
+    }
+    setInterval(postStats,5000);
     function useOgv(){
       if(usingOgv) return; usingOgv=true;
       if(typeof OGVPlayer==='undefined'){fail('decoder files missing');return;}
@@ -154,11 +180,11 @@ enum PlayerRoutes {
       ogvPreload(startOgv);
     }
     function startOgv(){
-      try{ player=new OGVPlayer({simd:false,threading:false}); }catch(e){fail('decoder failed to start: '+e);return;}
+      try{ player=new OGVPlayer({simd:simdOK,threading:threadsOK}); }catch(e){fail('decoder failed to start: '+e);return;}
       player.muted=startMuted;
       player.addEventListener('ended',function(){ if(window.mdLoopOn){player.currentTime=0;player.play();} else {post('ended');} });
       player.addEventListener('error',function(){fail('decoder error');});
-      player.addEventListener('playing',function(){post('engine: ogv.js (WebAssembly)');});
+      player.addEventListener('playing',function(){post('engine: ogv.js (WebAssembly'+(simdOK?', SIMD':'')+(threadsOK?', '+cores+' threads':'')+')');});
       player.addEventListener('canplay',function(){post('canplay');});
       player.addEventListener('loadedmetadata',function(){post('metadata '+player.videoWidth+'x'+player.videoHeight);});
       player.src=src;
@@ -181,6 +207,7 @@ enum PlayerRoutes {
     }
     var isWebm=/webm/i.test(type)||/\\.webm(\\?|$)/i.test(src);
     var can=document.createElement('video').canPlayType('video/webm');
+    post('isolated='+!!window.crossOriginIsolated+' SharedArrayBuffer='+(typeof SharedArrayBuffer!=='undefined')+' simd='+simdOK+' cores='+cores);
     if(q.get('preload')==='1'){ if(typeof OGVLoader!=='undefined'){ogvPreload(function(){});} }
     else {
       post('canPlayType(video/webm)="'+can+'"');

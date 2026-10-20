@@ -36,6 +36,11 @@ for EXT in "$APP"/PlugIns/*.appex; do
   ldid -SSupport/$NAME.entitlements "$EXT/$NAME"
   echo "Signed extension $NAME"
 done
+for FW in "$APP"/Frameworks/*.framework; do
+  [ -d "$FW" ] || continue
+  ldid -S "$FW/$(basename "$FW" .framework)"
+  echo "Signed framework $(basename "$FW")"
+done
 ldid -SSupport/MediaDeck.entitlements "$APP/MediaDeck"
 
 rm -rf build/Payload build/MediaDeck.ipa

@@ -3,6 +3,7 @@ import SwiftUI
 /// Hidden tools: Settings › About › tap Version 5 times.
 struct DebugConsoleView: View {
     @ObservedObject private var log = DebugLog.shared
+    @AppStorage("ogvSingleThread") private var ogvSingleThread = false
     @State private var filter = ""
     @State private var watchResult: String?
 
@@ -27,6 +28,11 @@ struct DebugConsoleView: View {
                 Button("Forget smart thumbnail crops") { SmartCrop.clear(); ToastCenter.shared.show("Smart crops cleared") }
                 Button("Copy log") { UIPasteboard.general.string = log.text; ToastCenter.shared.show("Log copied") }
                 Button("Clear log", role: .destructive) { log.clear() }
+            }
+            Section {
+                Toggle("Web decoder: single thread", isOn: $ogvSingleThread)
+            } header: { Text("Video testing") } footer: {
+                Text("Turns off ogv.js threads, to compare decoding speed (see the 'stats' lines in the log).")
             }
             Section("Info") {
                 row("Network speed", NetworkSpeed.shared.summary)

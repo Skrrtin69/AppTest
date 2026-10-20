@@ -60,7 +60,7 @@ final class AppSettings: ObservableObject {
                          smartThumbnails = "smartThumbnails", twoPageLandscape = "twoPageLandscape", fallbackSite = "fallbackSite",
                          stripEXIF = "stripEXIF", autoTagDownloads = "autoTagDownloads", panicGesture = "panicGesture", panicAction = "panicAction",
                          doubleTapAction = "doubleTapAction", swipeUpAction = "swipeUpAction", swipeDownAction = "swipeDownAction",
-                         startMuted = "startMuted", edgeSwipes = "edgeSwipes"
+                         startMuted = "startMuted", edgeSwipes = "edgeSwipes", useVLC = "useVLC"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
@@ -68,7 +68,7 @@ final class AppSettings: ObservableObject {
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
                           readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
                           detectClipboardLinks, dataSaver, wifiOnlyMedia, mixWithOthers,
-                          smartThumbnails, twoPageLandscape, fallbackSite, stripEXIF, autoTagDownloads, panicGesture, panicAction, doubleTapAction, swipeUpAction, swipeDownAction, startMuted, edgeSwipes]
+                          smartThumbnails, twoPageLandscape, fallbackSite, stripEXIF, autoTagDownloads, panicGesture, panicAction, doubleTapAction, swipeUpAction, swipeDownAction, startMuted, edgeSwipes, useVLC]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -101,6 +101,8 @@ final class AppSettings: ObservableObject {
     @Published var startMuted: Bool = false { didSet { d.set(startMuted, forKey: K.startMuted) } }
     /// Viewer edge swipes: left edge = brightness, right edge = volume.
     @Published var edgeSwipes: Bool = true { didSet { d.set(edgeSwipes, forKey: K.edgeSwipes) } }
+    /// WebM/Matroska play in VLCKit (native decoding) instead of the web player.
+    @Published var useVLC: Bool = false { didSet { d.set(useVLC, forKey: K.useVLC) } }
     /// Thumbnails stay blurred until tapped once.
     @Published var blurThumbnails: Bool = false { didSet { d.set(blurThumbnails, forKey: K.blurThumbnails) } }
     /// Thumbnails of posts already opened are dimmed.
@@ -232,6 +234,7 @@ final class AppSettings: ObservableObject {
         autoplayVideos = d.object(forKey: K.autoplayVideos) as? Bool ?? true
         startMuted = d.object(forKey: K.startMuted) as? Bool ?? false
         edgeSwipes = d.object(forKey: K.edgeSwipes) as? Bool ?? true
+        useVLC = d.object(forKey: K.useVLC) as? Bool ?? false
         blurThumbnails = d.object(forKey: K.blurThumbnails) as? Bool ?? false
         dimViewed = d.object(forKey: K.dimViewed) as? Bool ?? true
         viewerAspect = ViewerAspect(rawValue: d.string(forKey: K.viewerAspect) ?? "") ?? .fit

@@ -66,8 +66,11 @@ struct SettingsView: View {
                         .accessibilityIdentifier("startMutedToggle")
                     Toggle("Enable Volume/Brightness Swipes", isOn: $settings.edgeSwipes)
                         .accessibilityIdentifier("edgeSwipesToggle")
+                    Toggle("Use VLCKit for Video (Faster, Larger App)", isOn: $settings.useVLC)
+                        .accessibilityIdentifier("useVLCToggle")
+                        .disabled(!VLCVideoView.available)
                 } header: { Text("Reading & Viewer") } footer: {
-                    Text("Swipes: drag along the right edge of a post for volume, the left edge for brightness.")
+                    Text("Swipes: drag along the right edge of a post for volume, the left edge for brightness. VLCKit plays WebM and MKV videos with native code instead of the web player's WebAssembly decoder, which is much faster for large files. It doesn't use the hardware decoder (iOS doesn't offer one for VP9 to apps). VLCKit is part of every copy of the app, so this switch only picks the player.")
                 }
 
                 Section {

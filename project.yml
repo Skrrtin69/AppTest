@@ -86,6 +86,10 @@ targets:
     dependencies:
       - target: MediaDeckWidget
       - target: MediaDeckShare
+      # Fetched (and thinned to arm64) by scripts/fetch_vlckit.sh; not in the repo.
+      - framework: Vendor/MobileVLCKit.framework
+        embed: true
+        codeSign: false
 
   # Home-screen widget: a random favorite (reads thumbnails the app saves in the app group).
   MediaDeckWidget:

@@ -3,22 +3,66 @@ import AVFoundation
 import AVKit
 
 /// Which player handles a given file. Decided at runtime per URL: AVFoundation is asked
-/// whether it can play the asset; if not (WebM, usually) the WKWebView player is used.
+/// whether it can play the asset; if not (WebM, usually) the WKWebView player is used, or
+/// VLCKit when that setting is on.
 enum PlaybackPath: String {
-    case native, web
-    var label: String { self == .native ? "Native player (AVPlayer)" : "Web player (WKWebView)" }
+    case native, web, vlc
+    var label: String {
+        switch self {
+        case .native: return "Native player (AVPlayer)"
+        case .web: return "Web player (WKWebView)"
+        case .vlc: return "VLCKit player"
+        }
+    }
 }
 
 actor PlaybackRouter {
     static let shared = PlaybackRouter()
+    /// .native, or .web meaning "not AVPlayer" (the web player or VLC, per the setting).
     private var cache: [URL: PlaybackPath] = [:]
+    /// What AVPlayer actually opens, when that differs from the post's address.
+    private var aliases: [URL: URL] = [:]
 
-    func route(for url: URL) async -> PlaybackPath {
-        if let c = cache[url] { return c }
+    func playURL(for url: URL) -> URL { aliases[url] ?? url }
+
+    func route(for url: URL, siteID: String? = nil) async -> PlaybackPath {
+        let useVLC = await MainActor.run { AppSettings.shared.useVLC && VLCVideoView.available }
+        let other: PlaybackPath = useVLC ? .vlc : .web
+        if let c = cache[url] { return c == .native ? .native : other }
         // HLS streams list no tracks until they play, so the check below would wrongly send
         // them to the web player; AVPlayer is the stream player.
         if url.pathExtension.lowercased() == "m3u8" { cache[url] = .native; return .native }
-        let asset = AVURLAsset.withSiteHeaders(url)
+        // WebM/MKV: look inside first. An MP4 with the wrong name goes to AVPlayer; real
+        // Matroska goes straight to the web player or VLC, skipping AVPlayer's slow refusal.
+        if ["webm", "mkv"].contains(url.pathExtension.lowercased()), let s = await MediaSniffer.sniff(url) {
+            DebugLog.log("Playback", "\(url.lastPathComponent): \(s.summary)")
+            switch s.container {
+            case .mp4:
+                let alias = url.isFileURL ? (MediaSniffer.mp4FileAlias(url) ?? url) : MediaSniffer.mp4ProxyURL(url, siteID: siteID)
+                if await Self.isPlayable(AVURLAsset.withSiteHeaders(alias)) {
+                    aliases[url] = alias
+                    cache[url] = .native
+                    DebugLog.log("Playback", "\(url.lastPathComponent) is an MP4: AVPlayer")
+                    return .native
+                }
+            case .matroska:
+                if s.isH264orHEVC, !useVLC {
+                    DebugLog.log("Playback", "H.264/HEVC in Matroska: the web decoder can't play it; turn on VLCKit in Settings › Reading & Viewer")
+                }
+                cache[url] = .web
+                return other
+            case .unknown:
+                break
+            }
+        }
+        let playable = await Self.isPlayable(AVURLAsset.withSiteHeaders(url))
+        let path: PlaybackPath = playable ? .native : .web
+        cache[url] = path
+        NSLog("[Playback] %@ → %@", url.lastPathComponent, path.rawValue)
+        return path == .native ? .native : other
+    }
+
+    private static func isPlayable(_ asset: AVURLAsset) async -> Bool {
         // Race the playability check against a timeout so a slow server can't hang the viewer.
         let playable: Bool = await withTaskGroup(of: Bool?.self) { group in
             group.addTask {
@@ -34,10 +78,7 @@ actor PlaybackRouter {
             group.cancelAll()
             return first ?? false
         }
-        let path: PlaybackPath = playable ? .native : .web
-        cache[url] = path
-        NSLog("[Playback] %@ → %@", url.lastPathComponent, path.rawValue)
-        return path
+        return playable
     }
 
     /// Native playback failed after routing; remember to use the web player next time.
@@ -80,6 +121,8 @@ struct MediaVideoView: View {
     @ObservedObject private var settings = AppSettings.shared
 
     @State private var path: PlaybackPath?
+    /// What AVPlayer opens (an MP4 sent under a .webm name plays through the proxy as .mp4).
+    @State private var nativeURL: URL?
     @State private var engine: String?
     @State private var webReady = false
     @State private var webTimedOut = false
@@ -94,12 +137,20 @@ struct MediaVideoView: View {
             case .none:
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             case .some(.native):
-                NativeVideoView(url: url, isActive: isActive, showControls: showControls, onFinished: onFinished) {
+                NativeVideoView(url: nativeURL ?? url, isActive: isActive, showControls: showControls, onFinished: onFinished) {
                     Task {
                         await PlaybackRouter.shared.markFailed(url)
                         path = .web
                     }
                 }
+            case .some(.vlc):
+                VLCVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
+                             loop: !settings.autoAdvance, showControls: showControls, onFinished: onFinished,
+                             onReady: { webReady = true; webError = nil },
+                             onError: { webError = $0 }, onStatus: { engine = $0 })
+                    .id(webAttempt)
+                    .overlay { loadingOverlay }
+                    .task(id: "\(url.absoluteString)#\(webAttempt)") { await watchStart() }
             case .some(.web):
                 WebVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
                              loop: !settings.autoAdvance, onFinished: onFinished,
@@ -109,9 +160,28 @@ struct MediaVideoView: View {
                     .overlay(alignment: .bottomTrailing) {
                         if showControls { SpeedButton().padding(.trailing, 70).padding(.bottom, 145) }
                     }
-                    .overlay {
-                        // Until the page's player can play: "Loading video...", then (after the
-                        // timeout for this connection's speed, or at once on an error) Retry.
+                    .overlay { loadingOverlay }
+                    .task(id: "\(url.absoluteString)#\(webAttempt)") { await watchStart() }
+            }
+            if let p = path, showControls {
+                Text(p != .native ? "\(p.label) · \(engine ?? "loading…")" : p.label)
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Capsule().fill(Color.black.opacity(0.55)))
+                    .foregroundColor(.white)
+                    .padding(.top, 100).padding(.leading, 10)
+                    .accessibilityIdentifier("playerPath")
+            }
+        }
+        .task(id: url) {
+            path = await PlaybackRouter.shared.route(for: url, siteID: siteID)
+            nativeURL = await PlaybackRouter.shared.playURL(for: url)
+        }
+    }
+
+    /// Until the player can play: "Loading video...", then (after the timeout for this
+    /// connection's speed, or at once on an error) Retry / Open in Safari.
+    @ViewBuilder var loadingOverlay: some View {
                         if let why = webError {
                             webFailure(why)
                         } else if !webReady {
@@ -132,30 +202,18 @@ struct MediaVideoView: View {
                                 .accessibilityIdentifier("webVideoLoading")
                             }
                         }
-                    }
-                    .task(id: "\(url.absoluteString)#\(webAttempt)") {
-                        webReady = false
-                        webTimedOut = false
-                        webError = nil
-                        let limit = network.videoTimeout
-                        try? await Task.sleep(nanoseconds: UInt64(limit * 1_000_000_000))
-                        if !Task.isCancelled, !webReady {
-                            webTimedOut = true
-                            DebugLog.log("WebVideo", "No canplay within \(Int(limit)) s (\(network.summary)): \(DebugLog.redact(url))")
-                        }
-                    }
-            }
-            if let p = path, showControls {
-                Text(p == .web ? "\(p.label) · \(engine ?? "loading…")" : p.label)
-                    .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(Capsule().fill(Color.black.opacity(0.55)))
-                    .foregroundColor(.white)
-                    .padding(.top, 100).padding(.leading, 10)
-                    .accessibilityIdentifier("playerPath")
-            }
+    }
+
+    func watchStart() async {
+        webReady = false
+        webTimedOut = false
+        webError = nil
+        let limit = network.videoTimeout
+        try? await Task.sleep(nanoseconds: UInt64(limit * 1_000_000_000))
+        if !Task.isCancelled, !webReady {
+            webTimedOut = true
+            DebugLog.log("WebVideo", "No canplay within \(Int(limit)) s (\(network.summary)): \(DebugLog.redact(url))")
         }
-        .task(id: url) { path = await PlaybackRouter.shared.route(for: url) }
     }
 }
 

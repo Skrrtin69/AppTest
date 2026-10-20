@@ -77,7 +77,9 @@ struct WebVideoView: UIViewRepresentable {
         }
         let type = url.pathExtension.lowercased() == "webm" ? "video/webm" : ""
         let muted = AppSettings.shared.startMuted ? "&muted=1" : ""
-        return URL(string: "\(server)/player/video.html?src=\(encode(src))&type=\(encode(type))\(muted)") ?? url
+        // Debug Console switch, for comparing decoding speed with and without threads.
+        let single = UserDefaults.standard.bool(forKey: "ogvSingleThread") ? "&ogv=single" : ""
+        return URL(string: "\(server)/player/video.html?src=\(encode(src))&type=\(encode(type))\(muted)\(single)") ?? url
     }
 
     /// Shared by every web player, so later ones reuse the already running web process.
@@ -139,7 +141,7 @@ struct WebVideoView: UIViewRepresentable {
         private var readySent = false
         func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
             let text = "\(message.body)"
-            NSLog("[WebVideo] %@", text)
+            DebugLog.log("WebVideo", text)
             if text == "ended" { DispatchQueue.main.async { self.onFinished?() } }
             if !readySent, text == "canplay" || text.hasPrefix("engine:") {
                 readySent = true
