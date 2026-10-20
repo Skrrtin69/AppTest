@@ -163,3 +163,12 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
   - My first stats wrongly showed stalls: ogv's `resetPlaybackStats()` also zeroes its frame counter. The stats now report per-window frames and a real-time ratio.
 - **Not testable here:** SIMD (needs iOS 16.4+). An MP4 named .webm and H.264-in-Matroska weren't found among live posts, so those two sniffing branches are untested on the phone.
 - **State left on the phone:** VLCKit off (default), single-thread test switch off. At the owner's request, MediaDeck's app passcode (and decoy passcode) was turned off so reinstalls no longer stop at the lock screen.
+
+## 24. Optimized build, VLCKit default
+- `SWIFT_OPTIMIZATION_LEVEL` changed from `-Onone` to `-O` for all three targets. "Use VLCKit for Video" now defaults to on.
+- **Smoke test of the optimized build on the phone:**
+  - It launched and browsed Danbooru.
+  - A fast-scrolled `rating:g` grid loaded its thumbnails, and an image opened in the viewer.
+  - A live 19 MB WebM played in VLCKit.
+- The phone had a stored "off" from the speed tests, so it was switched on in Settings by hand. The new default only applies when nothing is stored.
+- **Not measured:** before/after timings for UI, parsing or image loading. The change is standard; the gains weren't benchmarked.

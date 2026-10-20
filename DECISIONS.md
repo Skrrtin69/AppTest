@@ -184,6 +184,10 @@ Choices made while building MediaDeck, and why.
 - **Legacy suggestion addresses:** `index.php?page=autocomplete2&term={query}&type=tag_query&limit=10` and `public/autocomplete.php?q={query}` are tried before the older `q=` forms. The name key prefers `value` over `label`, because legacy boards put the real tag in `value` and a display form ("blue eyes") in `label`.
 - **Rejecting false suggestion addresses:** Auto-Configure rejected nothing before, and the owner's Danbooru adapter got `tags.json?q={query}`. That site ignores `q` and returns its newest tags, so suggestions were unrelated and Tag Info found nothing. Now at least one of the first 20 suggestions must contain the typed text. `tags.json?search[name_matches]={query}*&search[order]=count` was added to the address shapes tried. Square brackets in addresses are now percent-encoded, which older iOS versions require.
 
+## Build optimization
+- **`-O` for every target:** the app, widget and share extension were built with `-Onone` since the first commit (no recorded reason; probably faster CI builds). They now build with `-O` (optimize for speed). CI's Build IPA step takes about 2 minutes 15 seconds, and the IPA shrank from 24 MB to 22 MB.
+- **VLCKit on by default:** it's bundled anyway, so new installs (and Reset All Settings) use it. An existing stored choice is kept.
+
 ## Web video speed
 - **Timeout from a speed test:** a 1 MB download from a speed-test CDN (not a media site) at launch sets the web player's start-up timeout: over 15 Mbps 15 s, 5–15 Mbps 30 s, under 5 Mbps 60 s. A failed test counts as slow, and 30 s is used until the test finishes.
 - **Errors aren't timeouts:** a decoder or network error from the page shows the Retry / Open in Safari card at once, instead of waiting for the timer.
