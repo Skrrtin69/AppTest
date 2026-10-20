@@ -86,3 +86,7 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 - **Not run:** the X-Api-Key-only demo site (Demo Header Key).
 - **Cosmetic:** the "key.slash" icon next to "Key not found" doesn't show on this iOS version.
 - **Open question from the owner's own test:** a real site's bare address ended at "Check this address". Its index.php API may answer without JSON (for example a plain-text "missing authentication" message), which the resolver skips like any webpage. This hasn't been looked into yet.
+
+## 17. Resolver: plain-text "Missing authentication" answers
+- **Fixed:** the owner's live site answers its legacy API with plain text "Missing authentication…" and 200 OK. The resolver treated that like a webpage and skipped the path, ending at "Check this address". A short non-JSON answer containing an auth phrase now stops the resolver at that address and shows Requires Authentication. Probes keep the 5-second limit.
+- **Verified on the phone:** the demo `/legacy` board answers its API that way (plain text, 200). Typing `127.0.0.1:8765/legacy` and tapping Analyze stopped at `http://127.0.0.1:8765/legacy/index.php?page=dapi&s=post&q=index&json=1&tags={tags}&pid={page}` with the Requires Authentication banner and "Log in to find my key". The demo board accepts the Vault key and user ID, so the rest of the flow can be run there too; that would save a demo adapter, so it wasn't run.

@@ -251,6 +251,8 @@ Settings → Sites & Adapters → **Auto-configure from URL** (or the **Auto-con
 
   It uses the first that answers with JSON (an XML answer is skipped, since adapters read JSON).
 - **Fast probes:** each probe gets 5 seconds and no retries. When `https://` was only assumed and can't connect, the same path is tried over `http://` before moving on.
+- **Login messages count as found:** some older APIs answer without JSON, as text or a short HTML page saying "Missing authentication" (or "API key required", "Unauthorized", "Login required"…), often with 200 OK. That address is treated as the right one: the resolver stops, fills it in and shows **Requires Authentication**. JSON answers that say the same are treated the same way.
+- **Folder addresses:** an address with a folder but no file name (`example.org/board`) is tried as-is first, then as the base for the shapes above.
 - **If nothing answers:** the field is filled with `…/posts.json?tags={tags}&page={page}`, and you see "Couldn't auto-resolve. Please check this default address."
 
 
