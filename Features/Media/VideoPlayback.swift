@@ -127,6 +127,8 @@ final class VideoController: ObservableObject {
 
     /// Called when the video ends while auto-advance is on.
     var onFinished: (() -> Void)?
+    /// Whether this video's page is the one on screen (kept current by the view).
+    var isActivePage = false
 
     init(url: URL) {
         let item = AVPlayerItem(asset: AVURLAsset.withSiteHeaders(url))
@@ -206,7 +208,10 @@ struct NativeVideoView: View {
         }
         .onAppear {
             if holder.controller == nil { holder.controller = VideoController(url: url) }
-            holder.controller?.onFinished = { if isActive { onFinished?() } }
+            if let c = holder.controller {
+                c.isActivePage = isActive
+                c.onFinished = { [weak c] in if c?.isActivePage == true { onFinished?() } }
+            }
         }
         .onDisappear {
             holder.controller?.teardown()
@@ -256,6 +261,7 @@ private struct NativeVideoContent: View {
         }
         .onAppear { if isActive && AppSettings.shared.autoplayVideos { controller.play() } }
         .onChange(of: isActive) { active in
+            controller.isActivePage = active
             if active { if AppSettings.shared.autoplayVideos { controller.play() } } else { controller.pause() }
         }
         .onDisappear { controller.pause() }
