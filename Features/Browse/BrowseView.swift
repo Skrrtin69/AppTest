@@ -60,7 +60,7 @@ struct BrowseView: View {
                 }
             }
             .sheet(item: $collectionBatch) { CollectionPickerSheet(posts: $0.posts) }
-            .sheet(item: $builderFor) { QueryBuilderSheet(tab: $0) }
+            .sheet(item: $builderFor, onDismiss: { searchText = model.current?.query ?? "" }) { QueryBuilderSheet(tab: $0) }
             .sheet(isPresented: $showJump) {
                 NavigationView {
                     Form {
