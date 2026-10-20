@@ -99,6 +99,10 @@ enum MockVault {
             return r
         }
         if sub == "/posts.json" { return MockRoutes.siteA("/posts.json", req: req, origin: origin) }
+        if sub != "" && sub != "/" {
+            return .text(cfPage("Page not found", "<h1>404 Page not found</h1><p><a href=\"/cf/\">Return to homepage</a></p>"),
+                         status: 404, type: "text/html; charset=utf-8")
+        }
         return .text(cfPage("Demo CF site", "<h1>Demo site behind a check</h1>"), type: "text/html; charset=utf-8")
     }
 

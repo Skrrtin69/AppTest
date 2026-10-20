@@ -14,15 +14,32 @@ struct CloudflareVerifyView: View {
         weak var webView: WKWebView?
         var timer: Timer?
         var done = false
+        /// cf_clearance values that existed before the page opened: only a new one closes it.
+        var before: Set<String>?
     }
+
+    /// Just the scheme and host (and port): https://example.com/. API addresses aren't
+    /// pages, so opening one shows the site's 404 instead of the check.
+    static func siteRoot(of address: String) -> URL? {
+        guard let u = URL(string: address), let scheme = u.scheme, let host = u.host else { return nil }
+        return URL(string: "\(scheme)://\(host)\(u.port.map { ":\($0)" } ?? "")/")
+    }
+
+    var root: URL { Self.siteRoot(of: url.absoluteString) ?? url }
 
     var body: some View {
         NavigationView {
-            CloudflareWebView(url: url, model: model)
+            CloudflareWebView(url: root, model: model)
                 .ignoresSafeArea(edges: .bottom)
                 .navigationTitle("Security check")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                    // For when the site had already let this browser in (no new pass appears).
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { finish(force: true) }.accessibilityIdentifier("cloudflareDone")
+                    }
+                }
         }
         .onAppear { startWatching() }
         .onDisappear { model.timer?.invalidate() }
@@ -30,26 +47,37 @@ struct CloudflareVerifyView: View {
 
     private func startWatching() {
         model.timer?.invalidate()
-        model.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in check() }
+        model.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in finish(force: false) }
     }
 
-    private func check() {
-        guard !model.done, let wv = model.webView, let host = url.host?.lowercased() else { return }
-        wv.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
-            let mine = cookies.filter { c in
+    private func cookies(_ done: @escaping ([HTTPCookie]) -> Void) {
+        guard let wv = model.webView, let host = root.host?.lowercased() else { return done([]) }
+        wv.configuration.websiteDataStore.httpCookieStore.getAllCookies { all in
+            done(all.filter { c in
                 let d = c.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
                 return host == d || host.hasSuffix("." + d)
-            }
-            guard !model.done, mine.contains(where: { $0.name == "cf_clearance" }) else { return }
+            })
+        }
+    }
+
+    /// Closes (and hands over the cookies and User-Agent) when a new cf_clearance appears,
+    /// or right away when `force` (Done). Error pages (404…) never close it.
+    private func finish(force: Bool) {
+        guard !model.done, let wv = model.webView else { return }
+        cookies { mine in
+            let passes = Set(mine.filter { $0.name == "cf_clearance" }.map(\.value))
+            if model.before == nil { model.before = passes; if !force { return } }
+            guard !model.done, force || !passes.subtracting(model.before ?? []).isEmpty else { return }
             model.done = true
             model.timer?.invalidate()
             for c in mine { HTTPCookieStorage.shared.setCookie(c) }
             wv.evaluateJavaScript("navigator.userAgent") { result, _ in
                 let ua = (result as? String) ?? ""
-                DebugLog.log("Cloudflare", "passed for \(host); \(mine.count) cookie(s) kept")
+                DebugLog.log("Cloudflare", "\(force ? "done tapped" : "new pass") for \(root.host ?? ""); \(mine.count) cookie(s) kept")
                 onVerified(ua)
                 dismiss()
-                ToastCenter.shared.show("Verified. Trying the site again…", style: .success)
+                ToastCenter.shared.show(passes.isEmpty ? "No pass from the site yet. Trying again anyway…" : "Verified. Trying the site again…",
+                                        style: passes.isEmpty ? .error : .success)
             }
         }
     }

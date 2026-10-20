@@ -20,7 +20,7 @@ enum MockExtras {
         return .text("""
         <!doctype html><html><head><title>Demo server</title>
         <link rel="search" type="application/opensearchdescription+xml" title="Demo A" href="\(o)/a/opensearch.xml">
-        </head><body><h1>MediaDeck demo server</h1><p>Synthetic content only.</p></body></html>
+        </head><body><h1>MediaDeck demo server</h1><p>Synthetic content only.</p><p><a href="/cf/">Demo site behind a security check</a></p></body></html>
         """, type: "text/html; charset=utf-8")
     }
 

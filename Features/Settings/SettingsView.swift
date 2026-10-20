@@ -47,11 +47,6 @@ struct SettingsView: View {
                         ForEach(ThumbAspect.allCases) { Text($0.label).tag($0) }
                     }
                     Toggle("Animate GIFs in grids", isOn: $settings.animateGridGIFs)
-                    Toggle("Autoplay videos in viewer", isOn: $settings.autoplayVideos)
-                    Toggle("Start videos muted", isOn: $settings.startMuted)
-                        .accessibilityIdentifier("startMutedToggle")
-                    Toggle("Enable Volume/Brightness Swipes", isOn: $settings.edgeSwipes)
-                        .accessibilityIdentifier("edgeSwipesToggle")
                     Toggle("Smart square thumbnails", isOn: $settings.smartThumbnails)
                         .accessibilityIdentifier("smartThumbnails")
                     Toggle("Play alongside other audio", isOn: $settings.mixWithOthers)
@@ -63,6 +58,16 @@ struct SettingsView: View {
                         ViewedStore.shared.clearViewed()
                         ToastCenter.shared.show("Viewed history cleared", style: .success)
                     }
+                }
+
+                Section {
+                    Toggle("Autoplay videos in viewer", isOn: $settings.autoplayVideos)
+                    Toggle("Start videos muted", isOn: $settings.startMuted)
+                        .accessibilityIdentifier("startMutedToggle")
+                    Toggle("Enable Volume/Brightness Swipes", isOn: $settings.edgeSwipes)
+                        .accessibilityIdentifier("edgeSwipesToggle")
+                } header: { Text("Reading & Viewer") } footer: {
+                    Text("Swipes: drag along the right edge of a post for volume, the left edge for brightness.")
                 }
 
                 Section {

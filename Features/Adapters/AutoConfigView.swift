@@ -310,7 +310,7 @@ struct AutoConfigView: View {
                     Label("Protected by Cloudflare", systemImage: "shield.lefthalf.filled")
                         .font(.headline).foregroundColor(.orange)
                     Button {
-                        if let u = siteHome ?? URL(string: address) { cfPage = LoginPage(url: u) }
+                        if let u = CloudflareVerifyView.siteRoot(of: address) { cfPage = LoginPage(url: u) }
                     } label: {
                         Text("This site is protected by Cloudflare. Tap to verify.")
                             .frame(maxWidth: .infinity)
