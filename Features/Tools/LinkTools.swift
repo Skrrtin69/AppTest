@@ -13,14 +13,19 @@ enum LinkRouter {
         let matching = configs.filter { c in
             [c.baseURL, c.mediaBaseURL].compactMap { $0.host?.lowercased() }.contains { strip($0) == strip(host) }
         }
-        // Several sites on one host (the demo server): prefer the one whose path matches too.
-        return matching.max { a, b in
-            commonPrefix(url.path, a.baseURL.path) < commonPrefix(url.path, b.baseURL.path)
-        }
+        // Several sites on one host (the demo server): the one whose whole address path the
+        // link starts with, longest first (/a/secure beats /a only for /a/secure/... links).
+        guard let best = matching.map({ pathScore(url, $0) }).max() else { return nil }
+        // No site's path fits (e.g. API under /api, pages under /posts): any site on the host.
+        let top = best < 0 ? matching : matching.filter { pathScore(url, $0) == best }
+        // Same address in several adapters: the site already open wins, then list order.
+        return top.first { $0.id == BrowseModel.shared.current?.siteID } ?? top.first
     }
 
-    private static func commonPrefix(_ a: String, _ b: String) -> Int {
-        zip(a, b).prefix { $0 == $1 }.count
+    private static func pathScore(_ url: URL, _ c: AdapterConfig) -> Int {
+        let base = c.baseURL.path.hasSuffix("/") ? String(c.baseURL.path.dropLast()) : c.baseURL.path
+        if base.isEmpty { return 0 }
+        return url.path == base || url.path.hasPrefix(base + "/") ? base.count : -1
     }
 
     /// What a link asks for: a post ID or search words.
