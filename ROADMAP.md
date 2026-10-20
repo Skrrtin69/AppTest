@@ -87,11 +87,15 @@ Status per item is tracked in commits and in BLOCKERS.md.
 ## Phase 17: Machine Learning, Background Tasks, and Advanced Reading ✅
 - OCR; feature-print near-duplicate detection; double-page landscape; saved-search watch notifications; video frame grabber; debug console.
 
-## Phase 18: Sharing, AI Filtering, and System Shortcuts
-- Adapter QR share/scan; on-device content blur; text-to-speech; Live Activities; deep links; image upscaling.
+## Phase 18: Deep links and upscaling ✅ (trimmed)
+- Kept: mediadeck://search?tag=X&site=Y and mediadeck://post?id=Y&site=Z; 2×/3× Lanczos upscaling in Edit Picture.
+- Dropped at the owner's request (privacy): Live Activities, QR adapter sharing, read aloud, AI subject blur.
 
-## Phase 19: Edge-Case Media & Format Handling
-- ZIP frame animations (`zipExtensions`); HTML interception; HLS (.m3u8); animated WebP/APNG; case-insensitive extensions; zero-byte detection.
+## Phase 19: Edge-Case Media & Format Handling ✅
+- ZIP frame animations (zipExtensions, zipFramesPath, animation.json), animated WebP/APNG, HLS (.m3u8), case-insensitive extensions, empty-file and web-page answers.
+
+## Phase 20: Data Hoarding & External Tools ✅
+- Save galleries as CBZ, external archive page (externalArchiveURL), Pools tab, Reverse Search Selected with a duplicates report, fallback site prompt.
 
 ## Testing Matrix
 Against the mock server:

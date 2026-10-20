@@ -138,3 +138,21 @@ Choices made while building MediaDeck, and why.
 - **Watching saved searches** uses `BGAppRefreshTask` (iOS decides when; it can't be forced) plus a check on opening. State lives in UserDefaults per saved-search ID. The first check only records what's there, so nothing counts as "new" right away. Notifications are only sent while the app is in the background; in the app a message is shown instead.
 - **Debug log masking:** query values whose names contain key, token, pass, secret, auth, session, user_id or sig are replaced before a line is stored.
 - **Messages moved to the bottom of the screen.** At the top, a message's Undo sat exactly where sheets have Done, so a quick Done tap undid the action (found while testing look-alikes).
+
+## Phase 18 (trimmed)
+- Live Activities, QR sharing, read aloud and AI subject blur were dropped at the owner's request: nothing on the Lock Screen, no talking, and the manual blur is enough.
+- **Deep links** reuse the existing router: a numbers-only search opens that post. The same link arriving twice within 2 s is ignored, because a link that launches the app is delivered twice.
+- **Upscaling** only applies to the saved file (Lanczos + 0.4 luminance sharpen); the preview stays small.
+
+## Phase 19
+- **ZIP reading** is built in (central directory; stored and deflate via the Compression framework), so no library is needed. Timings: site JSON (registered when results are mapped), else animation.json, else 100 ms. UIImage animations have one frame length, so longer frames are repeated to approximate their delay.
+- **Any multi-frame image ImageIO can read animates** (GIF, WebP, APNG), reading delays from each format's own dictionary.
+- **HLS always uses AVPlayer.** The playability check found no video tracks in an HLS asset before playback and sent it to the web player, which can't play it.
+- **Empty and HTML answers** are rejected before decoding everywhere: the request layer (status and Content-Type), the decoder (for local files) and downloads (size 0, or a text/html Content-Type).
+
+## Phase 20
+- **CBZ** pages keep their real type: the address's extension, else sniffed from the first bytes. Names are zero-padded to at least 3 digits.
+- **Pools** come either from a list of post IDs (fetched one by one in order, capped at 500) or from a search template (paged, capped at 1000).
+- **Six tabs would push Settings under iOS's "More"**, so Downloads moved into the Library, and the queue count shows as the Library tab's badge.
+- **Mass reverse search** runs sequentially with a 1.5 s pause between requests. "Duplicates" means selected posts whose best match is the same source address, or a match that points to a different post on one of your sites.
+- **Fallback** is offered only when the first page fails with a timeout, connection error, 429 or 5xx, and only if a fallback site is chosen. Nothing switches without a tap.

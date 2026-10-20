@@ -39,3 +39,7 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 
 ## 8. Not verifiable by automation (Phase 17)
 - **Background refresh timing:** iOS decides when background refresh runs. The same check was verified by running it from the debug console (9 new posts found on the demo "rotating" search, with the "9 new" badge shown).
+
+## 9. Phases 18–20
+- No blockers. HLS was verified with a short local stream (demo Formats site, post u5). Real HLS servers may need the adapter's headers, which are passed to AVPlayer.
+- Pools on adapters created before Phase 20 need the pool fields added by hand (Field Guide › Pools and archives). Only new installs get them on the built-in Demo Site A.

@@ -247,7 +247,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ---
 
-## What's new (Phases 1–17)
+## What's new (Phases 1–20)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -349,9 +349,29 @@ Failures are explained in plain English with one next step: bad address, unreach
 - **Debug console:** Settings › About › tap Version 5 times. It shows a live log, including every request with status, time and size; keys, tokens and passwords in addresses appear as •••. It can also run the saved-search check now.
 - The demo search **rotating** (Demo Site A) changes its results every minute, for trying Watch.
 
+**Links and upscaling (Phase 18)**
+- **Links that open MediaDeck:** `mediadeck://search?tag=blue&site=demo-a` runs a search, and `mediadeck://post?id=12&site=demo-a` opens a post. `site` is an adapter id or display name; leave it out to use the open site.
+- **Upscale:** Edit Picture › Size when saved › 2× or 3× larger, using high-quality (Lanczos) enlarging with light sharpening. It shows the saved size, and the long side is capped at 8192 px.
+
+**Awkward formats (Phase 19)**
+- **ZIP animations:** addresses ending in `.zip` (adapter `zipExtensions`) are unzipped on the phone and played like a GIF. Frame timings come from the site's JSON (`zipFramesPath`, a list like `[{"file": "000.jpg", "delay": 80}]`), else from an `animation.json` inside the ZIP, else 100 ms per frame.
+- **Animated WebP and APNG** play with their own frame timings.
+- **HLS streams** (`.m3u8`) play in the native player (added to the default video types). They can't be downloaded, and saying so is the only thing Download does for them.
+- **File endings ignore capitals:** `.JPG`, `.MP4` and `.ZIP` work like `.jpg`, `.mp4` and `.zip`.
+- **Clear errors:** an empty file says "File not found on server", and a web page where a picture or file was expected says "Site blocked request or requires login" (viewer, grid and downloads).
+- Auto-Configure › Try a demo address › **Demo Formats** shows one post per case.
+
+**Library power tools (Phase 20)**
+- **Save as CBZ:** in a gallery, use the box button next to the page counter (or ⋯ › Save as CBZ). Pages are downloaded, keep their own type, are named 001.jpg, 002.png… and packed into a `.cbz` you save to Files.
+- **Generate External Archive:** with `externalArchiveURL` set (for example `https://…/g/{id}?format=cbz`), ⋯ in a gallery opens that page in the themed browser with `{id}` filled in.
+- **Pools tab:** browse and search a site's pools (series, comics) and read one in order. Adapter fields: `poolsPath` (with `{page}`, `{query}`), `poolsResultsPath`, `poolIDPath`, `poolNamePath`, `poolCountPath`, and either `poolPostIDsPath` (IDs in reading order) or `poolSearchTemplate` (e.g. `pool:{id}`). The demo Site A has pools.
+- **The download queue now opens from the Library** (the arrow button, with a count badge on the Library tab), because iOS shows only five tabs before hiding the rest under "More".
+- **Reverse Search Selected:** select posts in Browse › magnifying-glass button. They're searched one by one with your reverse search engine, and the report lists sources, posts with no source, groups that share a source (likely duplicates), and matches already on one of your sites. Copy the report with the button at the top. To use the SauceNAO JSON API, add it as an engine in Settings › Tools › Reverse Search with your own key; MediaDeck doesn't ship any service.
+- **Fallback site** (Settings › Reading): when a search fails because the site is down or busy (timeout, 429, 5xx), MediaDeck asks "<site> is offline. Switch to <fallback> for this search?" and only switches if you tap Switch.
+
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 
 ### New adapters.json fields (all optional)
-`alternateMediaURLPaths`, `tagSpaceReplacement`, `autocompletePath`, `autocompleteResultsPath`, `autocompleteNameKey`, `randomTag`, `relatedTagsPath`, `wikiPath`, `tagAliasesPath`, `votePath`, `accountSettingsPath`, `registerURL`, `authUserParamName`, `apiKeyPageURL`, `favoritePath`, `tagCategoryKey`, `galleryPath`, `galleryURLKey`, and the `bearer` login style. `metadataPaths` can also hold an `uploader` entry.
+`alternateMediaURLPaths`, `tagSpaceReplacement`, `autocompletePath`, `autocompleteResultsPath`, `autocompleteNameKey`, `randomTag`, `relatedTagsPath`, `wikiPath`, `tagAliasesPath`, `votePath`, `accountSettingsPath`, `registerURL`, `authUserParamName`, `apiKeyPageURL`, `favoritePath`, `tagCategoryKey`, `galleryPath`, `galleryURLKey`, `zipExtensions`, `zipFramesPath`, `externalArchiveURL`, `poolsPath`, `poolsResultsPath`, `poolIDPath`, `poolNamePath`, `poolCountPath`, `poolPostIDsPath`, `poolSearchTemplate`, and the `bearer` login style. `m3u8` is now in the default `videoExtensions`. `metadataPaths` can also hold an `uploader` entry.
 
 Each is explained in Settings › Sites & Adapters › Field Guide. Features whose field is empty don't appear in the app.

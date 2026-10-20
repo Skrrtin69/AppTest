@@ -135,6 +135,9 @@ struct PoolsView: View {
             pools += fresh
             endReached = fresh.isEmpty
             page += 1
+        } catch is CancellationError {
+        } catch let e as URLError where e.code == .cancelled {
+            // A newer load replaced this one (e.g. the site was just chosen); not an error.
         } catch { self.error = error.localizedDescription }
     }
 }
