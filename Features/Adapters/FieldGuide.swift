@@ -31,6 +31,8 @@ enum FieldGuide {
          [.autocompletePath, .autocompleteResultsPath, .autocompleteNameKey]),
         Section("Media types", "How the app decides if something is a video, a GIF, or a picture.",
          [.videoExtensions, .gifExtensions, .zipExtensions, .zipFramesPath]),
+        Section("Pools and archives", "Optional. Pools are ordered sets of posts (series, comics) shown in the Pools tab; the archive page builds downloads of whole galleries.",
+         [.poolsPath, .poolsResultsPath, .poolIDPath, .poolNamePath, .poolCountPath, .poolPostIDsPath, .poolSearchTemplate, .externalArchiveURL]),
         Section("Pages", "How to get the next page of results.",
          [.paginationStyle, .hasNextPagePath, .cursorPath]),
         Section("Login", "Only needed if the site wants an account or key. Your actual username/password/key is saved separately and securely under Account.",
@@ -91,6 +93,14 @@ enum FieldGuide {
         e(.galleryPath, "Gallery pages", "Optional. Inside one result: the list of pages of a multi-page post (comic, album). Those posts open as a scrolling reader with a page counter.", "pages")
         e(.zipExtensions, "Animation archive types", "Address endings of ZIP files that hold an animation frame by frame (e.g. zip). They play like a GIF.", "zip")
         e(.zipFramesPath, "Animation frames", "Optional. Inside one result: the list of frames with their delays, like [{\"file\": \"000.jpg\", \"delay\": 80}] (milliseconds). Without it, an animation.json inside the archive is used, or 100 ms per frame.", "frames")
+        e(.externalArchiveURL, "External archive page", "Optional. A web page (yours or a service you use) that makes a PDF/EPUB/CBZ of a gallery. {id} becomes the post ID. Opens from the gallery viewer.", "https://example.invalid/g/{id}?format=cbz")
+        e(.poolsPath, "Pools address", "Optional. Address of the site's list of pools (series, comics). {page} = page number, {query} = name search.", "pools.json?page={page}&search={query}")
+        e(.poolsResultsPath, "Pools list", "Where the list of pools is in that answer. Empty if the answer itself is the list.", "pools")
+        e(.poolIDPath, "Pool ID", "Inside one pool: its ID.", "id")
+        e(.poolNamePath, "Pool name", "Inside one pool: its name.", "name")
+        e(.poolCountPath, "Pool size", "Inside one pool: how many posts it has.", "post_count")
+        e(.poolPostIDsPath, "Pool post IDs", "Inside one pool: the IDs of its posts in reading order (each is opened with Post address).", "post_ids")
+        e(.poolSearchTemplate, "Pool search", "Only if pools don't list their post IDs: the search that shows one pool. {id} becomes the pool ID.", "pool:{id}")
         e(.galleryURLKey, "Gallery page key", "If each page is an object, which key holds the page's address.", "url")
         e(.favoritePath, "Account favorites address", "Optional. Added to the base address; {id} is the post ID. When set and you're logged in, favoriting also saves to your account (POST), and unfavoriting removes it (DELETE).", "favorites/{id}")
         e(.relatedTagsPath, "Related tags address", "Optional. Added to the base address; {tag} is replaced by a tag. When set, the Info panel shows tags that often appear with it.", "tags/related.json?tag={tag}")

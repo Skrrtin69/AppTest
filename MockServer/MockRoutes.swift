@@ -131,6 +131,14 @@ enum MockRoutes {
            (1...MockCatalog.count).contains(n) {
             return .json(siteAPost(MockCatalog.items[n - 1], origin: origin))
         }
+        if sub == "/pools.json" {
+            return .json(MockCatalog.pools(page: Int(req.query["page"] ?? "1") ?? 1, search: req.query["search"] ?? ""))
+        }
+        if sub.hasPrefix("/archive/") {
+            let id = String(sub.dropFirst("/archive/".count))
+            return .text("<!doctype html><html><head><meta name='viewport' content='width=device-width'><title>Demo archive</title></head><body style='font:18px -apple-system;padding:24px'><h1>Archive for post \(id)</h1><p>A real service would build a PDF, EPUB or CBZ here.</p><p><a href='#'>Download CBZ</a> · <a href='#'>Download PDF</a></p></body></html>",
+                         type: "text/html; charset=utf-8")
+        }
         if sub.hasPrefix("/view/") {
             return .text("<html><body style='font:20px -apple-system;padding:40px'><h1>Demo post \(sub.dropFirst(6))</h1><p>This is the demo server's \"source\" page.</p></body></html>",
                          type: "text/html; charset=utf-8")

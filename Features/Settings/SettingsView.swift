@@ -75,6 +75,11 @@ struct SettingsView: View {
                     .accessibilityIdentifier("viewerToolbarSettings")
                     Toggle("Swipe the site name to switch sites", isOn: $settings.swipeSites)
                     Toggle("Two pages side by side in landscape", isOn: $settings.twoPageLandscape)
+                    Picker("Fallback site", selection: $settings.fallbackSite) {
+                        Text("None").tag("")
+                        ForEach(registry.listedConfigs) { Text($0.displayName).tag($0.id) }
+                    }
+                    .accessibilityIdentifier("fallbackSitePicker")
                     Picker("Double tap a picture", selection: $settings.doubleTapAction) {
                         Text("Zoom").tag("zoom"); Text("Favorite").tag("favorite"); Text("Info").tag("info")
                         Text("Next post").tag("next"); Text("Read Later").tag("readLater"); Text("Nothing").tag("none")

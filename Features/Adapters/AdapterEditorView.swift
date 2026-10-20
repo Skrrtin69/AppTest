@@ -239,6 +239,14 @@ struct AdapterEditorView: View {
                           set: { c.zipExtensions = $0.split(whereSeparator: { $0 == " " || $0 == "," || $0 == "\n" }).map { String($0).lowercased() } }),
                   "zip", id: "field-zipExtensions")
         case .zipFramesPath: plain(opt(\.zipFramesPath), "frames", id: "field-zipFramesPath")
+        case .externalArchiveURL: plain(opt(\.externalArchiveURL), "https://example.invalid/g/{id}?format=cbz", id: "field-externalArchiveURL")
+        case .poolsPath: plain(opt(\.poolsPath), "pools.json?page={page}&search={query}", id: "field-poolsPath")
+        case .poolsResultsPath: plain(opt(\.poolsResultsPath), "pools", id: "field-poolsResultsPath")
+        case .poolIDPath: plain(opt(\.poolIDPath), "id", id: "field-poolIDPath")
+        case .poolNamePath: plain(opt(\.poolNamePath), "name", id: "field-poolNamePath")
+        case .poolCountPath: plain(opt(\.poolCountPath), "post_count", id: "field-poolCountPath")
+        case .poolPostIDsPath: plain(opt(\.poolPostIDsPath), "post_ids", id: "field-poolPostIDsPath")
+        case .poolSearchTemplate: plain(opt(\.poolSearchTemplate), "pool:{id}", id: "field-poolSearchTemplate")
         }
     }
 

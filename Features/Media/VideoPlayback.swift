@@ -15,6 +15,9 @@ actor PlaybackRouter {
 
     func route(for url: URL) async -> PlaybackPath {
         if let c = cache[url] { return c }
+        // HLS streams list no tracks until they play, so the check below would wrongly send
+        // them to the web player; AVPlayer is the stream player.
+        if url.pathExtension.lowercased() == "m3u8" { cache[url] = .native; return .native }
         let asset = AVURLAsset.withSiteHeaders(url)
         // Race the playability check against a timeout so a slow server can't hang the viewer.
         let playable: Bool = await withTaskGroup(of: Bool?.self) { group in

@@ -199,6 +199,8 @@ struct GalleryPage: View {
                             .accessibilityLabel("Page \(current + 1) of \(pages.count)")
                         Button { withAnimation { proxy.scrollTo(pages.count - 1, anchor: .top) } } label: { Image(systemName: "arrow.down.to.line") }
                             .accessibilityLabel("Last page")
+                        Button { Task { await CBZExporter.export(post) } } label: { Image(systemName: "archivebox") }
+                            .accessibilityLabel("Save as CBZ")
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 14).padding(.vertical, 7)

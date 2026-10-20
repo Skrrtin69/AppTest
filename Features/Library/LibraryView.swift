@@ -11,6 +11,7 @@ struct LibraryView: View {
     @State private var selected: Set<String> = []
     @State private var viewer: ViewerRequest?
     @State private var confirmDelete = false
+    @State private var showQueue = false
 
     var items: [DownloadItem] {
         let q = search.lowercased().trimmingCharacters(in: .whitespaces)
@@ -80,11 +81,25 @@ struct LibraryView: View {
                     .accessibilityLabel("Filter by site")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(selecting ? "Done" : "Select") { selecting.toggle(); selected = [] }
-                        .disabled(downloads.completed.isEmpty)
+                    HStack {
+                        Button { showQueue = true } label: {
+                            Image(systemName: downloads.queue.isEmpty ? "arrow.down.circle" : "arrow.down.circle.fill")
+                                .overlay(alignment: .topTrailing) {
+                                    if !downloads.queue.isEmpty {
+                                        Text("\(downloads.queue.count)").font(.caption2.bold()).foregroundColor(.white)
+                                            .padding(3).background(Circle().fill(Color.red)).offset(x: 9, y: -8)
+                                    }
+                                }
+                        }
+                        .accessibilityLabel("Downloads, \(downloads.queue.count) in progress")
+                        .accessibilityIdentifier("openDownloads")
+                        Button(selecting ? "Done" : "Select") { selecting.toggle(); selected = [] }
+                            .disabled(downloads.completed.isEmpty)
+                    }
                 }
             }
             .fullScreenCover(item: $viewer) { ViewerView(posts: $0.posts, startIndex: $0.index, isLocal: true) }
+            .sheet(isPresented: $showQueue) { DownloadsView() }
             .confirmationDialog("Delete \(selected.count) item(s) from this device?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     downloads.removeWithUndo(Array(selected)); selected = []; selecting = false

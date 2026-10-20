@@ -58,6 +58,9 @@ enum Presenter {
         }
     }
 
+    /// Offers an existing file (e.g. a freshly built archive) to be saved to Files.
+    static func exportFile(_ url: URL) { exportToFiles([url]) }
+
     /// Writes `data` to a temp file with `name` and offers to save it to Files.
     static func exportData(_ data: Data, filename: String) {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)

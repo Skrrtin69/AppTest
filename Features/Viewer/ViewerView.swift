@@ -18,6 +18,7 @@ struct ViewerView: View {
     @State private var reverseFor: PostBatch?
     @State private var quickHide: PostBatch?
     @State private var editing: PostBatch?
+    @State private var archivePage: AccountView.WebPageRequest?
     @ObservedObject private var dominant = DominantColors.shared
     @State private var sizes: [String: CGSize] = [:]
     // Vertical drag: swipe down to close; left edge = brightness, right edge = volume.
@@ -105,6 +106,7 @@ struct ViewerView: View {
         .sheet(item: $reverseFor) { ReverseSearchSheet(post: $0.posts[0]) }
         .sheet(item: $quickHide) { QuickHideSheet(post: $0.posts[0]) }
         .sheet(item: $editing) { MediaEditorView(post: $0.posts[0]) }
+        .sheet(item: $archivePage) { ThemedWebPage(url: $0.url, prefillUsername: "") }
     }
 
     /// The horizontal pager: one post per page, or two side by side in landscape.
@@ -454,6 +456,15 @@ struct ViewerView: View {
                     }
                     Button { reverseFor = PostBatch(posts: [p]) } label: { Label("Reverse Search", systemImage: "magnifyingglass.circle") }
                     Button { quickHide = PostBatch(posts: [p]) } label: { Label("Hide Posts Like This…", systemImage: "eye.slash") }
+                    if p.isGallery {
+                        Divider()
+                        Button { Task { await CBZExporter.export(p) } } label: { Label("Save as CBZ", systemImage: "archivebox") }
+                        if let u = ExternalArchive.url(for: p) {
+                            Button { archivePage = AccountView.WebPageRequest(url: u) } label: {
+                                Label("Generate External Archive", systemImage: "globe")
+                            }
+                        }
+                    }
                     if p.mediaType == .image {
                         Button { editing = PostBatch(posts: [p]) } label: { Label("Edit Picture…", systemImage: "slider.horizontal.below.rectangle") }
                     }

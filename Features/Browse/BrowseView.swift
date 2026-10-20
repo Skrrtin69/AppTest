@@ -432,6 +432,7 @@ struct SearchTabView: View {
     @ObservedObject var tab: SearchTabModel
     @ObservedObject var settings = AppSettings.shared
     @State private var accountFor: AccountRequest?
+    @State private var massReverse: PostBatch?
     /// Scrolled far enough down to offer the floating "back to top" button.
     @State private var showTopButton = false
     let onOpen: ([Post], Int) -> Void
@@ -500,6 +501,7 @@ struct SearchTabView: View {
             }
             if tab.selecting { selectionBar }
         }
+        .sheet(item: $massReverse) { MassReverseSheet(posts: $0.posts) }
         .sheet(item: $accountFor) { req in
             NavigationView {
                 AccountView(adapterID: req.siteID, displayName: AdapterRegistry.shared.displayName(for: req.siteID),
@@ -550,6 +552,8 @@ struct SearchTabView: View {
                 .disabled(picked.isEmpty).accessibilityLabel("Favorite selected")
             Button { onAddToCollection(picked) } label: { Image(systemName: "folder.badge.plus") }
                 .disabled(picked.isEmpty).accessibilityLabel("Add selected to collection")
+            Button { massReverse = PostBatch(posts: picked) } label: { Image(systemName: "magnifyingglass.circle") }
+                .disabled(picked.isEmpty).accessibilityLabel("Reverse search selected")
             Button {
                 Task { await DownloadManager.shared.enqueue(picked) }
                 tab.selecting = false

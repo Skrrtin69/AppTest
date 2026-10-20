@@ -94,6 +94,17 @@ enum MockCatalog {
         return tagCounts.filter { $0.tag.hasPrefix(p) || $0.tag.contains("_" + p) }.prefix(10).map { $0 }
     }
 
+    /// Demo pools: one per color, posts in reading order (oldest first).
+    static func pools(page: Int, search: String) -> [[String: Any]] {
+        guard page == 1 else { return [] }
+        return colors.enumerated().compactMap { i, c in
+            let name = "\(c)_series"
+            if !search.isEmpty, !name.contains(search.lowercased()) { return nil }
+            let ids = items.filter { $0.tags.contains(c) }.map(\.n).sorted()
+            return ["id": i + 1, "name": name, "post_count": ids.count, "post_ids": ids]
+        }
+    }
+
     /// Applies tag include/exclude, rating and sort.
     static func search(tagQuery: String, sort: String?, rating: String?) -> [MockItem] {
         let words = tagQuery.replacingOccurrences(of: "+", with: " ")

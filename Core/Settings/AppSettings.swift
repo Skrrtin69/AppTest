@@ -57,7 +57,7 @@ final class AppSettings: ObservableObject {
         static let batterySaver = "batterySaver", cacheExpiryDays = "cacheExpiryDays", hiddenViewerButtons = "hiddenViewerButtons"
         static let swipeSites = "swipeSites", detectClipboardLinks = "detectClipboardLinks", dataSaver = "dataSaver",
                          wifiOnlyMedia = "wifiOnlyMedia", mixWithOthers = "mixWithOthers",
-                         smartThumbnails = "smartThumbnails", twoPageLandscape = "twoPageLandscape",
+                         smartThumbnails = "smartThumbnails", twoPageLandscape = "twoPageLandscape", fallbackSite = "fallbackSite",
                          doubleTapAction = "doubleTapAction", swipeUpAction = "swipeUpAction", swipeDownAction = "swipeDownAction"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
@@ -66,7 +66,7 @@ final class AppSettings: ObservableObject {
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
                           readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
                           detectClipboardLinks, dataSaver, wifiOnlyMedia, mixWithOthers,
-                          smartThumbnails, twoPageLandscape, doubleTapAction, swipeUpAction, swipeDownAction]
+                          smartThumbnails, twoPageLandscape, fallbackSite, doubleTapAction, swipeUpAction, swipeDownAction]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -146,6 +146,8 @@ final class AppSettings: ObservableObject {
 
     /// Square thumbnails are cropped around the interesting part of the picture.
     @Published var smartThumbnails: Bool = true { didSet { d.set(smartThumbnails, forKey: K.smartThumbnails) } }
+    /// Site offered when a search fails because the site is down or busy ("" = none).
+    @Published var fallbackSite: String = "" { didSet { d.set(fallbackSite, forKey: K.fallbackSite) } }
     /// Two posts side by side when the phone is sideways (like an open book).
     @Published var twoPageLandscape: Bool = true { didSet { d.set(twoPageLandscape, forKey: K.twoPageLandscape) } }
     /// Viewer gestures: what a double tap / swipe up / swipe down does.
@@ -242,6 +244,7 @@ final class AppSettings: ObservableObject {
         mixWithOthers = d.object(forKey: K.mixWithOthers) as? Bool ?? false
         smartThumbnails = d.object(forKey: K.smartThumbnails) as? Bool ?? true
         twoPageLandscape = d.object(forKey: K.twoPageLandscape) as? Bool ?? true
+        fallbackSite = d.string(forKey: K.fallbackSite) ?? ""
         doubleTapAction = d.string(forKey: K.doubleTapAction) ?? "zoom"
         swipeUpAction = d.string(forKey: K.swipeUpAction) ?? "hide"
         swipeDownAction = d.string(forKey: K.swipeDownAction) ?? "close"

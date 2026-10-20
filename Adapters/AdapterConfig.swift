@@ -96,6 +96,22 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
     /// Inside one result: the list of animation frames with their delays,
     /// e.g. [{"file": "000.jpg", "delay": 80}] (delay in milliseconds).
     var zipFramesPath: String?
+    /// A page that builds an archive of a gallery for you; {id} becomes the post ID.
+    var externalArchiveURL: String?
+    /// Address of the site's pool list ({page}, {query}); pools appear in the Pools tab.
+    var poolsPath: String?
+    /// Where the list of pools is in that answer (empty = the answer itself).
+    var poolsResultsPath: String?
+    /// Inside one pool: its ID (default "id").
+    var poolIDPath: String?
+    /// Inside one pool: its name (default "name").
+    var poolNamePath: String?
+    /// Inside one pool: how many posts it has.
+    var poolCountPath: String?
+    /// Inside one pool: its post IDs in reading order.
+    var poolPostIDsPath: String?
+    /// If pools don't list post IDs: the search that shows a pool, e.g. pool:{id}.
+    var poolSearchTemplate: String?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case id, displayName, baseURL, searchPath, postPath, mediaBaseURL, requiresAuth, rateLimitPerSecond
@@ -105,7 +121,7 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         case sortOptions, ratingOptions, userAgent, proxyHost, proxyPort, timeoutSeconds, headers
         case alternateMediaURLPaths, tagSpaceReplacement, autocompletePath, autocompleteResultsPath, autocompleteNameKey, randomTag
         case relatedTagsPath, wikiPath, tagAliasesPath, votePath, accountSettingsPath, registerURL
-        case authUserParamName, apiKeyPageURL, favoritePath, tagCategoryKey, galleryPath, galleryURLKey, zipExtensions, zipFramesPath
+        case authUserParamName, apiKeyPageURL, favoritePath, tagCategoryKey, galleryPath, galleryURLKey, zipExtensions, zipFramesPath, externalArchiveURL, poolsPath, poolsResultsPath, poolIDPath, poolNamePath, poolCountPath, poolPostIDsPath, poolSearchTemplate
     }
 
     init(id: String, displayName: String, baseURL: URL, searchPath: String, postPath: String,
@@ -187,6 +203,14 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         galleryURLKey = try c.decodeIfPresent(String.self, forKey: .galleryURLKey)
         zipExtensions = try c.decodeIfPresent([String].self, forKey: .zipExtensions) ?? ["zip"]
         zipFramesPath = try c.decodeIfPresent(String.self, forKey: .zipFramesPath)
+        externalArchiveURL = try c.decodeIfPresent(String.self, forKey: .externalArchiveURL)
+        poolsPath = try c.decodeIfPresent(String.self, forKey: .poolsPath)
+        poolsResultsPath = try c.decodeIfPresent(String.self, forKey: .poolsResultsPath)
+        poolIDPath = try c.decodeIfPresent(String.self, forKey: .poolIDPath)
+        poolNamePath = try c.decodeIfPresent(String.self, forKey: .poolNamePath)
+        poolCountPath = try c.decodeIfPresent(String.self, forKey: .poolCountPath)
+        poolPostIDsPath = try c.decodeIfPresent(String.self, forKey: .poolPostIDsPath)
+        poolSearchTemplate = try c.decodeIfPresent(String.self, forKey: .poolSearchTemplate)
     }
 
     /// Writes every key, including empty ones as null, so an exported file shows all fields.
@@ -230,6 +254,14 @@ struct AdapterConfig: Codable, Hashable, Identifiable {
         try c.encode(galleryURLKey, forKey: .galleryURLKey)
         try c.encode(zipExtensions, forKey: .zipExtensions)
         try c.encode(zipFramesPath, forKey: .zipFramesPath)
+        try c.encode(externalArchiveURL, forKey: .externalArchiveURL)
+        try c.encode(poolsPath, forKey: .poolsPath)
+        try c.encode(poolsResultsPath, forKey: .poolsResultsPath)
+        try c.encode(poolIDPath, forKey: .poolIDPath)
+        try c.encode(poolNamePath, forKey: .poolNamePath)
+        try c.encode(poolCountPath, forKey: .poolCountPath)
+        try c.encode(poolPostIDsPath, forKey: .poolPostIDsPath)
+        try c.encode(poolSearchTemplate, forKey: .poolSearchTemplate)
     }
 
     /// Starting point for the "Add adapter" form.

@@ -233,8 +233,34 @@ final class SearchTabModel: ObservableObject, Identifiable {
         } catch {
             guard gen == generation, !Self.isCancellation(error) else { return }
             self.error = error.localizedDescription
+            if posts.isEmpty, await offerFallback(after: error) { return }
             ToastCenter.shared.error(error, prefix: siteName)
         }
+    }
+
+    /// When the site is offline or busy (timeout, 429, 5xx), asks whether to run this search
+    /// on the fallback site from Settings. Switches only if the user taps Switch.
+    func offerFallback(after error: Error) async -> Bool {
+        let fb = AppSettings.shared.fallbackSite
+        guard !fb.isEmpty, fb != siteID, !isMerged, let target = AdapterRegistry.shared.config(for: fb),
+              AdapterRegistry.shared.enabledConfigs.contains(where: { $0.id == fb }), Self.isOutage(error) else { return false }
+        let ok = await Confirm.ask(title: "\(siteName) is offline",
+                                   message: "\(error.localizedDescription)\n\nSwitch to \(target.displayName) for this search?",
+                                   confirm: "Switch")
+        guard ok else { return false }
+        DebugLog.log("Fallback", "\(siteID) → \(fb) for \"\(query)\"")
+        siteID = fb
+        BrowseModel.shared.objectWillChange.send()
+        await search(recordHistory: false)
+        return true
+    }
+
+    static func isOutage(_ error: Error) -> Bool {
+        if let u = error as? URLError {
+            return [.timedOut, .cannotConnectToHost, .networkConnectionLost, .cannotFindHost, .dnsLookupFailed].contains(u.code)
+        }
+        if case AppError.http(let status, _, _) = error { return status == 429 || (500...599).contains(status) }
+        return false
     }
 
     /// Pull-to-refresh: fetches page 1 first and swaps it in, keeping the current grid on
@@ -396,7 +422,7 @@ final class BrowseModel: ObservableObject {
 @MainActor
 final class AppRouter: ObservableObject {
     static let shared = AppRouter()
-    enum Tab: Hashable { case browse, favorites, library, downloads, settings }
+    enum Tab: Hashable { case browse, pools, favorites, library, downloads, settings }
     @Published var tab: Tab = .browse
 
     func search(tag: String, siteID: String) {

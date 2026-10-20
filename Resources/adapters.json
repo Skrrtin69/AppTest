@@ -68,7 +68,12 @@
     "wikiPath": "wiki/{tag}.json",
     "tagAliasesPath": "aliases.json?tag={tag}",
     "votePath": "posts/{id}/vote",
-    "registerURL": "register"
+    "registerURL": "register",
+    "poolsPath": "pools.json?page={page}&search={query}",
+    "poolsResultsPath": "",
+    "poolCountPath": "post_count",
+    "poolPostIDsPath": "post_ids",
+    "externalArchiveURL": "http://127.0.0.1:8765/a/archive/{id}"
   },
   {
     "id": "demo-b",

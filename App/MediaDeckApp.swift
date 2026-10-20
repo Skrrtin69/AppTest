@@ -112,16 +112,17 @@ struct RootView: View {
                     BrowseView()
                         .tabItem { Label("Browse", systemImage: "square.grid.3x3") }
                         .tag(AppRouter.Tab.browse)
+                    PoolsView()
+                        .tabItem { Label("Pools", systemImage: "books.vertical") }
+                        .tag(AppRouter.Tab.pools)
                     FavoritesView()
                         .tabItem { Label("Favorites", systemImage: "heart") }
                         .tag(AppRouter.Tab.favorites)
+                    // The download queue opens from the Library (a sixth tab would hide under "More").
                     LibraryView()
                         .tabItem { Label("Library", systemImage: "photo.on.rectangle") }
-                        .tag(AppRouter.Tab.library)
-                    DownloadsView()
-                        .tabItem { Label("Downloads", systemImage: "arrow.down.circle") }
                         .badge(downloads.queue.count)
-                        .tag(AppRouter.Tab.downloads)
+                        .tag(AppRouter.Tab.library)
                     SettingsView()
                         .tabItem { Label("Settings", systemImage: "gearshape") }
                         .tag(AppRouter.Tab.settings)
