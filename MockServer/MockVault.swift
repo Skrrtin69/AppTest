@@ -77,7 +77,8 @@ enum MockVault {
         }
     }
 
-    static let clearance = "cf_clearance=demo-clearance"
+    /// New every launch, so the check can be tried again after a restart.
+    static let clearance = "cf_clearance=demo-\(UUID().uuidString.prefix(8))"
 
     /// /cf: behaves like a site behind Cloudflare. Without the clearance cookie every page
     /// (API included) is a 403 check page with Cloudflare's headers; /cf/verify sets it.
