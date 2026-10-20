@@ -124,3 +124,19 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
   - "Verify you are human" set a new pass, and the sheet closed on its own: "Verified. Trying the site again…", then a successful analysis.
   - The demo pass now changes on every launch so this can be repeated.
 - **Settings:** Autoplay, Start videos muted and Enable Volume/Brightness Swipes are now in a new **Reading & Viewer** section (checked on the phone).
+
+## 21. False Cloudflare prompt; legacy tag counts
+- **Real trace (the owner's gallery site, captured on the phone by the new `[Probe]` lines in the Debug Console):**
+  - Old API shapes (`/api/v1/posts`, `/api/posts`, `/api/galleries/search`): **403 `text/plain`**, body `Use new API https://…/api/v2/docs`, `Server: cloudflare` and `cf-ray`, **no `cf-mitigated`**.
+  - Other shapes: 404 HTML pages with the same Cloudflare headers.
+  - `/api/v2/search?query=…`: 200 JSON, no login.
+  - **Cause:** every answer from a site behind Cloudflare carries those headers. The check counted any non-JSON 403 with them as a challenge. The resolver stopped at the first such answer, so re-analyzing after the check hit the same path and showed the same prompt.
+- **Fixed:**
+  - Cloudflare is reported only for `cf-mitigated: challenge` or a 403/503/429 page with Cloudflare's own check-page markup.
+  - A 403 counts as a login problem only when it says so, is JSON, or is empty. Other 403s are ordinary errors, and the next shape is tried.
+  - `/api/v2/search?query={tags}&page={page}` and `/api/v2/posts?tags={tags}&page={page}` were added to the shapes tried.
+- **Verified on the phone:** Analyze on the real site resolved to `/api/v2/search`, public, with no Cloudflare card. The mock `/mv` (same answers) did the same.
+- **Still open for that site:** its thumbnails are relative paths served from a separate image host. The media base address is marked low confidence and needs setting before images load.
+- **Legacy tag counts:** the probe sent `q=` to `index.php?page=autocomplete2`, which answers `[]` on a real board; it needs `term=`. The other style of board redirects `public/autocomplete.php` and puts the count only in the label (`blush (3922720)`). Both are now detected. The tag name is read from `value` before `label`, and counts are parsed from the label.
+  - Verified on the phone: mocks `/lb1` (autocomplete2, counts as strings) and `/lb2` (302 to JSON sent as text/html, counts in labels) both showed `blue, 8 posts` in the search bar. Both test adapters were deleted.
+  - The owner's saved Gelbooru and Rule34 adapters have **no suggestions address**. They need Auto-Configure re-run, or the address added in Edit, to show counts. They were not changed.
