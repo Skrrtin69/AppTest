@@ -28,6 +28,7 @@ enum Backup {
         root["adapterDisabled"] = d.stringArray(forKey: "adapterDisabled") ?? []
         root["library"] = LibraryStore.shared.backupJSON()
         root["readLater"] = ReadLaterStore.shared.backupJSON()
+        root["smartCollections"] = SmartCollectionStore.shared.backupJSON()
         root["tagTranslations"] = TagTranslations.shared.map
         if let t = d.data(forKey: "customThemes"), let list = try? JSONSerialization.jsonObject(with: t) {
             root["customThemes"] = list
@@ -80,6 +81,10 @@ enum Backup {
         if let later = root["readLater"] {
             let n = ReadLaterStore.shared.merge(later)
             if n > 0 { parts.append("\(n) Read Later post\(n == 1 ? "" : "s")") }
+        }
+        if let sc = root["smartCollections"] {
+            let n = SmartCollectionStore.shared.merge(sc)
+            if n > 0 { parts.append("\(n) smart collection\(n == 1 ? "" : "s")") }
         }
         if let tr = root["tagTranslations"] as? [String: String], !tr.isEmpty {
             var m = TagTranslations.shared.map

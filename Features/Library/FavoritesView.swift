@@ -12,6 +12,8 @@ struct FavoritesView: View {
     @State private var selected: Set<String> = []
     @State private var newCollection = ""
     @State private var showNewCollection = false
+    @State private var editingSmart: SmartCollection?
+    @ObservedObject private var smart = SmartCollectionStore.shared
 
     @State private var siteFilter: String?
     @State private var query = ""
@@ -94,6 +96,7 @@ struct FavoritesView: View {
             .fullScreenCover(item: $viewer) { ViewerView(posts: $0.posts, startIndex: $0.index) }
             .sheet(item: $collectionBatch) { CollectionPickerSheet(posts: $0.posts) }
             .sheet(isPresented: $showNewCollection) { NewCollectionSheet() }
+            .sheet(item: $editingSmart) { SmartCollectionEditor(collection: $0) }
         }
         .navigationViewStyle(.stack)
     }
@@ -136,12 +139,30 @@ struct FavoritesView: View {
     }
 
     @ViewBuilder var collectionsList: some View {
-        if store.collections.isEmpty {
+        if store.collections.isEmpty && smart.items.isEmpty {
             EmptyStateView(icon: "folder", title: "No collections",
                            message: "Create one with the button above, or long-press a thumbnail › Add to Collection.",
                            actionTitle: "New Collection") { showNewCollection = true }
+            Button { editingSmart = SmartCollection(name: "") } label: { Label("New Smart Collection", systemImage: "sparkles") }
+                .padding(.bottom, 30)
+                .accessibilityIdentifier("newSmartCollection")
         } else {
             List {
+                Section {
+                    ForEach(smart.items) { c in
+                        NavigationLink(destination: SmartCollectionDetailView(collection: c)) {
+                            HStack {
+                                Label(c.name, systemImage: "sparkles.rectangle.stack")
+                                Spacer()
+                                Text("\(smart.posts(for: c).count)").foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .onDelete { idx in idx.map { smart.items[$0].id }.forEach(smart.delete) }
+                    Button { editingSmart = SmartCollection(name: "") } label: { Label("New Smart Collection", systemImage: "sparkles") }
+                        .accessibilityIdentifier("newSmartCollection")
+                } header: { Text("Smart") } footer: { Text("Smart collections fill themselves from favorites that match their rules.") }
+                Section("Collections") {
                 ForEach(store.collections) { c in
                     NavigationLink(destination: CollectionDetailView(collectionID: c.id)) {
                         HStack {
@@ -152,6 +173,7 @@ struct FavoritesView: View {
                     }
                 }
                 .onDelete { idx in idx.map { store.collections[$0].id }.forEach(store.deleteCollection) }
+                }
             }
             .listStyle(.insetGrouped)
         }

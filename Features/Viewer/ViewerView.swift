@@ -17,6 +17,7 @@ struct ViewerView: View {
     @State private var collectionBatch: PostBatch?
     @State private var reverseFor: PostBatch?
     @State private var quickHide: PostBatch?
+    @State private var editing: PostBatch?
     @ObservedObject private var dominant = DominantColors.shared
     @State private var sizes: [String: CGSize] = [:]
     // Vertical drag: swipe down to close; left edge = brightness, right edge = volume.
@@ -52,6 +53,7 @@ struct ViewerView: View {
                                        onFinished: { if i == index { advance() } },
                                        onZoom: { zoomed = $0 },
                                        onTap: handleTap,
+                                       onDoubleTap: handleDoubleTap,
                                        onSize: { sizes[posts[i].key] = $0 })
                                 .tag(slot)
                         }
@@ -78,10 +80,14 @@ struct ViewerView: View {
                 .transition(.opacity)
             }
         }
-        .onDisappear { if settings.rotationLock != "auto" { OrientationLock.apply("auto") } }
+        .onDisappear {
+            if settings.rotationLock != "auto" { OrientationLock.apply("auto") }
+            ExternalDisplay.shared.show(nil)
+        }
         .statusBar(hidden: !chrome)
         .modifier(HideHomeIndicator(hidden: !chrome))
         .onAppear {
+            ExternalDisplay.shared.show(current)
             // Wait for the full-screen presentation to finish: a rotation requested while it's
             // still animating in is dropped by iOS.
             if settings.rotationLock != "auto" {
@@ -91,6 +97,7 @@ struct ViewerView: View {
             if let p = current { ViewedStore.shared.markViewed(p) }
         }
         .onChange(of: index) { _ in
+            ExternalDisplay.shared.show(current)
             prefetchNeighbors()
             if let p = current { ViewedStore.shared.markViewed(p) }
             if !slideshow { Haptics.tap() }
@@ -118,6 +125,7 @@ struct ViewerView: View {
         .sheet(item: $collectionBatch) { CollectionPickerSheet(posts: $0.posts) }
         .sheet(item: $reverseFor) { ReverseSearchSheet(post: $0.posts[0]) }
         .sheet(item: $quickHide) { QuickHideSheet(post: $0.posts[0]) }
+        .sheet(item: $editing) { MediaEditorView(post: $0.posts[0]) }
     }
 
     /// Pager position ↔ post index (reversed in right-to-left mode).
@@ -152,7 +160,7 @@ struct ViewerView: View {
                     } else if v.startLocation.x > width - 44 {
                         dragMode = .volume
                         startLevel = Double(SystemVolume.shared.current)
-                    } else if dy > 0 && !zoomed {
+                    } else if dy > 0 && !zoomed && settings.swipeDownAction == "close" {
                         dragMode = .dismiss
                     } else {
                         dragMode = .other
@@ -174,10 +182,10 @@ struct ViewerView: View {
                 }
             }
             .onEnded { v in
-                // Swipe up on a post: quick blacklist / mute.
+                // Swipe up on a post: the action chosen in Settings › Gestures.
                 if dragMode == .other, !zoomed, v.translation.height < -110,
                    abs(v.translation.width) < abs(v.translation.height) * 0.6, let p = current, !p.isGallery {
-                    quickHide = PostBatch(posts: [p])
+                    perform(settings.swipeUpAction, on: p)
                 }
                 if dragMode == .dismiss && (dragOffset > 140 || v.predictedEndTranslation.height > 400) {
                     dismiss()
@@ -335,6 +343,27 @@ struct ViewerView: View {
         ToastCenter.shared.show(OrientationLock.label(settings.rotationLock))
     }
 
+    /// Double tap: zoom (handled by the picture itself) or the action chosen in Settings.
+    func handleDoubleTap() -> Bool {
+        guard settings.doubleTapAction != "zoom", let p = current else { return false }
+        perform(settings.doubleTapAction, on: p)
+        return true
+    }
+
+    /// Runs a remappable gesture action.
+    func perform(_ action: String, on p: Post) {
+        switch action {
+        case "hide": quickHide = PostBatch(posts: [p])
+        case "info": showInfo = true
+        case "favorite": store.toggleFavorite(p); Haptics.tap()
+        case "download": Task { await DownloadManager.shared.enqueue([p]) }; ToastCenter.shared.show("Downloading")
+        case "readLater": ReadLaterStore.shared.toggle(p)
+        case "next": advance()
+        case "close": dismiss()
+        default: break
+        }
+    }
+
     /// A tap on a picture: with tap zones on, the outer 30% on each side turns the page
     /// (mirrored in right-to-left mode); otherwise it shows or hides the controls.
     func handleTap(_ x: CGFloat) {
@@ -395,6 +424,9 @@ struct ViewerView: View {
                     }
                     Button { reverseFor = PostBatch(posts: [p]) } label: { Label("Reverse Search", systemImage: "magnifyingglass.circle") }
                     Button { quickHide = PostBatch(posts: [p]) } label: { Label("Hide Posts Like This…", systemImage: "eye.slash") }
+                    if p.mediaType == .image {
+                        Button { editing = PostBatch(posts: [p]) } label: { Label("Edit Picture…", systemImage: "slider.horizontal.below.rectangle") }
+                    }
                 } label: { Image(systemName: "ellipsis.circle") }
                 .accessibilityLabel("More")
             }
@@ -425,6 +457,7 @@ struct ViewerPage: View {
     var onZoom: (Bool) -> Void
     /// Horizontal tap position 0…1 (0.5 when unknown).
     var onTap: (CGFloat) -> Void
+    var onDoubleTap: () -> Bool = { false }
     var onSize: (CGSize) -> Void
 
     @ObservedObject private var settings = AppSettings.shared
@@ -454,7 +487,7 @@ struct ViewerPage: View {
                                onFinished: onFinished)
             } else {
                 FullImagePage(post: post, aspect: aspect, isActive: isActive, onFinished: onFinished,
-                              onZoom: onZoom, onTap: onTap, onSize: onSize)
+                              onZoom: onZoom, onTap: onTap, onDoubleTap: onDoubleTap, onSize: onSize)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -469,6 +502,7 @@ struct FullImagePage: View {
     @ObservedObject private var settings = AppSettings.shared
     var onZoom: (Bool) -> Void
     var onTap: (CGFloat) -> Void
+    var onDoubleTap: () -> Bool = { false }
     var onSize: (CGSize) -> Void
     @StateObject private var model = ImageLoadModel()
     /// Data Saver: the user asked for the original of this post.
@@ -484,7 +518,7 @@ struct FullImagePage: View {
     var body: some View {
         ZStack {
             if let img = model.image {
-                ZoomableImageView(image: img, aspect: aspect, onZoomChange: onZoom, onSingleTap: onTap)
+                ZoomableImageView(image: img, aspect: aspect, onZoomChange: onZoom, onSingleTap: onTap, onDoubleTap: onDoubleTap)
                     .accessibilityIdentifier("viewerImage")
                 if shownURL != post.mediaURL && (settings.dataSaverActive || settings.mediaWaitsForWiFi) && !wantsFull {
                     VStack {

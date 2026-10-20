@@ -46,6 +46,8 @@ struct SettingsView: View {
                     }
                     Toggle("Animate GIFs in grids", isOn: $settings.animateGridGIFs)
                     Toggle("Autoplay videos in viewer", isOn: $settings.autoplayVideos)
+                    Toggle("Smart square thumbnails", isOn: $settings.smartThumbnails)
+                        .accessibilityIdentifier("smartThumbnails")
                     Toggle("Play alongside other audio", isOn: $settings.mixWithOthers)
                         .accessibilityIdentifier("mixWithOthers")
                     Toggle("Prefer lighter images in the viewer", isOn: $settings.preferLighter)
@@ -70,6 +72,20 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("viewerToolbarSettings")
                     Toggle("Swipe the site name to switch sites", isOn: $settings.swipeSites)
+                    Picker("Double tap a picture", selection: $settings.doubleTapAction) {
+                        Text("Zoom").tag("zoom"); Text("Favorite").tag("favorite"); Text("Info").tag("info")
+                        Text("Next post").tag("next"); Text("Read Later").tag("readLater"); Text("Nothing").tag("none")
+                    }
+                    .accessibilityIdentifier("doubleTapPicker")
+                    Picker("Swipe up on a post", selection: $settings.swipeUpAction) {
+                        Text("Hide posts like this").tag("hide"); Text("Info").tag("info"); Text("Favorite").tag("favorite")
+                        Text("Download").tag("download"); Text("Read Later").tag("readLater"); Text("Nothing").tag("none")
+                    }
+                    .accessibilityIdentifier("swipeUpPicker")
+                    Picker("Swipe down", selection: $settings.swipeDownAction) {
+                        Text("Close the viewer").tag("close"); Text("Nothing").tag("none")
+                    }
+                    Toggle("Show posts on a connected TV or monitor", isOn: $settings.useExternalDisplay)
                 } header: { Text("Reading") } footer: {
                     Text("Right-to-left suits manga: swipe right for the next post. With edge taps on, tapping the outer third of a picture turns the page and the middle shows the controls.")
                 }

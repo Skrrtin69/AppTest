@@ -26,6 +26,8 @@ struct ZoomableImageView: UIViewRepresentable {
     var onZoomChange: ((Bool) -> Void)? = nil
     /// Called with the tap's horizontal position, 0 (left edge) … 1 (right edge).
     var onSingleTap: ((CGFloat) -> Void)? = nil
+    /// Return true when the double tap was used for something else (gesture remapping).
+    var onDoubleTap: (() -> Bool)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -131,6 +133,7 @@ struct ZoomableImageView: UIViewRepresentable {
 
         @objc func doubleTap(_ g: UITapGestureRecognizer) {
             guard let sv = g.view as? UIScrollView else { return }
+            if parent.onDoubleTap?() == true { return }
             let base = scale(for: appliedAspect ?? .fit, in: sv)
             if sv.zoomScale > base * 1.01 {
                 sv.setZoomScale(base, animated: true)

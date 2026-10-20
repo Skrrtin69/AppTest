@@ -107,6 +107,8 @@ struct GridCell: View {
 
     var blurred: Bool { settings.blurThumbnails && !viewed.isRevealed(post.key) }
     var dimmed: Bool { settings.dimViewed && viewed.isViewed(post.key) && !selecting }
+    /// Square cells of still pictures and videos (animated GIFs keep their animation).
+    var useSmartCrop: Bool { settings.smartThumbnails && aspect == .square && post.mediaType != .gif }
 
     var ratio: CGFloat {
         guard aspect == .original else { return 1 }
@@ -118,13 +120,19 @@ struct GridCell: View {
         Color.gray.opacity(0.12)
             .aspectRatio(max(0.4, min(ratio, 2.5)), contentMode: .fit)
             .overlay(
-                CachedAsyncImage(url: post.thumbnailURL, maxPixel: 420,
-                                 animate: settings.gridGIFsAnimate,
-                                 client: AdapterRegistry.shared.adapter(for: post.siteID)?.client,
-                                 onLoad: { img in
-                                     if img.size.height > 0 { loadedRatio = img.size.width / img.size.height }
-                                 })
-                    .blur(radius: blurred ? 16 : 0)
+                Group {
+                    if useSmartCrop {
+                        SmartThumbnail(url: post.thumbnailURL, client: AdapterRegistry.shared.adapter(for: post.siteID)?.client)
+                    } else {
+                        CachedAsyncImage(url: post.thumbnailURL, maxPixel: 420,
+                                         animate: settings.gridGIFsAnimate,
+                                         client: AdapterRegistry.shared.adapter(for: post.siteID)?.client,
+                                         onLoad: { img in
+                                             if img.size.height > 0 { loadedRatio = img.size.width / img.size.height }
+                                         })
+                    }
+                }
+                .blur(radius: blurred ? 16 : 0)
             )
             .clipped()
             .opacity(dimmed ? 0.45 : 1)

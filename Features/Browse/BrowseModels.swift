@@ -298,26 +298,39 @@ final class SuggestionModel: ObservableObject {
     @Published private(set) var suggestions: [String] = []
     private var task: Task<Void, Never>?
 
-    /// Waits 300 ms after the last keystroke, then asks the site for suggestions.
+    /// Waits 300 ms after the last keystroke, then combines suggestions from the site (every
+    /// site for an All Sites tab) with tags you already know: favorites, Read Later, open
+    /// results, search history and your tag translations.
     func update(text: String, siteID: String?) {
         task?.cancel()
         let token = TagQuery.partialToken(text)
-        guard token.count >= 2, let id = siteID, let adapter = AdapterRegistry.shared.adapter(for: id),
-              adapter.supportsAutocomplete else {
-            suggestions = []
-            return
+        guard token.count >= 2 else { suggestions = []; return }
+        let registry = AdapterRegistry.shared
+        let sites: [GenericAdapter]
+        if siteID == SearchTabModel.mergedID {
+            sites = registry.enabledConfigs.compactMap { registry.adapter(for: $0.id) }.filter(\.supportsAutocomplete)
+        } else {
+            sites = siteID.flatMap { registry.adapter(for: $0) }.map { [$0] }?.filter(\.supportsAutocomplete) ?? []
         }
         task = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
-            do {
-                let found = try await adapter.suggest(token)
-                guard !Task.isCancelled else { return }
-                self?.suggestions = Array(found.filter { $0.lowercased() != token.lowercased() || found.count == 1 }.prefix(8))
-            } catch {
-                guard !Task.isCancelled else { return }
-                self?.suggestions = []
+            let remote: [String] = await withTaskGroup(of: [String].self) { group in
+                for a in sites.prefix(6) { group.addTask { (try? await a.suggest(token)) ?? [] } }
+                var all: [String] = []
+                for await r in group { all += r }
+                return all
             }
+            guard !Task.isCancelled else { return }
+            let local = await MainActor.run { LocalTagIndex.matches(token) }
+            var seen = Set<String>()
+            let merged = (remote + local).filter { s in
+                let k = s.lowercased()
+                guard k != token.lowercased(), !seen.contains(k) else { return false }
+                seen.insert(k)
+                return true
+            }
+            await MainActor.run { self?.suggestions = Array(merged.prefix(10)) }
         }
     }
 
@@ -414,5 +427,25 @@ final class AppRouter: ObservableObject {
         let named = p.siteName.flatMap { n in registry.enabledConfigs.first { $0.displayName.lowercased() == n.lowercased() || $0.id == n } }
         let site = named?.id ?? BrowseModel.shared.current?.siteID ?? registry.enabledConfigs.first?.id ?? ""
         search(tag: p.tags, siteID: site)
+    }
+}
+
+/// Tags MediaDeck already knows on this phone, for suggestions that work on every site.
+@MainActor
+enum LocalTagIndex {
+    static func matches(_ token: String, limit: Int = 6) -> [String] {
+        let t = token.lowercased()
+        var counts: [String: Int] = [:]
+        func add(_ tags: [String], weight: Int) { for tag in tags { counts[tag, default: 0] += weight } }
+        for f in LibraryStore.shared.favorites { add(f.post.tags, weight: 3) }
+        for e in ReadLaterStore.shared.entries { add(e.post.tags, weight: 2) }
+        for tab in BrowseModel.shared.tabs { for p in tab.posts.prefix(60) { add(p.tags, weight: 1) } }
+        for h in LibraryStore.shared.history.prefix(50) {
+            add(TagQuery.parse(h.query).map { $0.hasPrefix("-") ? String($0.dropFirst()) : $0 }, weight: 2)
+        }
+        // Your translated names match too, suggesting the site's tag.
+        for (orig, shown) in TagTranslations.shared.map where shown.lowercased().hasPrefix(t) { counts[orig, default: 0] += 5 }
+        let hits = counts.filter { $0.key.lowercased().hasPrefix(t) || $0.key.lowercased().contains("_" + t) }
+        return hits.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(limit).map(\.key)
     }
 }
