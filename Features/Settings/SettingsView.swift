@@ -286,7 +286,7 @@ struct SettingsView: View {
                     } else {
                         Button("Turn On Passcode") { showPasscodeSetup = true }
                             .accessibilityIdentifier("turnOnPasscode")
-                        Text("Locks the app with a 4–6 digit code (and optionally \(lock.biometryName)) whenever you leave it.")
+                        Text("Locks the app with a 4-digit code (and optionally \(lock.biometryName)) whenever you leave it.")
                             .font(.footnote).foregroundColor(.secondary)
                     }
                 } header: { Text("Security") } footer: {

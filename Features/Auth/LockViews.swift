@@ -7,6 +7,7 @@ struct LockScreenView: View {
     @State private var entered = ""
     @State private var shake = false
     @State private var message = "Enter Passcode"
+    @State private var confirmErase = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -14,7 +15,7 @@ struct LockScreenView: View {
             Image(systemName: "lock.fill").font(.system(size: 44))
             Text(message).font(.title3.weight(.semibold)).accessibilityIdentifier("lockMessage")
             HStack(spacing: 14) {
-                ForEach(0..<6, id: \.self) { i in
+                ForEach(0..<LockManager.pinLength, id: \.self) { i in
                     Circle()
                         .strokeBorder(Color.primary, lineWidth: 1.5)
                         .background(Circle().fill(i < entered.count ? Color.primary : Color.clear))
@@ -24,18 +25,23 @@ struct LockScreenView: View {
             .offset(x: shake ? 10 : 0)
             PinPad(entered: $entered, onBiometrics: biometricsButton ? { Task { await lock.unlockWithBiometrics() } } : nil,
                    biometryName: lock.biometryName)
-            Button("Unlock") { attempt() }
-                .buttonStyle(.borderedProminent)
-                .disabled(entered.count < 4)
-                .accessibilityIdentifier("unlockButton")
+            Button("Forgot Passcode?") { confirmErase = true }
+                .font(.footnote)
+                .accessibilityIdentifier("forgotPasscode")
             Spacer()
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background((settings.theme == .amoled ? Color.black : Color(UIColor.systemBackground)).ignoresSafeArea())
         .onChange(of: entered) { v in
-            // Auto-submit at 6 digits; shorter PINs use the Unlock button.
-            if v.count == 6 { attempt() }
+            // Every passcode has the same length, so it's checked as soon as it's complete.
+            if v.count == LockManager.pinLength { attempt() }
+        }
+        .alert("Erase everything?", isPresented: $confirmErase) {
+            Button("Erase and Unlock", role: .destructive) { DataWipe.eraseEverything() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will erase all local data to unlock the app: favorites, collections, history, downloads, settings, adapters, saved logins and the passcode. It can't be undone.")
         }
         .task { await lock.unlockWithBiometrics() }
     }
@@ -90,7 +96,7 @@ struct PinPad: View {
 
     func key(_ d: String) -> some View {
         Button {
-            if entered.count < 6 { entered.append(d); Haptics.tap() }
+            if entered.count < LockManager.pinLength { entered.append(d); Haptics.tap() }
         } label: {
             Text(d).font(.title.weight(.medium))
                 .frame(width: 72, height: 72)
@@ -112,17 +118,17 @@ struct PasscodeSetupView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
-                Text(first == nil ? (decoy ? "Choose a decoy passcode (different from your real one)" : "Choose a 4–6 digit passcode") : "Enter it again to confirm")
+                Text(first == nil ? (decoy ? "Choose a 4-digit decoy passcode (different from your real one)" : "Choose a 4-digit passcode") : "Enter it again to confirm")
                     .multilineTextAlignment(.center)
                     .font(.headline)
-                Text(String(repeating: "●", count: entered.count) + String(repeating: "○", count: max(0, 4 - entered.count)))
+                Text(String(repeating: "●", count: entered.count) + String(repeating: "○", count: max(0, LockManager.pinLength - entered.count)))
                     .font(.title2.monospaced())
                     .accessibilityIdentifier("pinDots")
                 if let e = error { Text(e).foregroundColor(.red).font(.footnote) }
                 PinPad(entered: $entered)
                 Button(first == nil ? "Next" : "Save Passcode") { next() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(entered.count < 4)
+                    .disabled(entered.count != LockManager.pinLength)
                     .accessibilityIdentifier("pinNext")
                 Spacer()
             }

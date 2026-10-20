@@ -111,11 +111,6 @@ struct AdapterEditorView: View {
                     }
                 } header: { Text(section.title) } footer: { Text(section.intro) }
             }
-            if originalID != nil {
-                Section {
-                    Button("Delete This Adapter", role: .destructive) { confirmDelete = true }
-                }
-            }
         }
         .keyboardDoneButton()
         .navigationTitle(originalID == nil ? "Add Adapter" : c.displayName)

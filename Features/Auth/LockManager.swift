@@ -2,7 +2,7 @@ import SwiftUI
 import LocalAuthentication
 import CryptoKit
 
-/// App-level passcode (4–6 digits, stored hashed in the Keychain) with optional Face ID /
+/// App-level passcode (4 digits, stored hashed in the Keychain) with optional Face ID /
 /// Touch ID. Locks when the app goes to the background and the grace period has passed.
 final class LockManager: ObservableObject {
     static let shared = LockManager()
@@ -24,8 +24,8 @@ final class LockManager: ObservableObject {
     }
 
     func setDecoyPasscode(_ pin: String) throws {
-        guard (4...6).contains(pin.count), pin.allSatisfy(\.isNumber) else {
-            throw AppError.message("The passcode must be 4 to 6 digits.")
+        guard pin.count == Self.pinLength, pin.allSatisfy(\.isNumber) else {
+            throw AppError.message("The passcode must be \(Self.pinLength) digits.")
         }
         guard !verify(pin) else { throw AppError.message("The decoy passcode must be different from your real one.") }
         try Keychain.set(Self.hash("decoy:" + pin), service: Keychain.pinService, account: decoyAccount)
@@ -55,9 +55,12 @@ final class LockManager: ObservableObject {
         Data(SHA256.hash(data: Data("mediadeck-pin:\(pin)".utf8)))
     }
 
+    /// Every passcode is exactly this many digits (setup, lock screen and decoy alike).
+    static let pinLength = 4
+
     func setPasscode(_ pin: String) throws {
-        guard (4...6).contains(pin.count), pin.allSatisfy(\.isNumber) else {
-            throw AppError.message("The passcode must be 4 to 6 digits.")
+        guard pin.count == Self.pinLength, pin.allSatisfy(\.isNumber) else {
+            throw AppError.message("The passcode must be \(Self.pinLength) digits.")
         }
         try Keychain.set(Self.hash(pin), service: Keychain.pinService, account: account)
         hasPasscode = true

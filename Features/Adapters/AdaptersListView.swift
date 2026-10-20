@@ -15,6 +15,7 @@ struct AdaptersListView: View {
     @ObservedObject private var auth = AuthManager.shared
     @State private var editing: EditRequest?
     @State private var confirmReset = false
+    @State private var deleting: AdapterConfig?
 
     var body: some View {
         List {
@@ -51,10 +52,17 @@ struct AdaptersListView: View {
                             .accessibilityLabel("Edit \(c.displayName)")
                     }
                     .accessibilityElement(children: .contain)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) { deleting = c } label: { Label("Delete", systemImage: "trash") }
+                    }
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button { duplicate(c) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+                            .tint(.accentColor)
+                    }
                 }
                 .onMove(perform: LockManager.shared.decoyActive ? nil : { registry.move(fromOffsets: $0, toOffset: $1) })
             } header: { Text("Your adapters") } footer: {
-                Text("Switch a site off to hide it everywhere without deleting it; switch it back on any time. Tap Edit (top right) and drag the handles to reorder.")
+                Text("Switch a site off to hide it everywhere without deleting it. Swipe a site left to delete it or right to duplicate it. Tap Edit (top right) and drag the handles to reorder.")
             }
 
             Section("Add") {
@@ -82,6 +90,18 @@ struct AdaptersListView: View {
                 Text(FieldGuide.howItWorks).font(.footnote)
             }
         }
+        .alert("Delete \(deleting?.displayName ?? "this site")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button("Delete", role: .destructive) {
+                guard let c = deleting else { return }
+                do {
+                    try registry.delete(id: c.id)
+                    AdapterReviewStore.shared.clear(c.id)
+                    ToastCenter.shared.show("Deleted \(c.displayName)")
+                } catch { ToastCenter.shared.error(error) }
+                deleting = nil
+            }
+            Button("Cancel", role: .cancel) { deleting = nil }
+        } message: { Text("Its saved login stays in the Keychain; favorites and downloads from it are kept.") }
         .navigationTitle("Sites & Adapters")
         .toolbar { EditButton() }
         .sheet(item: $editing) { req in
@@ -144,5 +164,21 @@ struct FieldGuideView: View {
             }
         }
         .navigationTitle("Field Guide")
+    }
+}
+
+extension AdaptersListView {
+    /// A copy with "Copy" added to the name and a new, unused ID.
+    func duplicate(_ c: AdapterConfig) {
+        var copy = c
+        var n = 1
+        func newID() -> String { n == 1 ? "\(c.id)-copy" : "\(c.id)-copy-\(n)" }
+        while registry.config(for: newID()) != nil { n += 1 }
+        copy.id = newID()
+        copy.displayName = c.displayName + " Copy"
+        do {
+            try registry.upsert(copy)
+            ToastCenter.shared.show("Duplicated as \(copy.displayName)", style: .success)
+        } catch { ToastCenter.shared.error(error) }
     }
 }
