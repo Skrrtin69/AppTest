@@ -50,17 +50,25 @@ enum SmartCrop {
     static func focusPoint(_ cg: CGImage, key: String) async -> CGPoint {
         lock.lock(); let known = focusPoints[key]; lock.unlock()
         if let p = known, p.count == 2 { return CGPoint(x: p[0], y: p[1]) }
-        let point: CGPoint = await Task.detached(priority: .utility) {
+        let vision = Task.detached(priority: .utility) { () -> CGPoint? in
             let request = VNGenerateAttentionBasedSaliencyImageRequest()
             request.preferBackgroundProcessing = true
             let handler = VNImageRequestHandler(cgImage: cg, options: [:])
-            guard (try? handler.perform([request])) != nil,
-                  let obs = request.results?.first as? VNSaliencyImageObservation,
+            do { try handler.perform([request]) } catch {
+                NSLog("[SmartCrop] Vision failed: %@", error.localizedDescription)
+                return nil
+            }
+            guard let obs = request.results?.first as? VNSaliencyImageObservation,
                   let boxes = obs.salientObjects, !boxes.isEmpty else { return CGPoint(x: 0.5, y: 0.5) }
             // Union of the salient areas; Vision's origin is bottom-left.
             let u = boxes.map(\.boundingBox).reduce(boxes[0].boundingBox) { $0.union($1) }
             return CGPoint(x: u.midX, y: 1 - u.midY)
-        }.value
+        }
+        // Never keep a thumbnail waiting: after 4 s the middle is used (and not remembered).
+        let timeout = Task { try? await Task.sleep(nanoseconds: 4_000_000_000); vision.cancel() }
+        let result = await vision.value
+        timeout.cancel()
+        guard let point = result else { return CGPoint(x: 0.5, y: 0.5) }
         lock.lock(); focusPoints[key] = [Double(point.x), Double(point.y)]; lock.unlock()
         scheduleSave()
         return point
@@ -82,10 +90,9 @@ struct SmartThumbnail: View {
 
     var body: some View {
         ZStack {
-            if let img = cropped {
+            // The plain (centered) thumbnail shows at once; the smart crop replaces it when ready.
+            if let img = cropped ?? model.image {
                 Image(uiImage: img).resizable().scaledToFill()
-            } else if model.image != nil {
-                Color.gray.opacity(0.12)
             } else if model.error != nil {
                 Image(systemName: "exclamationmark.triangle").foregroundColor(.secondary)
             } else {
