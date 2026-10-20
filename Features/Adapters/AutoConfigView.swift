@@ -288,7 +288,9 @@ struct AutoConfigView: View {
                                     authStyle: authStyle, authParamName: authParamName.nonEmpty,
                                     authUserParamName: (showUserID || !authUserParam.isEmpty) ? authUserParam.nonEmpty : nil,
                                     credentials: credentials)
-        let result = await AutoConfigurator(existingIDs: Set(registry.configs.map { $0.id })).analyze(input)
+        let (result, resolved) = await AutoConfigurator(existingIDs: Set(registry.configs.map { $0.id })).resolveAndAnalyze(input)
+        // Only the site's address was pasted: show the API address that was found.
+        if let resolved = resolved { urlText = resolved }
         switch result {
         case .success(let p):
             proposal = p

@@ -386,3 +386,44 @@ struct AutoConfigurator {
         return String(mapped).split(separator: "-").joined(separator: "-")
     }
 }
+
+// MARK: Smart address resolver
+
+extension AutoConfigurator {
+    /// Common API shapes tried, in order, when only a site's address is pasted.
+    static let apiTemplates = [
+        "/index.php?page=dapi&s=post&q=index&json=1&tags={tags}&pid={page}",
+        "/posts.json?tags={tags}&page={page}",
+        "/api/v1/posts?tags={tags}&page={page}",
+    ]
+    static let unresolvedMessage = "Couldn't automatically resolve the API address. Please paste the full JSON API URL manually."
+
+    /// Just a site's address: no path, query or placeholders (e.g. https://example.org/).
+    static func isBareAddress(_ t: String) -> Bool {
+        let s = t.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.contains("{"), !s.contains("?"), let parts = splitTemplate(s) else { return false }
+        return parts.rest.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
+    }
+
+    /// Analyzes the address; a bare site address is first completed with each common API
+    /// shape until one answers with JSON. Returns the address actually used when it changed.
+    func resolveAndAnalyze(_ input: AutoConfigInput) async -> (result: Result<AutoConfigProposal, AutoConfigFailure>, resolved: String?) {
+        guard Self.isBareAddress(input.urlTemplate) else { return (await analyze(input), nil) }
+        var origin = input.urlTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+        while origin.hasSuffix("/") { origin.removeLast() }
+        for t in Self.apiTemplates {
+            var attempt = input
+            attempt.urlTemplate = origin + t
+            let r = await analyze(attempt)
+            switch r {
+            // A webpage, an error page (404…) or no answer: try the next shape.
+            case .failure(.notJSON), .failure(.http), .failure(.network):
+                continue
+            // JSON (even if it needs a login or a manual field pick): this is the API.
+            default:
+                return (r, attempt.urlTemplate)
+            }
+        }
+        return (.failure(.badAddress(Self.unresolvedMessage)), nil)
+    }
+}

@@ -61,6 +61,11 @@ enum MockRoutes {
         case p.hasPrefix("/a/"):
             let sub = String(p.dropFirst(2))
             return MockExtras.siteAExtra(sub, req: req, origin: origin, member: false) ?? siteA(sub, req: req, origin: origin)
+        case p == "/index.php":
+            return .text("<!doctype html><html><head><title>Demo home</title></head><body><h1>Demo home page</h1></body></html>",
+                         type: "text/html; charset=utf-8")
+        case p == "/api/v1/posts":
+            return siteA("/posts.json", req: req, origin: origin)
         case p.hasPrefix("/rs/"):
             return MockReverse.respond(req, origin: origin)
         case p.hasPrefix("/u/") || p == "/u":
