@@ -43,32 +43,8 @@ struct ViewerView: View {
                                    onOpenPaged: { i in settings.verticalReading = false; index = i },
                                    onTap: { withAnimation { chrome.toggle() } })
                 } else {
-                    // Right-to-left: the pages are laid out in reverse, so the next post is on
-                    // the left. (Mirroring the layout instead would also mirror the zoom views.)
-                    if spreads {
-                        // Landscape: two posts side by side, like an open book.
-                        TabView(selection: spreadSelection) {
-                            ForEach(0..<spreadCount, id: \.self) { slot in
-                                let sp = settings.readingRTL ? spreadCount - 1 - slot : slot
-                                let pair = [sp * 2, sp * 2 + 1].filter { posts.indices.contains($0) }
-                                HStack(spacing: 2) {
-                                    ForEach(settings.readingRTL ? pair.reversed() : pair, id: \.self) { i in page(i) }
-                                }
-                                .tag(slot)
-                            }
-                        }
-                        .tabViewStyle(.page(indexDisplayMode: .never))
-                        .id("spreads-\(settings.readingRTL)")
-                    } else {
-                        TabView(selection: pagerSelection) {
-                            ForEach(posts.indices, id: \.self) { slot in
-                                page(postIndex(atSlot: slot)).tag(slot)
-                            }
-                        }
-                        .tabViewStyle(.page(indexDisplayMode: .never))
-                        .id(settings.readingRTL)
-                    }
-                    .simultaneousGesture(verticalDrag)
+                    pager
+                        .simultaneousGesture(verticalDrag)
                 }
             }
             .ignoresSafeArea()
@@ -129,6 +105,35 @@ struct ViewerView: View {
         .sheet(item: $reverseFor) { ReverseSearchSheet(post: $0.posts[0]) }
         .sheet(item: $quickHide) { QuickHideSheet(post: $0.posts[0]) }
         .sheet(item: $editing) { MediaEditorView(post: $0.posts[0]) }
+    }
+
+    /// The horizontal pager: one post per page, or two side by side in landscape.
+    @ViewBuilder var pager: some View {
+        // Right-to-left: the pages are laid out in reverse, so the next post is on
+        // the left. (Mirroring the layout instead would also mirror the zoom views.)
+        if spreads {
+            // Landscape: two posts side by side, like an open book.
+            TabView(selection: spreadSelection) {
+                ForEach(0..<spreadCount, id: \.self) { slot in
+                    let sp = settings.readingRTL ? spreadCount - 1 - slot : slot
+                    let pair = [sp * 2, sp * 2 + 1].filter { posts.indices.contains($0) }
+                    HStack(spacing: 2) {
+                        ForEach(settings.readingRTL ? pair.reversed() : pair, id: \.self) { i in page(i) }
+                    }
+                    .tag(slot)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .id("spreads-\(settings.readingRTL)")
+        } else {
+            TabView(selection: pagerSelection) {
+                ForEach(posts.indices, id: \.self) { slot in
+                    page(postIndex(atSlot: slot)).tag(slot)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .id(settings.readingRTL)
+        }
     }
 
     @Environment(\.verticalSizeClass) private var verticalSizeClass
