@@ -44,37 +44,66 @@ enum PlayerRoutes {
     }
 
     static let chunk = 2 * 1024 * 1024
+    /// The first piece is smaller, so the player has its header and first frames sooner.
+    static let firstChunk = 512 * 1024
 
-    /// Fetches `url` for the player (forwarding Range) using the matching adapter's client.
-    static func proxy(_ req: HTTPRequest) async -> HTTPResponse {
+    /// The request to send to the site for a /proxy call: Range forwarded (open-ended ranges
+    /// cut into pieces) plus the matching adapter's headers.
+    static func proxyRequest(_ req: HTTPRequest) -> (URLRequest, NetworkClient)? {
         guard let s = req.query["url"], let url = URL(string: s), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
-            return .json(["error": "bad url"], status: 400)
+            return nil
         }
         var r = URLRequest(url: url)
         if let range = req.headers["range"] {
             // "bytes=N-" would make the whole rest of the file download before anything is
-            // sent on; asking for 2 MB at a time lets the player start right away (it asks
+            // sent on; asking for a piece at a time lets the player start right away (it asks
             // for the next piece itself, as a 206 answer allows).
             if let m = range.range(of: "^bytes=[0-9]+-$", options: .regularExpression), m.lowerBound == range.startIndex,
                let start = Int(range.dropFirst("bytes=".count).dropLast()) {
-                r.setValue("bytes=\(start)-\(start + Self.chunk - 1)", forHTTPHeaderField: "Range")
+                let size = start == 0 ? Self.firstChunk : Self.chunk
+                r.setValue("bytes=\(start)-\(start + size - 1)", forHTTPHeaderField: "Range")
             } else {
                 r.setValue(range, forHTTPHeaderField: "Range")
             }
         }
         let client = req.query["site"].flatMap { AdapterRegistry.shared.adapter(for: $0)?.client } ?? NetworkClient.shared
         for (k, v) in client.mediaHeaders { r.setValue(v, forHTTPHeaderField: k) }
+        return (r, client)
+    }
+
+    /// Fetches the whole answer at once. Used when a site doesn't send 206: a whole file
+    /// that came back is kept, so the player's later range requests are cut from memory.
+    static func proxy(_ req: HTTPRequest) async -> HTTPResponse {
+        guard let (r, client) = proxyRequest(req), let url = r.url else { return .json(["error": "bad url"], status: 400) }
         do {
             let (data, resp) = try await client.session.data(for: r)
             guard let http = resp as? HTTPURLResponse else { return .json(["error": "bad response"], status: 502) }
-            var out = HTTPResponse(status: http.statusCode,
-                                   contentType: http.value(forHTTPHeaderField: "Content-Type") ?? MockMedia.contentType(url.path),
-                                   body: data)
+            let type = http.value(forHTTPHeaderField: "Content-Type") ?? MockMedia.contentType(url.path)
+            var out = HTTPResponse(status: http.statusCode, contentType: type, body: data)
             if let cr = http.value(forHTTPHeaderField: "Content-Range") { out.headers["Content-Range"] = cr }
+            if http.statusCode == 200, req.headers["range"] != nil {
+                DebugLog.log("Proxy", "Site ignored Range: whole file (\(data.count) bytes) kept for later pieces")
+                keep(url, data: data, type: type)
+            }
             return out
         } catch {
             return .json(["error": error.localizedDescription], status: 502)
         }
+    }
+
+    private static let cacheLock = NSLock()
+    private static var cache: (url: URL, data: Data, type: String)?
+
+    static func cachedFile(_ url: URL) -> (data: Data, type: String)? {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        guard let c = cache, c.url == url else { return nil }
+        return (c.data, c.type)
+    }
+
+    /// One file at a time (the video on screen), up to 150 MB.
+    private static func keep(_ url: URL, data: Data, type: String) {
+        guard data.count <= 150 * 1024 * 1024 else { return }
+        cacheLock.lock(); cache = (url, data, type); cacheLock.unlock()
     }
 
     /// Native <video> first; if WebKit can't play the file (WebM on most iOS versions),
@@ -100,11 +129,31 @@ enum PlayerRoutes {
     snd.onclick=function(e){ e.stopPropagation(); if(!player) return; player.muted=!player.muted; var p=player.play(); if(p&&p.catch){p.catch(function(){});} setSoundIcon(); post('sound '+(player.muted?'off':'on')); };
     function post(m){try{window.webkit.messageHandlers.status.postMessage(m);}catch(e){}}
     function fail(why){stage.innerHTML='<div id="msg">This video can\\'t be played on this device.<br>('+why+')</div>';post('error: '+why);}
+    // Loads ogv.js's WebM demuxer and every decoder it may need, and waits for them to
+    // start, so the stream begins only once the decoder is ready (8 s at most).
+    var ogvLoaded=false, ogvWaiting=[];
+    function ogvPreload(done){
+      if(ogvLoaded){done();return;}
+      ogvWaiting.push(done);
+      if(ogvWaiting.length>1) return;
+      var names=['OGVDemuxerWebMW','OGVDecoderVideoVP8W','OGVDecoderVideoVP9W','OGVDecoderAudioOpusW','OGVDecoderAudioVorbisW'];
+      var left=names.length, t0=Date.now();
+      function finish(how){ if(ogvLoaded) return; ogvLoaded=true; post('ogv '+how+' in '+(Date.now()-t0)+' ms'); var w=ogvWaiting; ogvWaiting=[]; w.forEach(function(f){f();}); }
+      function one(){ if(--left<=0) finish('ready'); }
+      setTimeout(function(){ finish('preload timeout'); }, 8000);
+      OGVLoader.base='/player/ogv';
+      names.forEach(function(n){
+        try{ OGVLoader.loadClass(n,function(factory){ try{ var p=factory({}); if(p&&p.then){p.then(one,one);}else{one();} }catch(e){one();} },{worker:false}); }catch(e){one();}
+      });
+    }
     function useOgv(){
       if(usingOgv) return; usingOgv=true;
       if(typeof OGVPlayer==='undefined'){fail('decoder files missing');return;}
       stage.innerHTML='';
       OGVLoader.base='/player/ogv';
+      ogvPreload(startOgv);
+    }
+    function startOgv(){
       try{ player=new OGVPlayer({simd:false,threading:false}); }catch(e){fail('decoder failed to start: '+e);return;}
       player.muted=startMuted;
       player.addEventListener('ended',function(){ if(window.mdLoopOn){player.currentTime=0;player.play();} else {post('ended');} });
@@ -121,7 +170,7 @@ enum PlayerRoutes {
     function useNative(){
       var v=document.createElement('video');
       v.setAttribute('playsinline',''); v.playsInline=true; v.autoplay=true; v.loop=true; v.muted=startMuted; v.controls=true;
-      v.addEventListener('error',useOgv);
+      v.addEventListener('error',function(){ var c=v.error&&v.error.code; if(c===2){fail('network error');} else {useOgv();} });
       v.addEventListener('playing',function(){post('engine: WebKit <video>');});
       v.addEventListener('canplay',function(){post('canplay');});
       v.addEventListener('ended',function(){post('ended');});
@@ -132,8 +181,11 @@ enum PlayerRoutes {
     }
     var isWebm=/webm/i.test(type)||/\\.webm(\\?|$)/i.test(src);
     var can=document.createElement('video').canPlayType('video/webm');
-    post('canPlayType(video/webm)="'+can+'"');
-    if(isWebm && can===''){useOgv();}else{useNative();}
+    if(q.get('preload')==='1'){ if(typeof OGVLoader!=='undefined'){ogvPreload(function(){});} }
+    else {
+      post('canPlayType(video/webm)="'+can+'"');
+      if(isWebm && can===''){useOgv();}else{useNative();}
+    }
     window.mdPlay=function(){if(player)player.play();};
     window.mdPause=function(){if(player)player.pause();};
     window.mdLoopOn=true;

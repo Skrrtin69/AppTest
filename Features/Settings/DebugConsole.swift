@@ -29,6 +29,7 @@ struct DebugConsoleView: View {
                 Button("Clear log", role: .destructive) { log.clear() }
             }
             Section("Info") {
+                row("Network speed", NetworkSpeed.shared.summary)
                 row("Demo server", MockServer.shared.isRunning ? "127.0.0.1:\(MockServer.shared.port)" : "stopped")
                 row("Adapters", "\(AdapterRegistry.shared.configs.count) (\(AdapterRegistry.shared.enabledConfigs.count) on)")
                 row("Shared folder", AppGroup.container == nil ? "unavailable" : "available")

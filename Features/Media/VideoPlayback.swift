@@ -84,6 +84,9 @@ struct MediaVideoView: View {
     @State private var webReady = false
     @State private var webTimedOut = false
     @State private var webAttempt = 0
+    /// The page's player reported an error (decoder, network): shown at once, no waiting.
+    @State private var webError: String?
+    @ObservedObject private var network = NetworkSpeed.shared
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -100,36 +103,46 @@ struct MediaVideoView: View {
             case .some(.web):
                 WebVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
                              loop: !settings.autoAdvance, onFinished: onFinished,
-                             onReady: { webReady = true }) { engine = $0 }
+                             onReady: { webReady = true; webError = nil },
+                             onError: { webError = $0 }) { engine = $0 }
                     .id(webAttempt)
                     .overlay(alignment: .bottomTrailing) {
                         if showControls { SpeedButton().padding(.trailing, 70).padding(.bottom, 145) }
                     }
                     .overlay {
-                        // Until the page's player can play: a spinner, then Retry after 10 s.
-                        if !webReady {
+                        // Until the page's player can play: "Loading video...", then (after the
+                        // timeout for this connection's speed, or at once on an error) Retry.
+                        if let why = webError {
+                            webFailure(why)
+                        } else if !webReady {
                             if webTimedOut {
-                                VStack(spacing: 12) {
-                                    Image(systemName: "exclamationmark.triangle.fill").font(.largeTitle)
-                                    Text("The video is taking too long to start.").font(.subheadline)
-                                    Button { webAttempt += 1 } label: { Label("Retry", systemImage: "arrow.clockwise") }
-                                        .buttonStyle(.borderedProminent)
-                                        .accessibilityIdentifier("webVideoRetry")
-                                }
-                                .foregroundColor(.white)
-                                .padding(20)
-                                .background(RoundedRectangle(cornerRadius: 14).fill(Color.black.opacity(0.7)))
+                                webFailure("The video didn't start within \(Int(network.videoTimeout)) seconds.")
                             } else {
-                                ProgressView().tint(.white).scaleEffect(1.5)
-                                    .accessibilityIdentifier("webVideoLoading")
+                                ZStack {
+                                    Color.black.opacity(0.35)
+                                    ProgressView("Loading video...")
+                                        .progressViewStyle(.circular)
+                                        .tint(.white)
+                                        .foregroundColor(.white)
+                                        .font(.subheadline)
+                                        .padding(18)
+                                        .background(RoundedRectangle(cornerRadius: 14).fill(Color.black.opacity(0.6)))
+                                }
+                                .allowsHitTesting(false)
+                                .accessibilityIdentifier("webVideoLoading")
                             }
                         }
                     }
                     .task(id: "\(url.absoluteString)#\(webAttempt)") {
                         webReady = false
                         webTimedOut = false
-                        try? await Task.sleep(nanoseconds: 10_000_000_000)
-                        if !Task.isCancelled, !webReady { webTimedOut = true }
+                        webError = nil
+                        let limit = network.videoTimeout
+                        try? await Task.sleep(nanoseconds: UInt64(limit * 1_000_000_000))
+                        if !Task.isCancelled, !webReady {
+                            webTimedOut = true
+                            DebugLog.log("WebVideo", "No canplay within \(Int(limit)) s (\(network.summary)): \(DebugLog.redact(url))")
+                        }
                     }
             }
             if let p = path, showControls {
@@ -143,6 +156,32 @@ struct MediaVideoView: View {
             }
         }
         .task(id: url) { path = await PlaybackRouter.shared.route(for: url) }
+    }
+}
+
+extension MediaVideoView {
+    /// Native error card over the web player: Retry reloads the page; Open in Safari hands
+    /// the original address to Safari (not for downloaded files).
+    func webFailure(_ message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill").font(.largeTitle).foregroundColor(.yellow)
+            Text(message).font(.subheadline).multilineTextAlignment(.center)
+                .accessibilityIdentifier("webVideoError")
+            HStack(spacing: 10) {
+                Button { webAttempt += 1 } label: { Label("Retry", systemImage: "arrow.clockwise") }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("webVideoRetry")
+                if !url.isFileURL {
+                    Button { UIApplication.shared.open(url) } label: { Label("Open in Safari", systemImage: "safari") }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("webVideoSafari")
+                }
+            }
+        }
+        .foregroundColor(.white)
+        .padding(20)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color.black.opacity(0.75)))
+        .padding(24)
     }
 }
 

@@ -122,10 +122,7 @@ final class MockServer {
                     request.body = Data(buf[from..<buf.index(from, offsetBy: min(length, buf.count - bodyStart))])
                 }
                 if request.path == "/proxy" {
-                    Task {
-                        let response = await PlayerRoutes.proxy(request)
-                        self.send(response, for: request, on: conn)
-                    }
+                    Task { await self.streamProxy(request, on: conn) }
                     return
                 }
                 let response = PlayerRoutes.serveStatic(request.path) ?? MockRoutes.respond(to: request, port: self.port)
@@ -164,6 +161,72 @@ final class MockServer {
             sendSlowly(out, from: 0, on: conn)
         } else {
             conn.send(content: out, completion: .contentProcessed { _ in conn.cancel() })
+        }
+    }
+
+    /// /proxy: passes the site's 206 answer on as it arrives (64 KB at a time) instead of
+    /// waiting for the whole piece. When the site ignores Range (200 for a part) or fails,
+    /// it falls back to fetching the whole file once (kept in memory) and cutting the
+    /// asked-for range out here.
+    private func streamProxy(_ request: HTTPRequest, on conn: NWConnection) async {
+        guard let (urlRequest, client) = PlayerRoutes.proxyRequest(request), let url = urlRequest.url else {
+            send(.json(["error": "bad url"], status: 400), for: request, on: conn)
+            return
+        }
+        if let cached = PlayerRoutes.cachedFile(url) {
+            send(HTTPResponse(contentType: cached.type, body: cached.data), for: request, on: conn)
+            return
+        }
+        let started = Date()
+        do {
+            let (bytes, resp) = try await client.session.bytes(for: urlRequest)
+            guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+            let length = http.expectedContentLength
+            guard http.statusCode == 206, length > 0 else {
+                bytes.task.cancel()
+                send(await PlayerRoutes.proxy(request), for: request, on: conn)
+                return
+            }
+            var headers: [String: String] = [
+                "Content-Type": http.value(forHTTPHeaderField: "Content-Type") ?? MockMedia.contentType(url.path),
+                "Content-Length": String(length),
+                "Accept-Ranges": "bytes",
+                "Connection": "close",
+                "Access-Control-Allow-Origin": "*",
+            ]
+            if let cr = http.value(forHTTPHeaderField: "Content-Range") { headers["Content-Range"] = cr }
+            var head = "HTTP/1.1 206 Partial Content\r\n"
+            for (k, v) in headers { head += "\(k): \(v)\r\n" }
+            head += "\r\n"
+            try await sendAsync(Data(head.utf8), on: conn)
+            if request.method == "HEAD" { bytes.task.cancel(); conn.cancel(); return }
+            var buffer = Data()
+            buffer.reserveCapacity(64 * 1024)
+            var sent = 0
+            for try await byte in bytes {
+                buffer.append(byte)
+                if buffer.count >= 64 * 1024 {
+                    if sent == 0 {
+                        DebugLog.log("Proxy", "206 first bytes after \(Int(Date().timeIntervalSince(started) * 1000)) ms · \(headers["Content-Range"] ?? "")")
+                    }
+                    try await sendAsync(buffer, on: conn)
+                    sent += buffer.count
+                    buffer.removeAll(keepingCapacity: true)
+                }
+            }
+            if !buffer.isEmpty { try await sendAsync(buffer, on: conn) }
+            conn.cancel()
+        } catch {
+            // The player closed the connection (seek, next video) or the site failed.
+            conn.cancel()
+        }
+    }
+
+    private func sendAsync(_ data: Data, on conn: NWConnection) async throws {
+        try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
+            conn.send(content: data, completion: .contentProcessed { error in
+                if let error = error { c.resume(throwing: error) } else { c.resume() }
+            })
         }
     }
 

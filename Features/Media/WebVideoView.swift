@@ -12,8 +12,10 @@ struct WebVideoView: UIViewRepresentable {
     /// false = auto-advance: report the end instead of looping.
     var loop: Bool = true
     var onFinished: (() -> Void)? = nil
-    /// Called once the page's player can play (or has shown an error).
+    /// Called once the page's player can play (canplay, or playback started).
     var onReady: (() -> Void)? = nil
+    /// Called when the page's player gives up (decoder or network error), with the reason.
+    var onError: ((String) -> Void)? = nil
     /// Reports which engine ended up playing (or the error), for the on-screen label.
     var onStatus: ((String) -> Void)? = nil
 
@@ -33,6 +35,7 @@ struct WebVideoView: UIViewRepresentable {
         wv.accessibilityIdentifier = "webVideo"
         context.coordinator.onStatus = onStatus
         context.coordinator.onReady = onReady
+        context.coordinator.onError = onError
         context.coordinator.loadedURL = url
         wv.load(URLRequest(url: Self.playerURL(for: url, siteID: siteID)))
         return wv
@@ -41,6 +44,7 @@ struct WebVideoView: UIViewRepresentable {
     func updateUIView(_ wv: WKWebView, context: Context) {
         context.coordinator.onStatus = onStatus
         context.coordinator.onReady = onReady
+        context.coordinator.onError = onError
         if context.coordinator.loadedURL != url {
             context.coordinator.loadedURL = url
             wv.load(URLRequest(url: Self.playerURL(for: url, siteID: siteID)))
@@ -89,9 +93,10 @@ struct WebVideoView: UIViewRepresentable {
         config.processPool = processPool
         enableWebMFeatures(config.preferences)
         let wv = WKWebView(frame: CGRect(x: 0, y: 0, width: 4, height: 4), configuration: config)
-        let server = MockServer.shared.baseURL.absoluteString
-        wv.loadHTMLString("<!doctype html><html><body><script src=\"\(server)/player/ogv/ogv.js\"></script></body></html>",
-                          baseURL: URL(string: server))
+        // The player page in preload mode: loads ogv.js and every WebM module into the cache.
+        if let u = URL(string: MockServer.shared.baseURL.absoluteString + "/player/video.html?preload=1") {
+            wv.load(URLRequest(url: u))
+        }
         warm = wv
     }
 
@@ -130,14 +135,19 @@ struct WebVideoView: UIViewRepresentable {
         var onStatus: ((String) -> Void)?
         var onFinished: (() -> Void)?
         var onReady: (() -> Void)?
+        var onError: ((String) -> Void)?
         private var readySent = false
         func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
             let text = "\(message.body)"
             NSLog("[WebVideo] %@", text)
             if text == "ended" { DispatchQueue.main.async { self.onFinished?() } }
-            if !readySent, text == "canplay" || text.hasPrefix("engine:") || text.hasPrefix("error:") {
+            if !readySent, text == "canplay" || text.hasPrefix("engine:") {
                 readySent = true
                 DispatchQueue.main.async { self.onReady?() }
+            }
+            if text.hasPrefix("error:") {
+                let why = String(text.dropFirst("error:".count)).trimmingCharacters(in: .whitespaces)
+                DispatchQueue.main.async { self.onError?("This video couldn't be played (\(why)).") }
             }
             if text.hasPrefix("engine:") || text.hasPrefix("error:") {
                 let status = text.replacingOccurrences(of: "engine: ", with: "")
