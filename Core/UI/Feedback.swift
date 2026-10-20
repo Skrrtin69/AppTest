@@ -105,7 +105,9 @@ struct ToastOverlay: View {
                 })
                 .onDisappear { PassthroughWindow.toastFrame = nil }
                 .transition(.move(edge: .top).combined(with: .opacity))
-                .onTapGesture { center.current = nil }
+                // Tapping a plain message closes it; one with a button (Undo, Open) keeps the
+                // tap for its button, otherwise this gesture would swallow it.
+                .onTapGesture { if t.action == nil { center.current = nil } }
                 // Swipe up to dismiss.
                 .gesture(DragGesture(minimumDistance: 8)
                     .onChanged { dragY = $0.translation.height }
