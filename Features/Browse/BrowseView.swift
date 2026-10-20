@@ -689,5 +689,6 @@ struct SearchHistorySheet: View {
 /// The grid's top edge in its scroll view (negative once scrolled down).
 struct GridTopOffset: PreferenceKey {
     static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+    // Sibling views report the default 0; the marker's (negative) offset must win.
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = min(value, nextValue()) }
 }
