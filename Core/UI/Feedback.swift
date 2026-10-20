@@ -78,7 +78,10 @@ struct ToastOverlay: View {
     @State private var dragY: CGFloat = 0
 
     var body: some View {
+        // Messages sit near the bottom, above the tab bar and the viewer's buttons: at the top
+        // they covered the Done / Close buttons of sheets, so a quick "Done" could hit Undo.
         VStack {
+            Spacer()
             if let t = center.current {
                 HStack(alignment: .top, spacing: 10) {
                     // Tapping the text closes the message. (On the whole row, this gesture
@@ -101,25 +104,24 @@ struct ToastOverlay: View {
                 .padding(12)
                 .background(RoundedRectangle(cornerRadius: 12).fill(color(t.style)))
                 .padding(.horizontal, 12)
-                .padding(.top, 6)
-                .offset(y: min(0, dragY))
+                .padding(.bottom, 112)
+                .offset(y: max(0, dragY))
                 .background(GeometryReader { g in
                     Color.clear
                         .onAppear { PassthroughWindow.toastFrame = g.frame(in: .global) }
                         .onChange(of: g.frame(in: .global)) { PassthroughWindow.toastFrame = $0 }
                 })
                 .onDisappear { PassthroughWindow.toastFrame = nil }
-                .transition(.move(edge: .top).combined(with: .opacity))
-                // Swipe up to dismiss.
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                // Swipe down to dismiss.
                 .gesture(DragGesture(minimumDistance: 8)
                     .onChanged { dragY = $0.translation.height }
                     .onEnded { v in
-                        if v.translation.height < -30 { center.current = nil }
+                        if v.translation.height > 30 { center.current = nil }
                         dragY = 0
                     })
                 .accessibilityIdentifier("toast")
             }
-            Spacer()
         }
         .animation(.spring(), value: center.current)
     }

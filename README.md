@@ -281,7 +281,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 **Look**
 - Custom themes: Settings › Theme › New Theme, with the iOS color picker for background, surface, text and accent. They apply to the whole app and to the site pages it opens.
 - Landscape adds two grid columns, plus a grid spacing slider (0–12 pt).
-- Messages can be dismissed with ✕ or a swipe up.
+- Messages appear near the bottom of the screen and can be dismissed with ✕ or a swipe down.
 
 **Continuous playback (Phase 9)**
 - The viewer's repeat button switches **Loop** (each post repeats) and **Auto-advance**. With auto-advance on, videos move on when they end, GIFs after one cycle, and still pictures after the slideshow interval. After the last post it goes back to the first.
