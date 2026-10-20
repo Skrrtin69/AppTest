@@ -32,7 +32,7 @@ struct AdaptersListView: View {
                 }
             }
             Section {
-                ForEach(registry.configs) { c in
+                ForEach(registry.listedConfigs) { c in
                     HStack(spacing: 12) {
                         Toggle("", isOn: Binding(get: { !registry.disabledIDs.contains(c.id) },
                                                  set: { registry.setEnabled($0, id: c.id) }))
@@ -52,7 +52,7 @@ struct AdaptersListView: View {
                     }
                     .accessibilityElement(children: .contain)
                 }
-                .onMove { registry.move(fromOffsets: $0, toOffset: $1) }
+                .onMove(perform: LockManager.shared.decoyActive ? nil : { registry.move(fromOffsets: $0, toOffset: $1) })
             } header: { Text("Your adapters") } footer: {
                 Text("Switch a site off to hide it everywhere without deleting it; switch it back on any time. Tap Edit (top right) and drag the handles to reorder.")
             }

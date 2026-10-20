@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var cacheSize: Int?
     @State private var siteCacheSizes: [String: Int] = [:]
     @State private var showPasscodeSetup = false
+    @State private var showDecoySetup = false
     @State private var confirm: ConfirmAction?
 
     enum ConfirmAction: String, Identifiable {
@@ -81,6 +82,8 @@ struct SettingsView: View {
                     if settings.savingPower {
                         Label("Battery Saver is on now", systemImage: "battery.25").foregroundColor(.orange)
                     }
+                    Toggle("Full-size media only on Wi-Fi", isOn: $settings.wifiOnlyMedia)
+                        .accessibilityIdentifier("wifiOnlyToggle")
                     Picker("Data Saver", selection: $settings.dataSaver) {
                         Text("Off").tag("off")
                         Text("On mobile data").tag("cellular")
@@ -88,7 +91,7 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("dataSaverPicker")
                 } header: { Text("Battery and data") } footer: {
-                    Text("Battery Saver stops GIF animation in grids, doesn't start videos by itself, shows the lighter file in the viewer when the site has one, and doesn't preload the next posts. Data Saver opens pictures in their smaller version first; tap Load Full Resolution for the original.")
+                    Text("Battery Saver stops GIF animation in grids, doesn't start videos by itself, shows the lighter file in the viewer when the site has one, and doesn't preload the next posts. Data Saver opens pictures in their smaller version first; tap Load Full Resolution for the original. With Wi-Fi only on, mobile data loads just thumbnails until you tap Load or Play.")
                 }
 
                 Section {
@@ -223,10 +226,23 @@ struct SettingsView: View {
                     Text("Each site's request speed is set per adapter (Requests per second).")
                 }
 
-                Section("Security") {
-                    if lock.hasPasscode {
+                Section {
+                    if lock.decoyActive {
+                        // Decoy mode: nothing here reveals or changes the real passcode.
+                        Button("Lock Now") { lock.lockNow() }
+                    } else if lock.hasPasscode {
                         Button("Change Passcode") { showPasscodeSetup = true }
                         Button("Turn Off Passcode", role: .destructive) { confirm = .removePasscode }
+                        if lock.hasDecoy {
+                            Button("Change Decoy Passcode") { showDecoySetup = true }
+                            Button("Remove Decoy Passcode", role: .destructive) {
+                                lock.removeDecoyPasscode()
+                                ToastCenter.shared.show("Decoy passcode removed")
+                            }
+                        } else {
+                            Button("Set Decoy Passcode…") { showDecoySetup = true }
+                                .accessibilityIdentifier("setDecoy")
+                        }
                         Toggle("Unlock with \(lock.biometryName)", isOn: $settings.biometricsEnabled)
                             .disabled(!lock.biometricsAvailable)
                         Picker("Require passcode", selection: $settings.lockGraceSeconds) {
@@ -243,6 +259,10 @@ struct SettingsView: View {
                         Text("Locks the app with a 4–6 digit code (and optionally \(lock.biometryName)) whenever you leave it.")
                             .font(.footnote).foregroundColor(.secondary)
                     }
+                } header: { Text("Security") } footer: {
+                    if lock.hasPasscode && !lock.decoyActive {
+                        Text("A decoy passcode opens MediaDeck looking unused: no favorites, collections, history or downloads, and only the demo sites. Nothing is deleted, and nothing new is saved. Your real passcode brings everything back.")
+                    }
                 }
 
                 Section("Haptics") {
@@ -251,13 +271,19 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink(destination: StorageView()) { Label("Storage", systemImage: "chart.bar.xaxis") }
+                        .accessibilityIdentifier("storageView")
+                    Button { Backup.exportNow() } label: { Label("Back Up Everything…", systemImage: "externaldrive.badge.plus") }
+                        .disabled(lock.decoyActive)
+                    Button { Backup.importNow() } label: { Label("Restore from Backup…", systemImage: "externaldrive.badge.checkmark") }
+                        .disabled(lock.decoyActive)
                     Button("Export Settings to Files") { exportSettings() }
                     Button("Import Settings from Files") { importSettings() }
                     Button("Clear Search History") { confirm = .clearHistory }
                     Button("Delete All Downloads", role: .destructive) { confirm = .clearDownloads }
                     Button("Reset All Settings", role: .destructive) { confirm = .resetSettings }
                 } header: { Text("Data") } footer: {
-                    Text("Adapters are imported/exported separately under Sites & Adapters.")
+                    Text("A backup holds settings, adapters, favorites, collections, history, saved searches, themes and reverse search engines in one JSON file. Passwords, API keys and the passcode are never included. Restoring adds what's missing and never deletes anything.")
                 }
 
                 Section("About") {
@@ -283,6 +309,7 @@ struct SettingsView: View {
             .keyboardDoneButton()
             .navigationTitle("Settings")
             .sheet(isPresented: $showPasscodeSetup) { PasscodeSetupView() }
+            .sheet(isPresented: $showDecoySetup) { PasscodeSetupView(decoy: true) }
             .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
                                 titleVisibility: .visible) {
                 Button("Confirm", role: .destructive) { perform(confirm) }

@@ -12,6 +12,40 @@ struct InfoPanel: View {
     struct InfoTag: Identifiable { let id = UUID(); let tag: String }
     var adapter: GenericAdapter? { AdapterRegistry.shared.adapter(for: post.siteID) }
 
+    /// The search open in Browse for this post's site (to add to or exclude from).
+    var currentQuery: String {
+        guard let t = BrowseModel.shared.current, t.siteID == post.siteID else { return "" }
+        return t.query.trimmingCharacters(in: .whitespaces)
+    }
+
+    func combined(_ term: String) -> String {
+        currentQuery.isEmpty ? term : currentQuery + " " + term
+    }
+
+    /// Long-press actions on a tag.
+    @ViewBuilder
+    func tagMenu(_ tag: String, hidden: Bool) -> some View {
+        Button { onTag(tag) } label: { Label("Search \(tag)", systemImage: "magnifyingglass") }
+        if !currentQuery.isEmpty {
+            Button { onTag(combined(tag)) } label: { Label("Add to Current Search", systemImage: "plus.magnifyingglass") }
+        }
+        Button { onTag(combined("-" + tag)) } label: { Label("Exclude from Search", systemImage: "minus.magnifyingglass") }
+        Button {
+            UIPasteboard.general.string = tag
+            ToastCenter.shared.show("Copied \"\(tag)\"")
+        } label: { Label("Copy Tag", systemImage: "doc.on.doc") }
+        if adapter?.supportsWiki == true || adapter?.supportsAliases == true {
+            Button { infoTag = InfoTag(tag: tag) } label: { Label("About This Tag", systemImage: "info.circle") }
+        }
+        if hidden {
+            Button { settings.blacklist.removeAll { $0.lowercased() == tag.lowercased() } } label: {
+                Label("Remove from Blacklist", systemImage: "eye")
+            }
+        } else {
+            Button(role: .destructive) { quickBlacklist(tag) } label: { Label("Blacklist", systemImage: "eye.slash") }
+        }
+    }
+
     func quickBlacklist(_ tag: String) {
         let t = tag.lowercased()
         guard !settings.blacklistSet.contains(t) else { return }
@@ -42,7 +76,7 @@ struct InfoPanel: View {
                         }
                     }
                 }
-                Section("Tags (tap to search, hold to blacklist)") {
+                Section("Tags (tap to search, hold for more)") {
                     if post.tags.isEmpty { Text("No tags").foregroundColor(.secondary) }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 6)], alignment: .leading, spacing: 6) {
                         ForEach(post.tags, id: \.self) { tag in
@@ -51,8 +85,7 @@ struct InfoPanel: View {
                                 .padding(.horizontal, 10).padding(.vertical, 5)
                                 .background(Capsule().fill(hidden ? Color.red.opacity(0.2) : TagColors.color(for: post.tagCategories?[tag]).opacity(0.22)))
                                 .onTapGesture { onTag(tag) }
-                                // Long-press: blacklist instantly.
-                                .onLongPressGesture(minimumDuration: 0.5) { quickBlacklist(tag) }
+                                .contextMenu { tagMenu(tag, hidden: hidden) }
                                 .accessibilityElement(children: .ignore)
                                 .accessibilityLabel("Tag \(tag)\(hidden ? ", blacklisted" : "")")
                                 .accessibilityAddTraits(.isButton)

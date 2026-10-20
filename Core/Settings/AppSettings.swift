@@ -49,14 +49,15 @@ final class AppSettings: ObservableObject {
         static let preferLighter = "preferLighter", viewerBackground = "viewerBackground", autoAdvance = "autoAdvance"
         static let readingRTL = "readingRTL", tapZones = "tapZones", rotationLock = "rotationLock"
         static let batterySaver = "batterySaver", cacheExpiryDays = "cacheExpiryDays", hiddenViewerButtons = "hiddenViewerButtons"
-        static let swipeSites = "swipeSites", detectClipboardLinks = "detectClipboardLinks", dataSaver = "dataSaver"
+        static let swipeSites = "swipeSites", detectClipboardLinks = "detectClipboardLinks", dataSaver = "dataSaver",
+                         wifiOnlyMedia = "wifiOnlyMedia"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
                           blurThumbnails, dimViewed, viewerAspect, playbackSpeed, verticalReading,
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
                           readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
-                          detectClipboardLinks, dataSaver]
+                          detectClipboardLinks, dataSaver, wifiOnlyMedia]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -127,6 +128,11 @@ final class AppSettings: ObservableObject {
     /// "off", "cellular" (on mobile data / Low Data Mode) or "always": the viewer shows the
     /// lighter file first, with a Load Full Resolution button.
     @Published var dataSaver: String = "off" { didSet { d.set(dataSaver, forKey: K.dataSaver) } }
+
+    /// On mobile data, full-size pictures and videos wait for a tap (thumbnails still load).
+    @Published var wifiOnlyMedia: Bool = false { didSet { d.set(wifiOnlyMedia, forKey: K.wifiOnlyMedia) } }
+
+    var mediaWaitsForWiFi: Bool { wifiOnlyMedia && NetworkStatus.shared.onMeteredData }
 
     var dataSaverActive: Bool {
         dataSaver == "always" || (dataSaver == "cellular" && NetworkStatus.shared.onMeteredData)
@@ -211,6 +217,7 @@ final class AppSettings: ObservableObject {
         swipeSites = d.object(forKey: K.swipeSites) as? Bool ?? true
         detectClipboardLinks = d.object(forKey: K.detectClipboardLinks) as? Bool ?? true
         dataSaver = d.string(forKey: K.dataSaver) ?? "off"
+        wifiOnlyMedia = d.object(forKey: K.wifiOnlyMedia) as? Bool ?? false
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }

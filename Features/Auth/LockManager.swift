@@ -10,12 +10,45 @@ final class LockManager: ObservableObject {
     @Published private(set) var isLocked = false
     @Published private(set) var hasPasscode = false
     @Published var obscured = false   // privacy cover while in the app switcher
+    /// Unlocked with the decoy passcode: personal data is hidden until the next lock.
+    @Published private(set) var decoyActive = false
+    @Published private(set) var hasDecoy = false
     private var backgroundedAt: Date?
     private let account = "app-pin"
+    private let decoyAccount = "app-decoy-pin"
 
     private init() {
         hasPasscode = (try? Keychain.get(service: Keychain.pinService, account: account)) != nil
         isLocked = hasPasscode
+        hasDecoy = (try? Keychain.get(service: Keychain.pinService, account: decoyAccount)) != nil
+    }
+
+    func setDecoyPasscode(_ pin: String) throws {
+        guard (4...6).contains(pin.count), pin.allSatisfy(\.isNumber) else {
+            throw AppError.message("The passcode must be 4 to 6 digits.")
+        }
+        guard !verify(pin) else { throw AppError.message("The decoy passcode must be different from your real one.") }
+        try Keychain.set(Self.hash("decoy:" + pin), service: Keychain.pinService, account: decoyAccount)
+        hasDecoy = true
+    }
+
+    func removeDecoyPasscode() {
+        try? Keychain.delete(service: Keychain.pinService, account: decoyAccount)
+        hasDecoy = false
+    }
+
+    private func isDecoy(_ pin: String) -> Bool {
+        guard let stored = try? Keychain.get(service: Keychain.pinService, account: decoyAccount) else { return false }
+        return stored == Self.hash("decoy:" + pin)
+    }
+
+    private func setDecoy(_ on: Bool) {
+        guard decoyActive != on else { return }
+        decoyActive = on
+        LibraryStore.shared.reload()
+        DownloadManager.shared.objectWillChange.send()
+        AdapterRegistry.shared.objectWillChange.send()
+        BrowseModel.shared.decoyChanged()
     }
 
     static func hash(_ pin: String) -> Data {
@@ -32,6 +65,8 @@ final class LockManager: ObservableObject {
 
     func removePasscode() throws {
         try Keychain.delete(service: Keychain.pinService, account: account)
+        removeDecoyPasscode()
+        setDecoy(false)
         hasPasscode = false
         isLocked = false
         AppSettings.shared.biometricsEnabled = false
@@ -44,6 +79,14 @@ final class LockManager: ObservableObject {
 
     func unlock(with pin: String) -> Bool {
         if verify(pin) {
+            setDecoy(false)
+            isLocked = false
+            Haptics.success()
+            return true
+        }
+        if isDecoy(pin) {
+            // Looks exactly like a normal unlock.
+            setDecoy(true)
             isLocked = false
             Haptics.success()
             return true
@@ -73,7 +116,7 @@ final class LockManager: ObservableObject {
         ctx.localizedFallbackTitle = "Enter Passcode"
         do {
             let ok = try await ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "Unlock MediaDeck")
-            if ok { isLocked = false; Haptics.success() }
+            if ok { setDecoy(false); isLocked = false; Haptics.success() }
         } catch {
             // User cancelled or failed; the passcode pad stays available.
         }

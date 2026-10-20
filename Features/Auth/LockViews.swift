@@ -102,6 +102,8 @@ struct PinPad: View {
 
 /// Two-step "enter, then confirm" passcode setup.
 struct PasscodeSetupView: View {
+    /// Sets the decoy passcode instead of the real one.
+    var decoy = false
     @Environment(\.dismiss) private var dismiss
     @State private var first: String?
     @State private var entered = ""
@@ -110,7 +112,8 @@ struct PasscodeSetupView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
-                Text(first == nil ? "Choose a 4–6 digit passcode" : "Enter it again to confirm")
+                Text(first == nil ? (decoy ? "Choose a decoy passcode (different from your real one)" : "Choose a 4–6 digit passcode") : "Enter it again to confirm")
+                    .multilineTextAlignment(.center)
                     .font(.headline)
                 Text(String(repeating: "●", count: entered.count) + String(repeating: "○", count: max(0, 4 - entered.count)))
                     .font(.title2.monospaced())
@@ -124,7 +127,7 @@ struct PasscodeSetupView: View {
                 Spacer()
             }
             .padding()
-            .navigationTitle("Set Passcode")
+            .navigationTitle(decoy ? "Decoy Passcode" : "Set Passcode")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
@@ -134,8 +137,13 @@ struct PasscodeSetupView: View {
         if let f = first {
             if f == entered {
                 do {
-                    try LockManager.shared.setPasscode(entered)
-                    ToastCenter.shared.show("Passcode set", style: .success)
+                    if decoy {
+                        try LockManager.shared.setDecoyPasscode(entered)
+                        ToastCenter.shared.show("Decoy passcode set", style: .success)
+                    } else {
+                        try LockManager.shared.setPasscode(entered)
+                        ToastCenter.shared.show("Passcode set", style: .success)
+                    }
                     dismiss()
                 } catch {
                     self.error = error.localizedDescription

@@ -29,7 +29,23 @@ final class AdapterRegistry: ObservableObject {
 
     private init() {}
 
-    var enabledConfigs: [AdapterConfig] { configs.filter { !disabledIDs.contains($0.id) } }
+    var enabledConfigs: [AdapterConfig] {
+        let on = configs.filter { !disabledIDs.contains($0.id) }
+        // Decoy mode: only the built-in demo sites.
+        return LockManager.shared.decoyActive ? on.filter { Self.bundledIDs.contains($0.id) } : on
+    }
+
+    /// The adapters list in Settings (decoy mode: built-in demo sites only).
+    var listedConfigs: [AdapterConfig] {
+        LockManager.shared.decoyActive ? configs.filter { Self.bundledIDs.contains($0.id) } : configs
+    }
+
+    /// IDs of the adapters that ship with the app.
+    static let bundledIDs: Set<String> = {
+        guard let url = bundledFile, let data = try? Data(contentsOf: url),
+              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+        return Set(list.compactMap { $0["id"] as? String })
+    }()
 
     func adapter(for id: String) -> GenericAdapter? {
         if let a = adapters[id] { return a }

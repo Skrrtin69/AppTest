@@ -47,7 +47,14 @@ final class LibraryStore: ObservableObject {
 
     private init() { reload() }
 
+    /// Decoy mode: nothing personal is shown, and nothing is saved.
+    var hidden: Bool { LockManager.shared.decoyActive }
+
     func reload() {
+        if hidden {
+            favorites = []; collections = []; history = []; savedSearches = []; favoriteKeys = []
+            return
+        }
         let favReq = NSFetchRequest<FavoriteMO>(entityName: "Favorite")
         favReq.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
         let favs = (try? ctx.fetch(favReq)) ?? []
@@ -101,6 +108,7 @@ final class LibraryStore: ObservableObject {
     }
 
     func toggleFavorite(_ post: Post) {
+        guard !hidden else { return }
         if let mo = favoriteMO(post.key) {
             let collectionIDs = mo.collections.map { $0.id }
             ctx.delete(mo)
@@ -121,11 +129,13 @@ final class LibraryStore: ObservableObject {
     }
 
     func addFavorites(_ posts: [Post]) {
+        guard !hidden else { return }
         posts.forEach { ensureFavorite($0) }
         commit()
     }
 
     func removeFavorites(keys: [String]) {
+        guard !hidden else { return }
         keys.compactMap { favoriteMO($0) }.forEach { ctx.delete($0) }
         commit()
     }
@@ -141,6 +151,7 @@ final class LibraryStore: ObservableObject {
 
     @discardableResult
     func createCollection(named name: String) -> String? {
+        guard !hidden else { return nil }
         guard let n = name.nonEmpty else { return nil }
         let c = CollectionMO(context: ctx)
         c.id = UUID().uuidString
@@ -157,12 +168,14 @@ final class LibraryStore: ObservableObject {
     }
 
     func deleteCollection(_ id: String) {
+        guard !hidden else { return }
         if let c = collectionMO(id) { ctx.delete(c) }
         commit()
     }
 
     /// Adding to a collection also favorites the post.
     func add(_ posts: [Post], toCollection id: String) {
+        guard !hidden else { return }
         guard let c = collectionMO(id) else { return }
         for p in posts {
             let f = ensureFavorite(p)
@@ -187,6 +200,7 @@ final class LibraryStore: ObservableObject {
     // MARK: History & saved searches
 
     func recordSearch(_ query: String, siteID: String) {
+        guard !hidden else { return }
         let q = query.trimmingCharacters(in: .whitespaces)
         // Re-running a search moves it to the top instead of duplicating it.
         let r = NSFetchRequest<HistoryMO>(entityName: "History")
@@ -205,12 +219,14 @@ final class LibraryStore: ObservableObject {
     }
 
     func clearHistory() {
+        guard !hidden else { return }
         let r = NSFetchRequest<HistoryMO>(entityName: "History")
         ((try? ctx.fetch(r)) ?? []).forEach { ctx.delete($0) }
         commit()
     }
 
     func saveSearch(name: String, query: String, siteID: String) {
+        guard !hidden else { return }
         let s = SavedSearchMO(context: ctx)
         s.id = UUID().uuidString
         s.name = name.nonEmpty ?? (query.nonEmpty ?? "All posts")
@@ -226,5 +242,71 @@ final class LibraryStore: ObservableObject {
         r.predicate = NSPredicate(format: "id == %@", id)
         ((try? ctx.fetch(r)) ?? []).forEach { ctx.delete($0) }
         commit()
+    }
+}
+
+// MARK: - Backup
+
+extension LibraryStore {
+    struct BackupCounts { var favorites = 0, collections = 0, history = 0, savedSearches = 0 }
+
+    /// Favorites, collections, history and saved searches as plain JSON values.
+    func backupJSON() -> [String: Any] {
+        let iso = ISO8601DateFormatter()
+        func postJSON(_ p: Post) -> Any {
+            (try? encoder.encode(p)).flatMap { try? JSONSerialization.jsonObject(with: $0) } ?? [:]
+        }
+        let hReq = NSFetchRequest<HistoryMO>(entityName: "History")
+        let allHistory = (try? ctx.fetch(hReq)) ?? []
+        return [
+            "favorites": favorites.map { f -> [String: Any] in
+                ["post": postJSON(f.post), "createdAt": iso.string(from: f.createdAt), "collections": Array(f.collectionIDs)]
+            },
+            "collections": collections.map { ["id": $0.id, "name": $0.name] },
+            "history": allHistory.map { ["query": $0.query, "siteID": $0.siteID, "date": iso.string(from: $0.date)] },
+            "savedSearches": savedSearches.map { ["id": $0.id, "name": $0.name, "query": $0.query, "siteID": $0.siteID] },
+        ]
+    }
+
+    /// Adds what's missing from a backup; nothing already here is changed or removed.
+    func mergeBackup(_ json: [String: Any]) -> BackupCounts {
+        var n = BackupCounts()
+        guard !hidden else { return n }
+        let iso = ISO8601DateFormatter()
+        for c in json["collections"] as? [[String: Any]] ?? [] {
+            guard let id = c["id"] as? String, let name = c["name"] as? String, collectionMO(id) == nil else { continue }
+            let mo = CollectionMO(context: ctx)
+            mo.id = id; mo.name = name; mo.createdAt = Date()
+            n.collections += 1
+        }
+        for f in json["favorites"] as? [[String: Any]] ?? [] {
+            guard let obj = f["post"], let data = try? JSONSerialization.data(withJSONObject: obj),
+                  let post = try? decoder.decode(Post.self, from: data) else { continue }
+            let isNew = favoriteMO(post.key) == nil
+            let mo = ensureFavorite(post)
+            if isNew {
+                mo.createdAt = (f["createdAt"] as? String).flatMap { iso.date(from: $0) } ?? Date()
+                n.favorites += 1
+            }
+            for id in f["collections"] as? [String] ?? [] { if let c = collectionMO(id) { mo.collections.insert(c) } }
+        }
+        let existing = Set(((try? ctx.fetch(NSFetchRequest<HistoryMO>(entityName: "History"))) ?? []).map { "\($0.siteID)|\($0.query)" })
+        for h in json["history"] as? [[String: Any]] ?? [] {
+            guard let q = h["query"] as? String, let site = h["siteID"] as? String, !existing.contains("\(site)|\(q)") else { continue }
+            let mo = HistoryMO(context: ctx)
+            mo.query = q; mo.siteID = site
+            mo.date = (h["date"] as? String).flatMap { iso.date(from: $0) } ?? Date()
+            n.history += 1
+        }
+        let savedIDs = Set(savedSearches.map(\.id))
+        for s in json["savedSearches"] as? [[String: Any]] ?? [] {
+            guard let id = s["id"] as? String, !savedIDs.contains(id), let q = s["query"] as? String, let site = s["siteID"] as? String else { continue }
+            let mo = SavedSearchMO(context: ctx)
+            mo.id = id; mo.name = s["name"] as? String ?? q; mo.query = q; mo.siteID = site; mo.createdAt = Date()
+            n.savedSearches += 1
+        }
+        stack.save()
+        reload()
+        return n
     }
 }

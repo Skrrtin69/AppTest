@@ -423,12 +423,28 @@ struct ViewerPage: View {
     var onTap: (CGFloat) -> Void
     var onSize: (CGSize) -> Void
 
+    @ObservedObject private var settings = AppSettings.shared
+    @State private var videoAllowed = false
+
     var body: some View {
         Group {
             if !isNear {
                 Color.clear
             } else if post.isGallery {
                 GalleryPage(post: post, isActive: isActive, onTap: { onTap(0.5) }, onFinished: onFinished)
+            } else if post.mediaType == .video && settings.mediaWaitsForWiFi && !videoAllowed {
+                // Wi-Fi only: a still and a button instead of streaming on mobile data.
+                ZStack {
+                    CachedAsyncImage(url: post.thumbnailURL, maxPixel: 900, contentMode: .scaleAspectFit)
+                    Button { videoAllowed = true } label: {
+                        Label("Play on Mobile Data", systemImage: "play.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .background(Capsule().fill(Color.black.opacity(0.65)))
+                            .foregroundColor(.white)
+                    }
+                    .accessibilityIdentifier("playOnMobileData")
+                }
             } else if post.mediaType == .video {
                 MediaVideoView(url: post.mediaURL, isActive: isActive, showControls: showControls, siteID: post.siteID,
                                onFinished: onFinished)
@@ -456,6 +472,7 @@ struct FullImagePage: View {
 
     /// The address shown: with Data Saver on, the smaller version until Load Full Resolution.
     var shownURL: URL {
+        if settings.mediaWaitsForWiFi && !wantsFull { return post.thumbnailURL }
         if settings.dataSaverActive && !wantsFull { return post.sampleURL ?? post.thumbnailURL }
         return settings.viewerPrefersLighter ? (post.sampleURL ?? post.mediaURL) : post.mediaURL
     }
@@ -465,11 +482,12 @@ struct FullImagePage: View {
             if let img = model.image {
                 ZoomableImageView(image: img, aspect: aspect, onZoomChange: onZoom, onSingleTap: onTap)
                     .accessibilityIdentifier("viewerImage")
-                if shownURL != post.mediaURL && settings.dataSaverActive && !wantsFull {
+                if shownURL != post.mediaURL && (settings.dataSaverActive || settings.mediaWaitsForWiFi) && !wantsFull {
                     VStack {
                         Spacer()
                         Button { wantsFull = true } label: {
-                            Label("Load Full Resolution", systemImage: "arrow.up.left.and.arrow.down.right")
+                            Label(settings.mediaWaitsForWiFi ? "Load on Mobile Data" : "Load Full Resolution",
+                                  systemImage: settings.mediaWaitsForWiFi ? "antenna.radiowaves.left.and.right" : "arrow.up.left.and.arrow.down.right")
                                 .font(.subheadline.weight(.semibold))
                                 .padding(.horizontal, 14).padding(.vertical, 8)
                                 .background(Capsule().fill(Color.black.opacity(0.65)))

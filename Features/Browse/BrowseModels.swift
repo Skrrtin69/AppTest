@@ -355,6 +355,13 @@ final class BrowseModel: ObservableObject {
         objectWillChange.send()
     }
 
+    /// Entering or leaving decoy mode: start over with one tab on an allowed site.
+    func decoyChanged() {
+        tabs = []
+        selectedID = nil
+        ensureTab()
+    }
+
     @discardableResult
     func openTab(siteID: String, query: String) -> SearchTabModel {
         let t = SearchTabModel(siteID: siteID, query: query)

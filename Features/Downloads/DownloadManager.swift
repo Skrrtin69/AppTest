@@ -46,7 +46,9 @@ final class DownloadManager: NSObject, ObservableObject {
 
     /// Items hidden while their Undo toast is showing; really deleted afterwards.
     @Published private(set) var pendingRemoval: Set<String> = []
-    var completed: [DownloadItem] { items.filter { $0.state == .completed && !pendingRemoval.contains($0.id) } }
+    /// Decoy mode shows no downloads.
+    private var shown: [DownloadItem] { LockManager.shared.decoyActive ? [] : items }
+    var completed: [DownloadItem] { shown.filter { $0.state == .completed && !pendingRemoval.contains($0.id) } }
 
     /// Deletes after a 5-second Undo window.
     func removeWithUndo(_ ids: [String]) {
@@ -62,7 +64,7 @@ final class DownloadManager: NSObject, ObservableObject {
             self.remove(still)
         }
     }
-    var queue: [DownloadItem] { items.filter { $0.state != .completed } }
+    var queue: [DownloadItem] { shown.filter { $0.state != .completed } }
 
     // MARK: Startup
 
@@ -159,6 +161,7 @@ final class DownloadManager: NSObject, ObservableObject {
     /// Adds posts to the queue using the quality and filename settings.
     @MainActor
     func enqueue(_ posts: [Post]) async {
+        guard !LockManager.shared.decoyActive else { return }
         let settings = AppSettings.shared
         guard !posts.isEmpty else { return }
         // Mobile data: confirm batches and videos first.
@@ -285,7 +288,7 @@ final class DownloadManager: NSObject, ObservableObject {
         retry(id)
     }
 
-    var failedCount: Int { items.filter { $0.state == .failed }.count }
+    var failedCount: Int { shown.filter { $0.state == .failed }.count }
 
     /// Writes the files to one ZIP in the temp folder and offers to save it in Files.
     func exportZIP(_ list: [DownloadItem]) {
@@ -337,6 +340,8 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     func removeAll() {
+        // Decoy mode: looks done, touches nothing.
+        guard !LockManager.shared.decoyActive else { return }
         remove(items.map { $0.id })
         try? FileManager.default.removeItem(at: Self.root)
     }

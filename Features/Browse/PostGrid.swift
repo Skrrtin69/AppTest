@@ -18,10 +18,12 @@ struct PostGrid<Footer: View>: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var viewed = ViewedStore.shared
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var columns: [GridItem] {
-        // iPhones report a compact vertical size class in landscape: reflow with more columns.
-        let n = settings.columns(landscape: verticalSizeClass == .compact)
+        // iPhones report a compact vertical size class in landscape, and a full-width iPad window
+        // a regular horizontal one: both get more columns. A narrow Split View pane doesn't.
+        let n = settings.columns(landscape: verticalSizeClass == .compact || horizontalSizeClass == .regular)
         return Array(repeating: GridItem(.flexible(), spacing: settings.gridSpacing), count: n)
     }
 

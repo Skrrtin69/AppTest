@@ -30,9 +30,10 @@ struct LibraryView: View {
     }
 
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: settings.gridSpacing),
-              count: settings.columns(landscape: verticalSizeClass == .compact))
+              count: settings.columns(landscape: verticalSizeClass == .compact || horizontalSizeClass == .regular))
     }
 
     var body: some View {

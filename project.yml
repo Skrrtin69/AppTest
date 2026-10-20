@@ -40,6 +40,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
+        # iPad Split View and Slide Over.
+        UIRequiresFullScreen: false
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -71,3 +73,5 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_OPTIMIZATION_LEVEL: "-Onone"
         DEBUG_INFORMATION_FORMAT: dwarf
+        # Charts exists only on iOS 16+; weak-link it so iOS 15 can still launch.
+        OTHER_LDFLAGS: ["$(inherited)", "-weak_framework", "Charts"]
