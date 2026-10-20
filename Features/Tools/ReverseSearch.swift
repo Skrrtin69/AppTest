@@ -162,13 +162,18 @@ enum ReverseSearch {
         }
         let minimum = engine.minSimilarity ?? 0
         return list.compactMap { node -> ReverseMatch? in
-            let sim = engine.similarityPath.flatMap { DottedPath.string($0, in: node) }.flatMap { Double($0.replacingOccurrences(of: "%", with: "")) }
+            // Paths the user filled in win; empty ones are found by looking through the match
+            // for keys named like similarity / thumbnail / url / title.
+            let simText = engine.similarityPath?.nonEmpty.flatMap { DottedPath.string($0, in: node) } ?? MatchGuess.similarity(node)
+            let sim = simText.flatMap { Double($0.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)) }
             if let s = sim, s < minimum { return nil }
             func link(_ p: String?) -> URL? {
-                p.flatMap { DottedPath.string($0, in: node) }.flatMap { URL(string: $0) }.flatMap { $0.scheme?.hasPrefix("http") == true ? $0 : nil }
+                p?.nonEmpty.flatMap { DottedPath.string($0, in: node) }.flatMap { URL(string: $0) }.flatMap { $0.scheme?.hasPrefix("http") == true ? $0 : nil }
             }
-            return ReverseMatch(similarity: sim, thumbnail: link(engine.thumbnailPath), source: link(engine.sourceURLPath),
-                                title: engine.titlePath.flatMap { DottedPath.string($0, in: node) })
+            let thumb = link(engine.thumbnailPath) ?? MatchGuess.thumbnail(node)
+            let source = link(engine.sourceURLPath) ?? MatchGuess.source(node, excluding: thumb)
+            let title = engine.titlePath?.nonEmpty.flatMap { DottedPath.string($0, in: node) } ?? MatchGuess.title(node)
+            return ReverseMatch(similarity: sim, thumbnail: thumb, source: source, title: title)
         }
         .sorted { ($0.similarity ?? 0) > ($1.similarity ?? 0) }
     }
@@ -306,6 +311,56 @@ extension ReverseSearch {
             r.allHTTPHeaderFields = original.allHTTPHeaderFields
             completionHandler(r)
         }
+    }
+}
+
+/// Finds the usual pieces of a match when the engine's paths are left empty.
+enum MatchGuess {
+    /// Every (key, value) in the match, a few levels deep; arrays keep their parent key.
+    static func pairs(_ node: Any, key: String = "", depth: Int = 0) -> [(String, Any)] {
+        guard depth < 4 else { return [] }
+        if let d = node as? [String: Any] {
+            return d.sorted { $0.key < $1.key }.flatMap { k, v -> [(String, Any)] in
+                (v is [String: Any] || v is [Any]) ? pairs(v, key: k, depth: depth + 1) : [(k.lowercased(), v)]
+            }
+        }
+        if let a = node as? [Any] { return a.flatMap { pairs($0, key: key, depth: depth + 1) }.map { ($0.0.isEmpty ? key.lowercased() : $0.0, $0.1) } + a.compactMap { ($0 is String) ? (key.lowercased(), $0) : nil } }
+        return []
+    }
+
+    static func text(_ v: Any) -> String? {
+        if let s = v as? String { return s }
+        if let n = v as? NSNumber { return n.stringValue }
+        return nil
+    }
+
+    static func similarity(_ node: Any) -> String? {
+        pairs(node).first { $0.0.contains("similarity") || $0.0 == "score" }.flatMap { text($0.1) }
+    }
+
+    static func httpURL(_ v: Any) -> URL? {
+        guard let s = v as? String, let u = URL(string: s), u.scheme?.hasPrefix("http") == true else { return nil }
+        return u
+    }
+
+    static func thumbnail(_ node: Any) -> URL? {
+        pairs(node).first { ($0.0.contains("thumb") || $0.0.contains("preview")) && httpURL($0.1) != nil }.flatMap { httpURL($0.1) }
+    }
+
+    /// The first web link under a key like url/urls/source/link that isn't the thumbnail.
+    static func source(_ node: Any, excluding thumb: URL?) -> URL? {
+        let all = pairs(node).filter { httpURL($0.1) != nil && httpURL($0.1) != thumb }
+        let named = all.first { k, _ in ["url", "source", "link", "page"].contains { k.contains($0) } && !k.contains("thumb") }
+        return (named ?? all.first(where: { !$0.0.contains("thumb") })).flatMap { httpURL($0.1) }
+    }
+
+    static func title(_ node: Any) -> String? {
+        let p = pairs(node)
+        for k in ["title", "material", "source", "creator", "author", "member_name", "artist", "name"] {
+            if let t = p.first(where: { $0.0 == k || $0.0.hasSuffix("_" + k) }).flatMap({ text($0.1) }),
+               !t.isEmpty, httpURL(t) == nil { return t }
+        }
+        return nil
     }
 }
 
