@@ -163,3 +163,4 @@ Choices made while building MediaDeck, and why.
 - **Redirects keep the POST body** (a dedicated session re-sends method, body and headers).
 - **Engine errors:** a negative `header.status` (even with HTTP 200), or an HTTP error, shows the engine's `header.message` with HTML tags, entities and literal `\uXXXX` escapes removed.
 - The demo engine now rejects uploads that aren't a multipart `file` picture, or that also send `url=`, so this is covered by tests on the demo server.
+- **Empty match paths are guessed:** if an engine leaves Similarity, Thumbnail, Source link or Title empty, each match is searched for keys named like `similarity`/`score`, `thumb`/`preview`, `url`/`source`/`link` (the first web link that isn't the thumbnail) and `title`/`material`/`source`/`creator`/`author`/`*_name`. Filled-in paths always win.
