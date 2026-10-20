@@ -400,17 +400,26 @@ extension AutoConfigurator {
         /// that answers with a list of tag-like items wins.
         mutating func probeAutocomplete(adapter: GenericAdapter) async {
             let patterns = ["tags/autocomplete.json?q={query}", "tags/autocomplete?q={query}", "autocomplete.json?q={query}",
-                            "autocomplete?q={query}", "suggest?q={query}", "tags.json?q={query}"]
+                            "autocomplete?q={query}", "suggest?q={query}",
+                            "tags.json?search[name_matches]={query}*&search[order]=count", "tags.json?q={query}"]
             let query = String((input.sampleTag.split(separator: " ").first ?? "a").prefix(2))
             let bases = parts.base == parts.origin ? [parts.base] : [parts.base, parts.origin]
             for base in bases {
                 for pattern in patterns {
                     let filled = pattern.replacingOccurrences(of: "{query}", with: GenericAdapter.encode(query))
-                    guard let url = URL(string: GenericAdapter.join(base, filled)),
+                    guard let url = URL(string: GenericAdapter.escapeQueryBrackets(GenericAdapter.join(base, filled))),
                           let (data, resp) = try? await adapter.fetchRaw(url, rateLimited: false),
                           (200...299).contains(resp.statusCode),
                           let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
                           let found = Self.suggestionList(json) else { continue }
+                    // A list that ignores the query (e.g. just the newest tags) isn't suggestions.
+                    let listed = (DottedPath.evaluate(found.path, in: json) ?? json) as? [Any] ?? []
+                    let names = listed.prefix(20).compactMap { item -> String? in
+                        if let s = item as? String { return s }
+                        guard let d = item as? [String: Any] else { return nil }
+                        return DottedPath.stringValue(d[found.nameKey ?? "name"])
+                    }
+                    guard names.contains(where: { $0.lowercased().contains(query.lowercased()) }) else { continue }
                     // Under the API folder it's written relative to baseURL; at the root, as a full address.
                     config.autocompletePath = base == parts.base ? pattern : GenericAdapter.join(base, pattern)
                     config.autocompleteResultsPath = found.path

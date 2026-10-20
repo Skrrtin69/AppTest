@@ -118,7 +118,7 @@ final class GenericAdapter: SiteAdapter {
         } else {
             full = Self.join(config.baseURL.absoluteString, p)
         }
-        guard var comps = URLComponents(string: full) else { throw AppError.invalidURL(full) }
+        guard var comps = URLComponents(string: Self.escapeQueryBrackets(full)) else { throw AppError.invalidURL(full) }
         // Built as text from encoded parts: assigning percentEncodedQueryItems traps on
         // characters like "&" in a user-typed key name.
         var extra: [String] = []
@@ -139,6 +139,13 @@ final class GenericAdapter: SiteAdapter {
         }
         guard let url = comps.url else { throw AppError.invalidURL(full) }
         return url
+    }
+
+    /// "search[name]=x" in a query: brackets percent-encoded, which older iOS versions require.
+    static func escapeQueryBrackets(_ s: String) -> String {
+        guard let q = s.firstIndex(of: "?") else { return s }
+        let query = s[q...].replacingOccurrences(of: "[", with: "%5B").replacingOccurrences(of: "]", with: "%5D")
+        return String(s[..<q]) + query
     }
 
     static func join(_ base: String, _ path: String) -> String {
