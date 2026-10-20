@@ -385,8 +385,6 @@ final class AppRouter: ObservableObject {
     static let shared = AppRouter()
     enum Tab: Hashable { case browse, favorites, library, downloads, settings }
     @Published var tab: Tab = .browse
-    /// A picture received from the share sheet (offers a reverse search).
-    @Published var sharedImage: SharedImage?
 
     func search(tag: String, siteID: String) {
         tab = .browse

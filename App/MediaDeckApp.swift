@@ -133,7 +133,6 @@ struct RootView: View {
         .onChange(of: settings.theme) { Theme.apply($0) }
         .onChange(of: settings.mixWithOthers) { _ in AudioSessionConfig.apply() }
         .onOpenURL { url in Task { @MainActor in ShareInbox.handle(url) } }
-        .sheet(item: $router.sharedImage) { SharedImageSheet(shared: $0) }
     }
 }
 

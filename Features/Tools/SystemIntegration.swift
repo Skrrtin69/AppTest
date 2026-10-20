@@ -27,7 +27,8 @@ enum ShareInbox {
                 // A picture: keep a private copy (the inbox file is removed) and offer a reverse search.
                 let copy = FileManager.default.temporaryDirectory.appendingPathComponent("shared-\(UUID().uuidString).\(f.pathExtension)")
                 guard (try? FileManager.default.copyItem(at: f, to: copy)) != nil else { continue }
-                AppRouter.shared.sharedImage = SharedImage(url: copy)
+                // Presented from the topmost screen, so it also appears over the viewer or a sheet.
+                Presenter.present(UIHostingController(rootView: SharedImageSheet(shared: SharedImage(url: copy))))
             }
         }
     }
@@ -36,7 +37,8 @@ enum ShareInbox {
     static func handle(_ url: URL) {
         guard url.scheme == "mediadeck" else { return }
         switch url.host {
-        case "inbox": process()
+        // Wait for the share sheet to finish closing before showing anything.
+        case "inbox": DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { process() }
         case "favorites": AppRouter.shared.tab = .favorites
         default: break
         }
