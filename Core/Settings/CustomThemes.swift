@@ -28,7 +28,10 @@ final class CustomThemeStore: ObservableObject {
     private init() {
         if let data = UserDefaults.standard.data(forKey: listKey),
            let list = try? JSONDecoder().decode([CustomTheme].self, from: data) { themes = list }
-        activeID = UserDefaults.standard.string(forKey: activeKey)
+        // Set the stored value directly: going through `activeID`'s didSet here would call
+        // Theme.apply, which reads CustomThemeStore.shared while it's still being created
+        // (a recursive lazy-init crash on launch when a custom theme is active).
+        _activeID = Published(initialValue: UserDefaults.standard.string(forKey: activeKey))
     }
 
     var active: CustomTheme? { themes.first { $0.id == activeID } ?? themes.first }
