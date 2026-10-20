@@ -168,7 +168,7 @@ final class SearchTabModel: ObservableObject, Identifiable {
 
     /// Space-separated tags; a leading "-" excludes a tag and is passed through unchanged.
     /// Space-separated tags; "quoted phrases" are one tag; "-" excludes a tag.
-    var tags: [String] { TagQuery.parse(query) }
+    var tags: [String] { TagQuery.parse(query).map(TagTranslations.shared.original) }
 
     /// Blacklisted posts are hidden (applied live, so editing the blacklist updates every grid).
     func visiblePosts(blacklist: Set<String>) -> [Post] {

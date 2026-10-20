@@ -9,6 +9,9 @@ struct InfoPanel: View {
     @ObservedObject private var settings = AppSettings.shared
 
     @State private var infoTag: InfoTag?
+    @State private var translating: String?
+    @State private var translation = ""
+    @ObservedObject private var translations = TagTranslations.shared
     struct InfoTag: Identifiable { let id = UUID(); let tag: String }
     var adapter: GenericAdapter? { AdapterRegistry.shared.adapter(for: post.siteID) }
 
@@ -26,6 +29,9 @@ struct InfoPanel: View {
     @ViewBuilder
     func tagMenu(_ tag: String, hidden: Bool) -> some View {
         Button { onTag(tag) } label: { Label("Search \(tag)", systemImage: "magnifyingglass") }
+        Button { translating = tag; translation = TagTranslations.shared.map[tag.lowercased()] ?? "" } label: {
+            Label(TagTranslations.shared.map[tag.lowercased()] == nil ? "Translate Tag…" : "Edit Translation…", systemImage: "character.bubble")
+        }
         if !currentQuery.isEmpty {
             Button { onTag(combined(tag)) } label: { Label("Add to Current Search", systemImage: "plus.magnifyingglass") }
         }
@@ -87,7 +93,7 @@ struct InfoPanel: View {
                             Menu {
                                 tagMenu(tag, hidden: hidden)
                             } label: {
-                                Text(tag).strikethrough(hidden).font(.footnote).lineLimit(1)
+                                Text(TagTranslations.shared.display(tag)).strikethrough(hidden).font(.footnote).lineLimit(1)
                                     .foregroundColor(.primary)
                                     .padding(.horizontal, 10).padding(.vertical, 5)
                                     .background(Capsule().fill(hidden ? Color.red.opacity(0.2) : TagColors.color(for: post.tagCategories?[tag]).opacity(0.22)))
@@ -146,6 +152,12 @@ struct InfoPanel: View {
                     }
                 }
             }
+            .alert("Your name for \"\(translating ?? "")\"", isPresented: Binding(get: { translating != nil }, set: { if !$0 { translating = nil } })) {
+                TextField("Name to show", text: $translation)
+                Button("Save") { if let t = translating { TagTranslations.shared.set(t, to: translation) }; translating = nil }
+                Button("Remove", role: .destructive) { if let t = translating { TagTranslations.shared.set(t, to: nil) }; translating = nil }
+                Button("Cancel", role: .cancel) { translating = nil }
+            } message: { Text("Shown instead of the site's tag. Typing it in a search sends the site's tag.") }
             .sheet(item: $infoTag) { it in
                 if let a = adapter { TagInfoSheet(adapter: a, tag: it.tag, onSearch: onTag) }
             }

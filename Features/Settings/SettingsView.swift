@@ -108,6 +108,11 @@ struct SettingsView: View {
                 }
 
                 Section("Browsing") {
+                    NavigationLink(destination: TagTranslationsView()) {
+                        HStack { Label("Tag Translations", systemImage: "character.bubble"); Spacer()
+                            Text("\(TagTranslations.shared.map.count)").foregroundColor(.secondary) }
+                    }
+                    .accessibilityIdentifier("tagTranslations")
                     NavigationLink(destination: BlacklistView()) {
                         HStack {
                             Label("Tag Blacklist", systemImage: "eye.slash")

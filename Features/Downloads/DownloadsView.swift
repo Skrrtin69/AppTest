@@ -18,7 +18,24 @@ struct DownloadsView: View {
                             }
                             .accessibilityIdentifier("retryAllFailed")
                         }
-                        ForEach(manager.queue) { item in DownloadRow(item: item) }
+                        ForEach(manager.queue) { item in
+                            DownloadRow(item: item)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) { manager.cancel(item.id) } label: { Label("Cancel", systemImage: "xmark") }
+                                }
+                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                    switch item.state {
+                                    case .downloading, .queued:
+                                        Button { manager.pause(item.id) } label: { Label("Pause", systemImage: "pause") }.tint(.orange)
+                                    case .paused:
+                                        Button { manager.resume(item.id) } label: { Label("Resume", systemImage: "play") }.tint(.green)
+                                    case .failed:
+                                        Button { manager.retry(item.id) } label: { Label("Retry", systemImage: "arrow.clockwise") }.tint(.blue)
+                                    case .completed:
+                                        EmptyView()
+                                    }
+                                }
+                        }
                     }
                     .listStyle(.plain)
                 }

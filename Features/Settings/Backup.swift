@@ -27,6 +27,8 @@ enum Backup {
         root["adapterOrder"] = d.stringArray(forKey: "adapterOrder") ?? []
         root["adapterDisabled"] = d.stringArray(forKey: "adapterDisabled") ?? []
         root["library"] = LibraryStore.shared.backupJSON()
+        root["readLater"] = ReadLaterStore.shared.backupJSON()
+        root["tagTranslations"] = TagTranslations.shared.map
         if let t = d.data(forKey: "customThemes"), let list = try? JSONSerialization.jsonObject(with: t) {
             root["customThemes"] = list
             root["activeCustomTheme"] = d.string(forKey: "activeCustomTheme") ?? ""
@@ -75,6 +77,17 @@ enum Backup {
             if n.history > 0 { parts.append("\(n.history) history item\(n.history == 1 ? "" : "s")") }
         }
 
+        if let later = root["readLater"] {
+            let n = ReadLaterStore.shared.merge(later)
+            if n > 0 { parts.append("\(n) Read Later post\(n == 1 ? "" : "s")") }
+        }
+        if let tr = root["tagTranslations"] as? [String: String], !tr.isEmpty {
+            var m = TagTranslations.shared.map
+            var added = 0
+            for (k, v) in tr where m[k] == nil { m[k] = v; added += 1 }
+            TagTranslations.shared.save(m)
+            if added > 0 { parts.append("\(added) tag translation\(added == 1 ? "" : "s")") }
+        }
         if let themes = root["customThemes"],
            let data = try? JSONSerialization.data(withJSONObject: themes),
            let list = try? JSONDecoder().decode([CustomTheme].self, from: data) {

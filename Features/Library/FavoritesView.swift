@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Local favorites (independent of any server) and named collections.
 struct FavoritesView: View {
-    enum Mode: String, CaseIterable { case favorites = "Favorites", collections = "Collections" }
+    enum Mode: String, CaseIterable { case favorites = "Favorites", collections = "Collections", later = "Later" }
     @ObservedObject private var store = LibraryStore.shared
     @ObservedObject private var settings = AppSettings.shared
     @State private var mode: Mode = .favorites
@@ -69,7 +69,13 @@ struct FavoritesView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(10)
-                if mode == .favorites { favoritesGrid } else { collectionsList }
+                switch mode {
+                case .favorites: favoritesGrid
+                case .collections: collectionsList
+                case .later:
+                    ReadLaterGrid(onOpen: { viewer = ViewerRequest(posts: $0, index: $1) },
+                                  onAddToCollection: { collectionBatch = PostBatch(posts: $0) })
+                }
             }
             .themedBackground()
             .navigationTitle(mode.rawValue)
@@ -79,7 +85,7 @@ struct FavoritesView: View {
                     if mode == .favorites {
                         Button(selecting ? "Done" : "Select") { selecting.toggle(); selected = [] }
                             .disabled(favoritePosts.isEmpty)
-                    } else {
+                    } else if mode == .collections {
                         Button { showNewCollection = true } label: { Image(systemName: "folder.badge.plus") }
                             .accessibilityLabel("New collection")
                     }

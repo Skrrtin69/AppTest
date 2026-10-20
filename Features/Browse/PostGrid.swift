@@ -27,31 +27,68 @@ struct PostGrid<Footer: View>: View {
         return Array(repeating: GridItem(.flexible(), spacing: settings.gridSpacing), count: n)
     }
 
+    var columnCount: Int {
+        settings.columns(landscape: verticalSizeClass == .compact || horizontalSizeClass == .regular)
+    }
+
     var body: some View {
-        LazyVGrid(columns: columns, spacing: settings.gridSpacing) {
-            ForEach(Array(posts.enumerated()), id: \.element.key) { index, post in
-                GridCell(post: post, aspect: settings.thumbAspect, selecting: selecting,
-                         isSelected: selected.contains(post.key), showSource: showSource, showSyncState: showSyncState)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        // With blur on, the first tap only reveals the thumbnail.
-                        if settings.blurThumbnails && !selecting && !viewed.isRevealed(post.key) {
-                            viewed.reveal(post.key)
-                            Haptics.tap()
-                        } else {
-                            onTap(index)
-                        }
+        Group {
+            if settings.thumbAspect == .masonry {
+                masonry
+            } else {
+                LazyVGrid(columns: columns, spacing: settings.gridSpacing) {
+                    ForEach(Array(posts.enumerated()), id: \.element.key) { index, post in
+                        cell(index, post, aspect: settings.thumbAspect)
                     }
-                    .modifier(PeekContextMenu(post: post) {
-                        PostMenuItems(post: post, onSelect: onLongPressSelect.map { f in { f(post) } },
-                                      onAddToCollection: { onAddToCollection([post]) })
-                    })
-                    .onAppear { onAppearIndex?(index) }
-                    .accessibilityIdentifier("cell-\(post.id)")
+                }
             }
         }
         .padding(.horizontal, settings.gridSpacing)
         footer()
+    }
+
+    /// Staggered columns: each post goes to the currently shortest column, keeping its own
+    /// shape (posts without a known size count as square until their picture loads).
+    var masonry: some View {
+        let n = max(1, columnCount)
+        var heights = Array(repeating: CGFloat(0), count: n)
+        var cols = Array(repeating: [MasonryItem](), count: n)
+        for (i, p) in posts.enumerated() {
+            let ratio = p.pixelSize.map { max(0.4, min($0.width / $0.height, 2.5)) } ?? 1
+            let c = heights.indices.min { heights[$0] < heights[$1] } ?? 0
+            cols[c].append(MasonryItem(index: i, post: p))
+            heights[c] += 1 / ratio
+        }
+        return HStack(alignment: .top, spacing: settings.gridSpacing) {
+            ForEach(0..<n, id: \.self) { c in
+                LazyVStack(spacing: settings.gridSpacing) {
+                    ForEach(cols[c]) { item in
+                        cell(item.index, item.post, aspect: .original)
+                    }
+                }
+            }
+        }
+    }
+
+    func cell(_ index: Int, _ post: Post, aspect: ThumbAspect) -> some View {
+        GridCell(post: post, aspect: aspect, selecting: selecting,
+                 isSelected: selected.contains(post.key), showSource: showSource, showSyncState: showSyncState)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                // With blur on, the first tap only reveals the thumbnail.
+                if settings.blurThumbnails && !selecting && !viewed.isRevealed(post.key) {
+                    viewed.reveal(post.key)
+                    Haptics.tap()
+                } else {
+                    onTap(index)
+                }
+            }
+            .modifier(PeekContextMenu(post: post) {
+                PostMenuItems(post: post, onSelect: onLongPressSelect.map { f in { f(post) } },
+                              onAddToCollection: { onAddToCollection([post]) })
+            })
+            .onAppear { onAppearIndex?(index) }
+            .accessibilityIdentifier("cell-\(post.id)")
     }
 }
 
@@ -198,6 +235,10 @@ struct PostMenuItems: View {
             store.isFavorite(post) ? Label("Unfavorite", systemImage: "heart.slash") : Label("Favorite", systemImage: "heart")
         }
         Button { onAddToCollection() } label: { Label("Add to Collection…", systemImage: "folder.badge.plus") }
+        Button { ReadLaterStore.shared.toggle(post) } label: {
+            ReadLaterStore.shared.contains(post) ? Label("Remove from Read Later", systemImage: "bookmark.slash")
+                : Label("Read Later", systemImage: "bookmark")
+        }
         if post.mediaType != .video {
             Button { Task { await ImageClipboard.copy(post) } } label: { Label("Copy Image", systemImage: "photo.on.rectangle") }
         }
@@ -268,4 +309,10 @@ struct CollectionPickerSheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
     }
+}
+
+struct MasonryItem: Identifiable {
+    let index: Int
+    let post: Post
+    var id: String { post.key }
 }

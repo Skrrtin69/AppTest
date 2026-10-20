@@ -25,9 +25,15 @@ enum ThemeMode: String, CaseIterable, Identifiable {
 }
 
 enum ThumbAspect: String, CaseIterable, Identifiable {
-    case square, original
+    case square, original, masonry
     var id: String { rawValue }
-    var label: String { self == .square ? "Square" : "Original" }
+    var label: String {
+        switch self {
+        case .square: return "Square"
+        case .original: return "Original"
+        case .masonry: return "Masonry (staggered)"
+        }
+    }
 }
 
 /// All user preferences, persisted in UserDefaults. Views observe this object directly.

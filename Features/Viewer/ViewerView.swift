@@ -389,6 +389,10 @@ struct ViewerView: View {
                         Button { UIApplication.shared.open(s) } label: { Label("Open Source", systemImage: "safari") }
                     }
                     Divider()
+                    Button { ReadLaterStore.shared.toggle(p) } label: {
+                        ReadLaterStore.shared.contains(p) ? Label("Remove from Read Later", systemImage: "bookmark.slash")
+                            : Label("Read Later", systemImage: "bookmark")
+                    }
                     Button { reverseFor = PostBatch(posts: [p]) } label: { Label("Reverse Search", systemImage: "magnifyingglass.circle") }
                     Button { quickHide = PostBatch(posts: [p]) } label: { Label("Hide Posts Like This…", systemImage: "eye.slash") }
                 } label: { Image(systemName: "ellipsis.circle") }

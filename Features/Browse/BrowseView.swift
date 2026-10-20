@@ -17,6 +17,7 @@ struct BrowseView: View {
     @State private var reviewing: EditRequest?
     @StateObject private var suggester = SuggestionModel()
     @State private var showJump = false
+    @State private var builderFor: SearchTabModel?
     @State private var jumpText = ""
     @ObservedObject private var viewedStore = ViewedStore.shared
     @ObservedObject private var reviews = AdapterReviewStore.shared
@@ -59,6 +60,7 @@ struct BrowseView: View {
                 }
             }
             .sheet(item: $collectionBatch) { CollectionPickerSheet(posts: $0.posts) }
+            .sheet(item: $builderFor) { QueryBuilderSheet(tab: $0) }
             .sheet(isPresented: $showJump) {
                 NavigationView {
                     Form {
@@ -335,6 +337,7 @@ struct BrowseView: View {
                 if t.supportsPageJump {
                     Button { jumpText = ""; showJump = true } label: { Label("Go to page…", systemImage: "arrow.right.to.line") }
                 }
+                Button { builderFor = t } label: { Label("Build a Search…", systemImage: "slider.horizontal.3") }
                 Button { t.scrollToTopToken += 1 } label: { Label("Scroll to top", systemImage: "arrow.up.to.line") }
                 Button {
                     let all = t.visiblePosts(blacklist: settings.blacklistSet)
