@@ -41,6 +41,8 @@ enum MockMedia {
             return try? Data(contentsOf: url)
         case "gif":
             return makeGIF(variant: Int(name) ?? 1)
+        case "page", "tall", "gthumb":
+            return MockGallery.generate(folder: folder, name: name)
         case "img", "sample", "thumb", "vthumb":
             guard let n = Int(name), (1...MockCatalog.count).contains(n) else { return nil }
             let item = MockCatalog.items[n - 1]

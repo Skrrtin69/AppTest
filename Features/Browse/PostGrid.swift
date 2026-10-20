@@ -95,7 +95,14 @@ struct GridCell: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if post.mediaType != .image {
+                if post.isGallery {
+                    Label("\(post.pages?.count ?? 0)", systemImage: "square.stack.fill")
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(Capsule().fill(Color.black.opacity(0.6)))
+                        .foregroundColor(.white)
+                        .padding(4)
+                } else if post.mediaType != .image {
                     Image(systemName: post.mediaType == .video ? "play.fill" : "sparkles")
                         .font(.caption2.weight(.bold))
                         .padding(5)
@@ -133,7 +140,7 @@ struct GridCell: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(post.mediaType.label) \(post.id)\(showSource ? " from \(AdapterRegistry.shared.displayName(for: post.siteID))" : "")\(blurred ? ", hidden" : "")\(dimmed ? ", viewed" : "")\(isSelected ? ", selected" : "")")
+            .accessibilityLabel("\(post.isGallery ? "Gallery of \(post.pages?.count ?? 0) pages" : post.mediaType.label) \(post.id)\(showSource ? " from \(AdapterRegistry.shared.displayName(for: post.siteID))" : "")\(blurred ? ", hidden" : "")\(dimmed ? ", viewed" : "")\(isSelected ? ", selected" : "")")
             .accessibilityAddTraits(.isButton)
     }
 }

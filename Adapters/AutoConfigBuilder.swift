@@ -50,6 +50,7 @@ extension AutoConfigurator {
             var extPaths: [String] = []
             var tagPaths: [(path: String, nameKey: String?)] = []
             var idPaths: [String] = []
+            var galleryPaths: [(path: String, urlKey: String?)] = []
             for p in common {
                 let vs = values(p)
                 let strings = vs.compactMap { $0 as? String }
@@ -68,6 +69,14 @@ extension AutoConfigurator {
                     if Set(ints).count == ints.count { idPaths.append(p) }
                 } else if let arrays = vs as? [[Any]], arrays.contains(where: { !$0.isEmpty }) {
                     let elems = arrays.flatMap { $0 }
+                    // A list of addresses (or of objects holding one) = the pages of a gallery.
+                    if let strs = elems as? [String], strs.allSatisfy({ AutoConfigurator.isURLString($0) }) {
+                        galleryPaths.append((p, nil)); continue
+                    }
+                    if let objs = elems as? [[String: Any]],
+                       let k = ["url", "src", "file", "image", "href"].first(where: { k in objs.allSatisfy { ($0[k] as? String).map(AutoConfigurator.isURLString) ?? false } }) {
+                        galleryPaths.append((p, k)); continue
+                    }
                     if elems.allSatisfy({ $0 is String }) {
                         tagPaths.append((p, nil))
                     } else if let objs = elems as? [[String: Any]], let k = ["name", "tag", "label", "value"].first(where: { k in objs.allSatisfy { $0[k] is String } }) {
@@ -82,6 +91,7 @@ extension AutoConfigurator {
             assignTags(tagPaths)
             assignTagSpaces()
             assignAlternates()
+            assignGallery(galleryPaths)
             assignMetadata(common, values: values)
             assignPostPath(maps.first ?? [:])
             pagination()
@@ -355,6 +365,23 @@ extension AutoConfigurator {
             set(.alternateMediaURLPaths, found.isEmpty ? .medium : .high, found.isEmpty
                 ? "No second (MP4) version of the media found in the first results."
                 : "Some results also have an MP4 at \(found.joined(separator: ", ")); it will be preferred so videos play natively with sound.")
+        }
+
+        /// A list of page addresses in each result → multi-page gallery.
+        mutating func assignGallery(_ paths: [(path: String, urlKey: String?)]) {
+            let words = ["page", "image", "gallery", "file", "photo", "picture"]
+            guard let g = paths.first(where: { Self.contains(AutoConfigurator.lastKey($0.path).lowercased(), any: words) != nil }) ?? paths.first else {
+                config.galleryPath = nil; config.galleryURLKey = nil
+                set(.galleryPath, .medium, "No list of pages found, so every result is a single picture or video.")
+                set(.galleryURLKey, .medium, "Not needed because there are no gallery pages.")
+                return
+            }
+            config.galleryPath = g.path
+            config.galleryURLKey = g.urlKey
+            set(.galleryPath, .high, "Key \(AutoConfigurator.lastKey(g.path)) is a list of addresses, so results with several of them open as a scrolling gallery.")
+            set(.galleryURLKey, g.urlKey == nil ? .medium : .high, g.urlKey == nil
+                ? "Pages are plain addresses, so no key is needed."
+                : "Each page is an object; its address is under '\(g.urlKey!)'.")
         }
 
         /// Tries common suggestion addresses next to the API (then at the site root); the first

@@ -215,11 +215,23 @@ final class GenericAdapter: SiteAdapter {
         return Post(id: id, siteID: config.id, thumbnailURL: thumb, mediaURL: media,
                     mediaType: Self.mediaType(typeStrings: typeStrings, url: media, config: config),
                     tags: tags, sourceURL: source, metadata: meta, sampleURL: sample,
-                    tagCategories: tagCategories(node))
+                    tagCategories: tagCategories(node), pages: galleryPages(node))
     }
 
     static func isMP4(_ url: URL) -> Bool {
         ["mp4", "m4v", "mov"].contains(url.pathExtension.lowercased())
+    }
+
+    /// A multi-page post's page addresses (galleryPath / galleryURLKey).
+    func galleryPages(_ node: Any) -> [URL]? {
+        guard let p = config.galleryPath?.nonEmpty, let list = DottedPath.evaluate(p, in: node) as? [Any] else { return nil }
+        let key = config.galleryURLKey?.nonEmpty ?? "url"
+        let urls = list.compactMap { item -> URL? in
+            if let s = item as? String { return resolve(s) }
+            if let d = item as? [String: Any], let s = DottedPath.stringValue(d[key]) { return resolve(s) }
+            return nil
+        }
+        return urls.isEmpty ? nil : urls
     }
 
     /// Tag → category, read from tag objects when tagCategoryKey is set.

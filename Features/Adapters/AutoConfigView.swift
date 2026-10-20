@@ -114,6 +114,7 @@ struct AutoConfigView: View {
                 Button("Demo Site C (unclear field names)") { urlText = "\(o)/c/list.json?tags={tags}&page={page}"; sampleTag = "dots" }
                 Button("Demo Site K (key + user ID)") { urlText = "\(o)/k/posts.json?tags={tags}&page={page}"; sampleTag = "red" }
                 Button("Demo Members (guest limits)") { urlText = "\(o)/a/members/posts.json?tags={tags}&page={page}"; sampleTag = "red" }
+                Button("Demo Gallery (multi-page)") { urlText = "\(o)/g/posts.json?tags={tags}&page={page}"; sampleTag = "comic" }
             } label: { Label("Try a demo address", systemImage: "testtube.2") }
         } header: { Text("Search address") } footer: {
             Text("Paste the address the site's API uses for a search. Put {tags} where the search words go and {page} where the page number goes (or {cursor} if pages use a token). Analyze fills these in with your sample tag and page 1.")

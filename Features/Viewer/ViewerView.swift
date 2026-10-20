@@ -121,6 +121,8 @@ struct ViewerView: View {
                 let dx = v.translation.width, dy = v.translation.height
                 if dragMode == .none {
                     guard abs(dy) > abs(dx) * 1.3 else { dragMode = .other; return }
+                    // A gallery scrolls vertically itself: no dismiss / edge sliders there.
+                    if current?.isGallery == true { dragMode = .other; return }
                     let width = UIScreen.main.bounds.width
                     if v.startLocation.x < 44 {
                         dragMode = .brightness
@@ -288,6 +290,8 @@ struct ViewerPage: View {
         Group {
             if !isNear {
                 Color.black
+            } else if post.isGallery {
+                GalleryPage(post: post, isActive: isActive, onTap: onTap, onFinished: onFinished)
             } else if post.mediaType == .video {
                 MediaVideoView(url: post.mediaURL, isActive: isActive, showControls: showControls, siteID: post.siteID,
                                onFinished: onFinished)

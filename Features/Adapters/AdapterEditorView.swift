@@ -232,6 +232,8 @@ struct AdapterEditorView: View {
         case .apiKeyPageURL: plain(opt(\.apiKeyPageURL), "account/api", id: "field-apiKeyPageURL")
         case .favoritePath: plain(opt(\.favoritePath), "favorites/{id}", id: "field-favoritePath")
         case .tagCategoryKey: plain(opt(\.tagCategoryKey), "category", id: "field-tagCategoryKey")
+        case .galleryPath: plain(opt(\.galleryPath), "pages", id: "field-galleryPath")
+        case .galleryURLKey: plain(opt(\.galleryURLKey), "url", id: "field-galleryURLKey")
         }
     }
 

@@ -77,6 +77,7 @@ final class ImagePipeline {
             throw AppError.message("This file isn't an image the app can display.")
         }
         let count = CGImageSourceGetCount(src)
+        let maxPixel = Self.effectiveMaxPixel(src, requested: maxPixel)
         var opts: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
@@ -102,6 +103,26 @@ final class ImagePipeline {
         }
         guard let cg = frame(0) else { throw AppError.message("The image data is damaged or in an unknown format.") }
         return UIImage(cgImage: cg)
+    }
+
+    /// Tall strips (webtoons) are limited by *width* instead of their long side, so they stay
+    /// sharp; and no image is ever decoded above ~24 megapixels, to avoid memory crashes.
+    static func effectiveMaxPixel(_ src: CGImageSource, requested: CGFloat) -> CGFloat {
+        guard let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let w = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.doubleValue,
+              let h = (props[kCGImagePropertyPixelHeight] as? NSNumber)?.doubleValue, w > 0, h > 0 else { return requested }
+        let budget = 24_000_000.0
+        var longSide = requested > 0 ? Double(requested) : max(w, h)
+        if requested > 0 && h / w > 2.5 {
+            // `requested` becomes the target width; the long side follows the aspect ratio.
+            longSide = min(h, Double(requested) * h / w)
+        }
+        // Pixels at this size, capped to the budget.
+        let scale = longSide / max(w, h)
+        let pixels = w * h * scale * scale
+        if pixels > budget { longSide *= (budget / pixels).squareRoot() }
+        if requested == 0 && longSide >= max(w, h) { return 0 }   // full size fits the budget
+        return CGFloat(longSide.rounded())
     }
 
     private static func frameDelay(_ src: CGImageSource, _ i: Int) -> Double {

@@ -55,6 +55,9 @@ struct Post: Codable, Hashable, Identifiable {
     var sampleURL: URL? = nil
     /// Tag → category (e.g. "artist") when the site provides one; used to color tags.
     var tagCategories: [String: String]? = nil
+    /// Every page of a multi-page post (gallery / comic), in order.
+    var pages: [URL]? = nil
+    var isGallery: Bool { (pages?.count ?? 0) > 1 }
 
     /// Unique across sites; used for favorites, selection and SwiftUI identity.
     var key: String { "\(siteID):\(id)" }
@@ -68,7 +71,16 @@ struct Post: Codable, Hashable, Identifiable {
 
     func with(mediaURL: URL, thumbnailURL: URL? = nil) -> Post {
         Post(id: id, siteID: siteID, thumbnailURL: thumbnailURL ?? self.thumbnailURL, mediaURL: mediaURL,
-             mediaType: mediaType, tags: tags, sourceURL: sourceURL, metadata: metadata, sampleURL: sampleURL)
+             mediaType: mediaType, tags: tags, sourceURL: sourceURL, metadata: metadata, sampleURL: sampleURL,
+             tagCategories: tagCategories, pages: pages)
+    }
+
+    /// One page of a gallery as its own (single-picture) post, for reading and saving.
+    func page(_ i: Int) -> Post {
+        guard let list = pages, list.indices.contains(i) else { return self }
+        var m = metadata; m.removeValue(forKey: "width"); m.removeValue(forKey: "height")
+        return Post(id: "\(id)-p\(i + 1)", siteID: siteID, thumbnailURL: list[i], mediaURL: list[i],
+                    mediaType: .image, tags: tags, sourceURL: sourceURL, metadata: m, tagCategories: tagCategories)
     }
 }
 
