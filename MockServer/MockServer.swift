@@ -169,10 +169,10 @@ final class MockServer {
         }
     }
 
-    /// /proxy: passes the site's 206 answer on as it arrives (64 KB at a time) instead of
-    /// waiting for the whole piece. When the site ignores Range (200 for a part) or fails,
-    /// it falls back to fetching the whole file once (kept in memory) and cutting the
-    /// asked-for range out here.
+    /// /proxy: passes the site's 206 answer on as it arrives (each network packet as
+    /// URLSession hands it over) instead of waiting for the whole piece. When the site
+    /// ignores Range (200 for a part) or fails, it falls back to fetching the whole file
+    /// once (kept in memory) and cutting the asked-for range out here.
     private func streamProxy(_ request: HTTPRequest, on conn: NWConnection) async {
         guard let (urlRequest, client) = PlayerRoutes.proxyRequest(request), let url = urlRequest.url else {
             send(.json(["error": "bad url"], status: 400), for: request, on: conn)
@@ -182,57 +182,14 @@ final class MockServer {
             send(HTTPResponse(contentType: cached.type, body: cached.data), for: request, on: conn)
             return
         }
-        let started = Date()
-        do {
-            let (bytes, resp) = try await client.session.bytes(for: urlRequest)
-            guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-            let length = http.expectedContentLength
-            guard http.statusCode == 206, length > 0 else {
-                bytes.task.cancel()
-                send(await PlayerRoutes.proxy(request), for: request, on: conn)
-                return
-            }
-            var headers: [String: String] = [
-                "Content-Type": request.query["type"] ?? http.value(forHTTPHeaderField: "Content-Type") ?? MockMedia.contentType(url.path),
-                "Content-Length": String(length),
-                "Accept-Ranges": "bytes",
-                "Connection": "close",
-                "Access-Control-Allow-Origin": "*",
-            ]
-            if let cr = http.value(forHTTPHeaderField: "Content-Range") { headers["Content-Range"] = cr }
-            var head = "HTTP/1.1 206 Partial Content\r\n"
-            for (k, v) in headers { head += "\(k): \(v)\r\n" }
-            head += "\r\n"
-            try await sendAsync(Data(head.utf8), on: conn)
-            if request.method == "HEAD" { bytes.task.cancel(); conn.cancel(); return }
-            var buffer = Data()
-            buffer.reserveCapacity(64 * 1024)
-            var sent = 0
-            for try await byte in bytes {
-                buffer.append(byte)
-                if buffer.count >= 64 * 1024 {
-                    if sent == 0 {
-                        DebugLog.log("Proxy", "206 first bytes after \(Int(Date().timeIntervalSince(started) * 1000)) ms · \(headers["Content-Range"] ?? "")")
-                    }
-                    try await sendAsync(buffer, on: conn)
-                    sent += buffer.count
-                    buffer.removeAll(keepingCapacity: true)
-                }
-            }
-            if !buffer.isEmpty { try await sendAsync(buffer, on: conn) }
-            conn.cancel()
-        } catch {
-            // The player closed the connection (seek, next video) or the site failed.
-            conn.cancel()
+        let streamer = ProxyStreamer(request: request, conn: conn, url: url) { [weak self] in
+            guard let self = self else { conn.cancel(); return }
+            Task { self.send(await PlayerRoutes.proxy(request), for: request, on: conn) }
         }
-    }
-
-    private func sendAsync(_ data: Data, on conn: NWConnection) async throws {
-        try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
-            conn.send(content: data, completion: .contentProcessed { error in
-                if let error = error { c.resume(throwing: error) } else { c.resume() }
-            })
-        }
+        let task = client.session.dataTask(with: urlRequest)
+        task.delegate = streamer
+        streamer.task = task
+        task.resume()
     }
 
     /// Demo only: video *downloads* made by the app's own downloader are served at ~20 KB/s,
@@ -320,5 +277,80 @@ struct HTTPResponse {
         case 500: return "Internal Server Error"
         default: return "Status"
         }
+    }
+}
+
+/// Forwards one site answer to the player's connection as the data arrives.
+private final class ProxyStreamer: NSObject, URLSessionDataDelegate {
+    let request: HTTPRequest
+    let conn: NWConnection
+    let url: URL
+    let fallback: () -> Void
+    weak var task: URLSessionTask?
+    private let started = Date()
+    private var streaming = false
+    private var sent = 0
+    /// Keeps itself alive until the site's answer is finished (the task holds its delegate weakly in some iOS versions).
+    private var keepAlive: ProxyStreamer?
+
+    init(request: HTTPRequest, conn: NWConnection, url: URL, fallback: @escaping () -> Void) {
+        self.request = request
+        self.conn = conn
+        self.url = url
+        self.fallback = fallback
+        super.init()
+        keepAlive = self
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                    completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        guard let http = response as? HTTPURLResponse, http.statusCode == 206, http.expectedContentLength > 0 else {
+            completionHandler(.cancel)
+            fallback()
+            keepAlive = nil
+            return
+        }
+        streaming = true
+        var headers: [String: String] = [
+            "Content-Type": request.query["type"] ?? http.value(forHTTPHeaderField: "Content-Type") ?? MockMedia.contentType(url.path),
+            "Content-Length": String(http.expectedContentLength),
+            "Accept-Ranges": "bytes",
+            "Connection": "close",
+            "Access-Control-Allow-Origin": "*",
+        ]
+        if let cr = http.value(forHTTPHeaderField: "Content-Range") { headers["Content-Range"] = cr }
+        var head = "HTTP/1.1 206 Partial Content\r\n"
+        for (k, v) in headers { head += "\(k): \(v)\r\n" }
+        head += "\r\n"
+        conn.send(content: Data(head.utf8), completion: .contentProcessed { _ in })
+        if request.method == "HEAD" {
+            completionHandler(.cancel)
+            finish()
+            return
+        }
+        DebugLog.log("Proxy", "206 headers after \(Int(Date().timeIntervalSince(started) * 1000)) ms · \(headers["Content-Range"] ?? "")")
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        sent += data.count
+        conn.send(content: data, completion: .contentProcessed { [weak dataTask] error in
+            // The player closed the connection (seek, next video): stop downloading.
+            if error != nil { dataTask?.cancel() }
+        })
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard streaming else { keepAlive = nil; return }
+        if error == nil {
+            DebugLog.log("Proxy", "\(sent / 1024) KB sent in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+        }
+        finish()
+    }
+
+    private func finish() {
+        // Close once everything queued so far has gone out.
+        conn.send(content: nil, isComplete: true, completion: .contentProcessed { [conn] _ in conn.cancel() })
+        keepAlive = nil
     }
 }
