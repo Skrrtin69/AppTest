@@ -416,11 +416,12 @@ struct AutoConfigView: View {
         proposal = nil
         notice = nil
         defer { running = false }
-        urlText = AutoConfigurator.normalizeAddress(urlText)
+        let normalized = AutoConfigurator.normalizeAddress(urlText)
+        urlText = normalized.address
         authStyle = nil
         let input = AutoConfigInput(urlTemplate: urlText, sampleTag: sampleTag,
                                     headers: AdapterEditorView.parsePairs(headersText))
-        let (result, resolved) = await AutoConfigurator(existingIDs: Set(registry.configs.map { $0.id })).resolveAndAnalyze(input)
+        let (result, resolved) = await AutoConfigurator(existingIDs: Set(registry.configs.map { $0.id })).resolveAndAnalyze(input, guessedScheme: normalized.guessed)
         // Only the site's address was pasted: show the API address that was found (or the usual one).
         if let resolved = resolved { urlText = resolved }
         if case .failure(.badAddress(let m)) = result, m == AutoConfigurator.unresolvedMessage {
@@ -459,7 +460,8 @@ struct AutoConfigView: View {
         proposal = nil
         notice = nil
         defer { running = false }
-        urlText = AutoConfigurator.normalizeAddress(urlText)
+        let normalized = AutoConfigurator.normalizeAddress(urlText)
+        urlText = normalized.address
         let keyParam = authParamName.nonEmpty ?? "api_key"
         let userParam = authUserParam.nonEmpty ?? "user_id"
         typealias Attempt = (label: String, style: AuthStyle, param: String?, userParam: String?)
@@ -484,7 +486,7 @@ struct AutoConfigView: View {
                                         headers: AdapterEditorView.parsePairs(headersText),
                                         authStyle: a.style, authParamName: a.param, authUserParamName: a.userParam,
                                         credentials: creds)
-            let (result, resolved) = await configurator.resolveAndAnalyze(input)
+            let (result, resolved) = await configurator.resolveAndAnalyze(input, guessedScheme: normalized.guessed)
             DebugLog.log("AuthTester", "\(a.label): \(Self.describe(result))")
             switch result {
             case .success(var p):

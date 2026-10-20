@@ -29,6 +29,8 @@ struct AutoConfigInput {
     /// Name of the user-ID address parameter, for sites that want it next to the key.
     var authUserParamName: String? = nil
     var credentials: Credentials? = nil
+    /// Probing several possible addresses: short timeout, no retries.
+    var quickProbe = false
 }
 
 struct AutoConfigProposal {
@@ -134,7 +136,13 @@ struct AutoConfigurator {
         if (input.authStyle == .apiKeyQuery || input.authStyle == .apiKeyHeader), probe.authParamName == nil {
             return .failure(.badAddress("This login style needs the key's name (for example api_key or X-Api-Key). Fill in the Key name field."))
         }
-        let adapter = GenericAdapter(config: probe)
+        let adapter: GenericAdapter
+        if input.quickProbe {
+            let quick = NetworkClient.Config(timeout: Self.probeTimeout, headers: probe.headers, ratePerSecond: 10, retries: 0)
+            adapter = GenericAdapter(config: probe, client: NetworkClient(config: quick))
+        } else {
+            adapter = GenericAdapter(config: probe)
+        }
         if let style = input.authStyle, style != .none, let creds = input.credentials {
             do { adapter.session = try await adapter.authenticate(credentials: creds) } catch {
                 return .failure(.loginRejected(error.localizedDescription))
@@ -405,15 +413,31 @@ extension AutoConfigurator {
     static let defaultTemplate = "/posts.json?tags={tags}&page={page}"
     static let unresolvedMessage = "Couldn't auto-resolve. Please check this default address."
 
-    /// "example.org" → "https://example.org" (web addresses typed without a scheme).
-    static func normalizeAddress(_ t: String) -> String {
+    /// Seconds each address gets while probing.
+    static let probeTimeout: Double = 5
+
+    /// "example.org" → "https://example.org"; local addresses ("127.0.0.1:8765",
+    /// "192.168.1.5", "localhost") → "http://…". `guessed` is true when https was only
+    /// assumed, so http can be tried if the secure connection fails.
+    static func normalizeAddress(_ t: String) -> (address: String, guessed: Bool) {
         var s = t.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !s.isEmpty else { return s }
+        guard !s.isEmpty else { return (s, false) }
         let lower = s.lowercased()
-        if lower.hasPrefix("http://") || lower.hasPrefix("https://") { return s }
-        if lower.contains("://") { return s }   // another scheme: reported as unusable later
+        if lower.contains("://") { return (s, false) }   // has a scheme (others are reported later)
         while s.hasPrefix("/") { s.removeFirst() }
-        return "https://" + s
+        let host = s.lowercased()
+        let local = ["127.", "192.168.", "10.", "localhost"].contains { host.hasPrefix($0) }
+        return local ? ("http://" + s, false) : ("https://" + s, true)
+    }
+
+    /// The same address over plain http.
+    static func httpVersion(_ t: String) -> String? {
+        t.lowercased().hasPrefix("https://") ? "http://" + t.dropFirst("https://".count) : nil
+    }
+
+    private static func isNetworkFailure(_ r: Result<AutoConfigProposal, AutoConfigFailure>) -> Bool {
+        if case .failure(.network) = r { return true }
+        return false
     }
 
     /// Just a site's address: no path, query or placeholders (e.g. https://example.org/).
@@ -425,14 +449,38 @@ extension AutoConfigurator {
 
     /// Analyzes the address; a bare site address is first completed with each common API
     /// shape until one answers with JSON. Returns the address actually used when it changed.
-    func resolveAndAnalyze(_ input: AutoConfigInput) async -> (result: Result<AutoConfigProposal, AutoConfigFailure>, resolved: String?) {
-        guard Self.isBareAddress(input.urlTemplate) else { return (await analyze(input), nil) }
+    func resolveAndAnalyze(_ input: AutoConfigInput, guessedScheme: Bool = false) async -> (result: Result<AutoConfigProposal, AutoConfigFailure>, resolved: String?) {
+        guard Self.isBareAddress(input.urlTemplate) else {
+            guard guessedScheme, let http = Self.httpVersion(input.urlTemplate) else { return (await analyze(input), nil) }
+            // https was only assumed: a quick try, then plain http if it can't connect.
+            var quick = input
+            quick.quickProbe = true
+            let r = await analyze(quick)
+            guard Self.isNetworkFailure(r) else { return (r, nil) }
+            var plain = input
+            plain.urlTemplate = http
+            let r2 = await analyze(plain)
+            return Self.isNetworkFailure(r2) ? (r, nil) : (r2, http)
+        }
         var origin = input.urlTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
         while origin.hasSuffix("/") { origin.removeLast() }
+        var httpsMayFail = guessedScheme
         for t in Self.apiTemplates {
             var attempt = input
+            attempt.quickProbe = true
             attempt.urlTemplate = origin + t
-            let r = await analyze(attempt)
+            var r = await analyze(attempt)
+            // https was only assumed and couldn't connect: same path over http.
+            if httpsMayFail, Self.isNetworkFailure(r), let httpOrigin = Self.httpVersion(origin) {
+                attempt.urlTemplate = httpOrigin + t
+                let r2 = await analyze(attempt)
+                if !Self.isNetworkFailure(r2) {
+                    // The site speaks plain http: use it for the remaining paths too.
+                    origin = httpOrigin
+                    httpsMayFail = false
+                    r = r2
+                }
+            }
             switch r {
             // A webpage, an error page (404…) or no answer: try the next shape.
             case .failure(.notJSON), .failure(.http), .failure(.network):

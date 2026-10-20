@@ -10,6 +10,8 @@ final class NetworkClient {
         var timeout: Double = 20
         var headers: [String: String] = [:]
         var ratePerSecond: Double = 2
+        /// Retries for 5xx answers and timeouts (0 for quick probes).
+        var retries: Int = NetworkClient.maxRetries
     }
 
     static let defaultUserAgent = "MediaDeck/\(AppInfo.version) (iOS)"
@@ -81,7 +83,7 @@ final class NetworkClient {
                     throw AppError.badResponse("Not an HTTP response")
                 }
                 DebugLog.log("HTTP", "\(http.statusCode) · \(Int(Date().timeIntervalSince(started) * 1000)) ms · \(data.count) B · \(DebugLog.redact(request.url))")
-                if (500...599).contains(http.statusCode), attempt < Self.maxRetries {
+                if (500...599).contains(http.statusCode), attempt < config.retries {
                     attempt += 1
                     try await backoff(attempt)
                     continue
@@ -92,7 +94,7 @@ final class NetworkClient {
                                                                       contentType: http.value(forHTTPHeaderField: "Content-Type")))
                 }
                 return (data, http)
-            } catch let e as URLError where Self.isRetryable(e) && attempt < Self.maxRetries {
+            } catch let e as URLError where Self.isRetryable(e) && attempt < config.retries {
                 DebugLog.log("HTTP", "retry \(attempt + 1): \(e.localizedDescription) · \(DebugLog.redact(request.url))")
                 attempt += 1
                 try await backoff(attempt)
