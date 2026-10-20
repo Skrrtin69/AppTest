@@ -26,3 +26,7 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 - iCloud sync: needs real Apple signing and an iCloud container, which a fakesigned TrollStore app doesn't have. Use Settings › Data backups instead.
 - Automatic API discovery, capability probing, automatic key-location testing, scraping keys or results from web pages, and CAPTCHA-backed web search engines.
 
+
+## 6. Not verifiable by automation (Phases 12–13)
+- **Wi-Fi-only media and "Data Saver: On mobile data":** the test phone is on Wi-Fi. "Data Saver: Always" was tested and uses the same code path.
+- **iPad Split View:** there's no iPad to test on. The settings and layout rules are in place.

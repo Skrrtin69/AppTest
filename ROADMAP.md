@@ -72,7 +72,7 @@ Status per item is tracked in commits and in BLOCKERS.md.
 - Reverse image search: configurable native and inline-web engines.
 - Dominant-color background; data saver (low-res first); swipe-to-blacklist; mute uploader.
 
-## Phase 13: Premium Privacy, Management, and Shortcuts
+## Phase 13: Premium Privacy, Management, and Shortcuts ✅
 - Decoy vault; storage breakdown chart; long-press tag actions; Wi-Fi-only media; database backup/restore; iPad split screen.
 
 ## Phase 14: iOS System Integration

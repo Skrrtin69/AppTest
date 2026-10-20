@@ -101,3 +101,11 @@ Choices made while building MediaDeck, and why.
 - **Viewer pages are transparent** now: each page used to paint black, which hid the white/checker/color backdrop in paged mode.
 - **Toasts:** tap-to-dismiss sits on the message text only. On the whole row it swallowed taps on Undo/Open, so Undo had silently stopped working.
 - **Deploy script** sends the app to the background before killing it, so iOS saves recent settings changes first.
+
+## Phase 13
+- **Decoy mode is a view filter, not a second database.** While it's on, the library store reports empty lists and ignores writes. Downloads and the adapters list are filtered to nothing and to the bundled demo IDs. "Delete all" style actions show their usual message but touch nothing, so they can't be used to wipe real data. The flag lives only in memory: every lock and unlock decides again, and Face ID always means the real owner.
+- **The decoy code is stored like the real one** (salted SHA-256 in the Keychain). It must differ from the real code, and turning the passcode off removes it.
+- **Backups are merge-only.** Restoring never deletes or overwrites library items, adapters, themes or engines whose ID already exists. Settings are the exception: they're replaced, because they're one set of values. Secrets stay in the Keychain and are never exported.
+- **Charts** is iOS 16-only, so it's weak-linked (`-weak_framework Charts`) and iOS 15 gets simple drawn bars.
+- **Tag actions use `Menu` with a primary action**, not `.contextMenu`. Inside a List row, SwiftUI gives the whole row the first context menu, so every tag showed the first tag's actions.
+- **iPad multitasking:** `UIRequiresFullScreen = false`, plus columns based on the horizontal size class, so a narrow Split View pane gets the phone layout.

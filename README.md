@@ -247,7 +247,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ---
 
-## What's new (Phases 1–12)
+## What's new (Phases 1–13)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -308,6 +308,14 @@ Failures are explained in plain English with one next step: bad address, unreach
 - **Data Saver** (Settings › Battery and data): pictures open in their smaller version first, with a **Load Full Resolution** button. Choose Off, On mobile data, or Always.
 - **Swipe up on a post** (or ⋯ › Hide Posts Like This) to hide every post with one of its tags, or mute its uploader. Each one can be undone from the message.
 - **Mute uploaders:** the Info panel shows the uploader with a Mute button when the adapter maps one. Add `"uploader": "<path>"` to `metadataPaths`; Auto-Configure does this when it sees a field like `uploader` or `author`. Muted uploaders appear in the Tag Blacklist as `uploader:name`.
+
+**Privacy and management (Phase 13)**
+- **Decoy passcode** (Settings › Security, once a passcode is on): entering it opens MediaDeck looking unused. There are no favorites, collections, history, saved searches or downloads, and only the built-in demo sites. Nothing is deleted, nothing new is saved, and Security shows only Lock Now. Your real passcode brings everything back.
+- **Storage** (Settings › Data › Storage): a chart of what takes space (cache per site, downloads per site, the library database, web pages).
+- **Hold a tag** in the Info panel for Search, Add to Current Search, Exclude from Search, Copy Tag, About This Tag, and Blacklist / Remove from Blacklist. A plain tap still searches.
+- **Full-size media only on Wi-Fi** (Settings › Battery and data): on mobile data, only thumbnails load until you tap **Load on Mobile Data** or **Play on Mobile Data**.
+- **Back Up Everything / Restore from Backup** (Settings › Data): one JSON file with settings, adapters, favorites, collections, history, saved searches, themes and reverse search engines. Passwords, API keys and the passcode are never included. Restoring only adds what's missing.
+- **iPad:** works in Split View and Slide Over; the grid adds columns only when the window is wide.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 
