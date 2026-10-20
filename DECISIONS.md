@@ -164,3 +164,9 @@ Choices made while building MediaDeck, and why.
 - **Engine errors:** a negative `header.status` (even with HTTP 200), or an HTTP error, shows the engine's `header.message` with HTML tags, entities and literal `\uXXXX` escapes removed.
 - The demo engine now rejects uploads that aren't a multipart `file` picture, or that also send `url=`, so this is covered by tests on the demo server.
 - **Empty match paths are guessed:** if an engine leaves Similarity, Thumbnail, Source link or Title empty, each match is searched for keys named like `similarity`/`score`, `thumb`/`preview`, `url`/`source`/`link` (the first web link that isn't the thumbnail) and `title`/`material`/`source`/`creator`/`author`/`*_name`. Filled-in paths always win.
+
+## Log in to find my key
+- **Finding the key by context, not by length:** the key is found by what it's labeled with (label text, `name=` in example addresses, labeled text boxes), not by picking the longest string. Pages also show session codes, hashes and IDs, and the demo account page has one (`Session: …`) that is correctly ignored.
+- **Values the reader skips:** hidden inputs are skipped (they're usually form tokens), and so are password boxes (the user's own password must never be read). A value counts as a key only if it has 8+ characters with a digit, or 20+ characters.
+- **No automatic login:** the user logs in on the site themselves; the app never fills in or reads their password.
+- **Re-analyze:** after a key is picked, Analyze runs again on its own so the adapter is ready to save. Nothing is saved without tapping Save.
