@@ -79,7 +79,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        SWIFT_OPTIMIZATION_LEVEL: "-O"
         DEBUG_INFORMATION_FORMAT: dwarf
         # Charts exists only on iOS 16+; weak-link it so iOS 15 can still launch.
         OTHER_LDFLAGS: ["$(inherited)", "-weak_framework", "Charts"]
@@ -111,7 +111,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.skrrtin69.mediadeck.widget
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: NO
-        SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        SWIFT_OPTIMIZATION_LEVEL: "-O"
         DEBUG_INFORMATION_FORMAT: dwarf
     dependencies:
       - sdk: WidgetKit.framework
@@ -143,5 +143,5 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.skrrtin69.mediadeck.share
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: NO
-        SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        SWIFT_OPTIMIZATION_LEVEL: "-O"
         DEBUG_INFORMATION_FORMAT: dwarf

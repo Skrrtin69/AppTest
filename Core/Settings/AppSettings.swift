@@ -102,7 +102,7 @@ final class AppSettings: ObservableObject {
     /// Viewer edge swipes: left edge = brightness, right edge = volume.
     @Published var edgeSwipes: Bool = true { didSet { d.set(edgeSwipes, forKey: K.edgeSwipes) } }
     /// WebM/Matroska play in VLCKit (native decoding) instead of the web player.
-    @Published var useVLC: Bool = false { didSet { d.set(useVLC, forKey: K.useVLC) } }
+    @Published var useVLC: Bool = true { didSet { d.set(useVLC, forKey: K.useVLC) } }
     /// Thumbnails stay blurred until tapped once.
     @Published var blurThumbnails: Bool = false { didSet { d.set(blurThumbnails, forKey: K.blurThumbnails) } }
     /// Thumbnails of posts already opened are dimmed.
@@ -234,7 +234,7 @@ final class AppSettings: ObservableObject {
         autoplayVideos = d.object(forKey: K.autoplayVideos) as? Bool ?? true
         startMuted = d.object(forKey: K.startMuted) as? Bool ?? false
         edgeSwipes = d.object(forKey: K.edgeSwipes) as? Bool ?? true
-        useVLC = d.object(forKey: K.useVLC) as? Bool ?? false
+        useVLC = d.object(forKey: K.useVLC) as? Bool ?? true
         blurThumbnails = d.object(forKey: K.blurThumbnails) as? Bool ?? false
         dimViewed = d.object(forKey: K.dimViewed) as? Bool ?? true
         viewerAspect = ViewerAspect(rawValue: d.string(forKey: K.viewerAspect) ?? "") ?? .fit

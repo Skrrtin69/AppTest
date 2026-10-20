@@ -304,7 +304,7 @@ Failures are explained in plain English with one next step: bad address, unreach
   - **Proxy:** range requests (206) are passed on as the data arrives. An open-ended range is cut into pieces (512 KB first, then 2 MB). If a site ignores ranges, the file is fetched once, kept in memory, and the pieces are cut from it.
   - **Decoder speed:** the player page is cross-origin isolated, so ogv.js decodes with one thread per CPU core. WebAssembly SIMD is used on iOS 16.4 and later; iOS 16.2 doesn't have it.
 - **What's inside a .webm:** the first 64 KB are read before choosing a player. An MP4 that is only *named* .webm plays in AVPlayer (through the local server under a .mp4 name). H.264/HEVC inside Matroska can't be decoded by ogv.js; that needs VLCKit.
-- **Use VLCKit for Video (Faster, Larger App):** Settings › Reading & Viewer, off by default. WebM and MKV then play in VLCKit (native ARM code, several threads) instead of the web player. VLCKit is in every copy of the app (about 39 MB), so the switch only picks the player. VLC decodes in software: iOS doesn't let apps use a hardware VP9 decoder.
+- **Use VLCKit for Video (Faster, Larger App):** Settings › Reading & Viewer, on by default (turn it off to use the web player). WebM and MKV then play in VLCKit (native ARM code, several threads) instead of the web player. VLCKit is in every copy of the app (about 39 MB), so the switch only picks the player. VLC decodes in software: iOS doesn't let apps use a hardware VP9 decoder.
 
 ## Cloudflare and other ways sites ask for keys
 
