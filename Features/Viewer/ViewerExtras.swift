@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreImage
 import UIKit
 import MediaPlayer
 import AVFoundation
@@ -118,7 +119,12 @@ struct RowTops: PreferenceKey {
 
 struct VerticalItem: View {
     let post: Post
+    /// Show only the left (0) or right (1) half of the picture (split double pages).
+    var half: Int? = nil
+    /// Reports the picture's width ÷ height once it's loaded.
+    var onRatio: ((CGFloat) -> Void)? = nil
     @StateObject private var model = ImageLoadModel()
+    @State private var halfImage: UIImage?
 
     var body: some View {
         Group {
@@ -128,7 +134,7 @@ struct VerticalItem: View {
                         .aspectRatio(post.pixelSize.map { $0.width / $0.height } ?? 4 / 3, contentMode: .fit)
                     Image(systemName: "play.circle.fill").font(.system(size: 54)).foregroundColor(.white.opacity(0.85))
                 }
-            } else if let img = model.image {
+            } else if let img = half == nil ? model.image : halfImage {
                 AnimatedImageView(image: img, contentMode: .scaleAspectFit)
                     .aspectRatio(img.size.width / max(img.size.height, 1), contentMode: .fit)
             } else {
@@ -139,44 +145,104 @@ struct VerticalItem: View {
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(post.mediaType.label) \(post.id)")
-        .task(id: post.mediaURL) {
+        .accessibilityLabel("\(post.mediaType.label) \(post.id)\(half.map { $0 == 0 ? ", left half" : ", right half" } ?? "")")
+        .task(id: "\(post.mediaURL.absoluteString)|\(half.map(String.init) ?? "-")") {
             guard post.mediaType != .video else { return }
             // Downsampled to screen width: a full-resolution long strip could exhaust memory.
-            await model.load(post.mediaURL, maxPixel: 1600, animate: true,
+            // A split page is loaded at double width so each half stays sharp.
+            await model.load(post.mediaURL, maxPixel: half == nil ? 1600 : 3200, animate: half == nil,
                              client: AdapterRegistry.shared.adapter(for: post.siteID)?.client, onLoad: nil)
+            if let img = model.image {
+                onRatio?(img.size.width / max(img.size.height, 1))
+                if let h = half { halfImage = Self.half(img, h) }
+            }
         }
-        .onDisappear { model.release() }
+        .onDisappear { model.release(); halfImage = nil }
+    }
+
+    /// One vertical half of a picture, cut with Core Image.
+    static func half(_ img: UIImage, _ side: Int) -> UIImage? {
+        guard let cg = img.cgImage else { return nil }
+        let ci = CIImage(cgImage: cg)
+        let w = ci.extent.width / 2
+        let rect = CGRect(x: ci.extent.minX + (side == 0 ? 0 : w), y: ci.extent.minY, width: w, height: ci.extent.height)
+        guard let out = CIContext().createCGImage(ci.cropped(to: rect), from: rect) else { return nil }
+        return UIImage(cgImage: out)
     }
 }
 
 /// A multi-page post in the paged viewer: its pages stacked top to bottom, with a
-/// "3 / 24" counter. Tall strips are decoded at screen width (see ImagePipeline).
+/// "3 / 24" counter. Tall strips are decoded at screen width (see ImagePipeline). Wide
+/// pages (double-page scans) can be split into two halves, and the place you stopped is
+/// remembered.
 struct GalleryPage: View {
     let post: Post
     let isActive: Bool
     var onTap: () -> Void
     var onFinished: () -> Void = {}
     @State private var current = 0
-    @State private var showCounter = true
+    @State private var ratios: [Int: CGFloat] = [:]
+    @State private var offerResume: Int?
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var splits = SplitPages.shared
+
+    struct Row: Hashable {
+        let page: Int
+        let half: Int?
+        var id: String { "p\(page)-\(half.map(String.init) ?? "x")" }
+    }
+
+    var rows: [Row] {
+        let pages = post.pages ?? []
+        return pages.indices.flatMap { i -> [Row] in
+            guard splits.isSplit(pages[i]) else { return [Row(page: i, half: nil)] }
+            // Right-to-left books read the right half first.
+            return settings.readingRTL ? [Row(page: i, half: 1), Row(page: i, half: 0)] : [Row(page: i, half: 0), Row(page: i, half: 1)]
+        }
+    }
+
+    /// The split/join button sits on whole wide pages, and on the first half of a split one.
+    func showsSplitButton(_ row: Row, firstRowOfPage: Bool) -> Bool {
+        guard isActive, firstRowOfPage else { return false }
+        return row.half != nil || (ratios[row.page] ?? 0) > 1.2
+    }
 
     var body: some View {
         let pages = post.pages ?? []
+        let rows = self.rows
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 2) {
-                    ForEach(pages.indices, id: \.self) { i in
-                        VerticalItem(post: post.page(i))
-                            .id(i)
-                            .background(GeometryReader { g in
-                                Color.clear.preference(key: RowTops.self, value: [i: g.frame(in: .named("gallery")).minY])
-                            })
+                    ForEach(Array(rows.enumerated()), id: \.element) { n, row in
+                        VerticalItem(post: post.page(row.page), half: row.half, onRatio: { r in
+                            if row.half == nil { ratios[row.page] = r }
+                        })
+                        .id(row.id)
+                        .overlay(alignment: .topTrailing) {
+                            if showsSplitButton(row, firstRowOfPage: n == 0 || rows[n - 1].page != row.page) {
+                                Button { splits.toggle(pages[row.page]); Haptics.tap() } label: {
+                                    Label(row.half == nil ? "Split Spread" : "Join Pages",
+                                          systemImage: row.half == nil ? "rectangle.split.2x1" : "rectangle")
+                                        .font(.caption.weight(.semibold))
+                                        .padding(.horizontal, 8).padding(.vertical, 5)
+                                        .background(Capsule().fill(Color.black.opacity(0.6)))
+                                        .foregroundColor(.white)
+                                }
+                                .padding(8)
+                                .accessibilityIdentifier("splitSpread-\(row.page)")
+                            }
+                        }
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: RowTops.self, value: [row.page: g.frame(in: .named("gallery")).minY])
+                        })
                     }
                     Text("End of gallery · \(pages.count) pages")
                         .font(.footnote).foregroundColor(.white.opacity(0.7))
                         .padding(.vertical, 40)
-                        .onAppear { if isActive && settings.autoAdvance { onFinished() } }
+                        .onAppear {
+                            ReadingProgress.shared.save(post.key, page: 0, total: pages.count)   // finished
+                            if isActive && settings.autoAdvance { onFinished() }
+                        }
                 }
             }
             .coordinateSpace(name: "gallery")
@@ -184,20 +250,37 @@ struct GalleryPage: View {
                 let line = UIScreen.main.bounds.height / 3
                 if let c = tops.filter({ $0.value <= line }).max(by: { $0.value < $1.value })?.key, c != current {
                     current = c
+                    if c > 0 { offerResume = nil }
                 }
             }
             .contentShape(Rectangle())
             .onTapGesture { onTap() }
+            .overlay(alignment: .top) {
+                if isActive, let page = offerResume {
+                    Button {
+                        withAnimation { proxy.scrollTo(rows.first { $0.page == page }?.id, anchor: .top) }
+                        offerResume = nil
+                    } label: {
+                        Label("Continue Reading · page \(page + 1) of \(pages.count)", systemImage: "book")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .background(Capsule().fill(Color.accentColor))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.top, 110)
+                    .accessibilityIdentifier("continueReading")
+                }
+            }
             .overlay(alignment: .bottom) {
                 if isActive {
                     HStack(spacing: 14) {
-                        Button { withAnimation { proxy.scrollTo(0, anchor: .top) } } label: { Image(systemName: "arrow.up.to.line") }
+                        Button { withAnimation { proxy.scrollTo(rows.first?.id, anchor: .top) } } label: { Image(systemName: "arrow.up.to.line") }
                             .accessibilityLabel("First page")
                         Text("\(current + 1) / \(pages.count)")
                             .font(.subheadline.monospacedDigit().weight(.semibold))
                             .accessibilityIdentifier("galleryCounter")
                             .accessibilityLabel("Page \(current + 1) of \(pages.count)")
-                        Button { withAnimation { proxy.scrollTo(pages.count - 1, anchor: .top) } } label: { Image(systemName: "arrow.down.to.line") }
+                        Button { withAnimation { proxy.scrollTo(rows.last?.id, anchor: .top) } } label: { Image(systemName: "arrow.down.to.line") }
                             .accessibilityLabel("Last page")
                         Button { Task { await CBZExporter.export(post) } } label: { Image(systemName: "archivebox") }
                             .accessibilityLabel("Save as CBZ")
@@ -207,6 +290,13 @@ struct GalleryPage: View {
                     .background(Capsule().fill(Color.black.opacity(0.6)))
                     .padding(.bottom, 90)
                 }
+            }
+            .onAppear {
+                if let m = ReadingProgress.shared.mark(post.key), m.page > 0, m.page < pages.count { offerResume = m.page }
+            }
+            .onDisappear {
+                // Remember where reading stopped (cleared again at the end of the gallery).
+                if current > 0 { ReadingProgress.shared.save(post.key, page: current, total: pages.count) }
             }
         }
         .accessibilityIdentifier("galleryReader")

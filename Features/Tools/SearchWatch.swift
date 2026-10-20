@@ -113,6 +113,8 @@ final class SearchWatch: ObservableObject {
             schedule()
             let work = Task { @MainActor in
                 let n = await SearchWatch.shared.check()
+                // Followed artists are checked in the same background slot (about daily).
+                await FollowStore.shared.checkIfDue()
                 DebugLog.log("Watch", "Background refresh done, \(n) new")
                 refresh.setTaskCompleted(success: true)
             }

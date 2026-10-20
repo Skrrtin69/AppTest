@@ -58,6 +58,7 @@ final class AppSettings: ObservableObject {
         static let swipeSites = "swipeSites", detectClipboardLinks = "detectClipboardLinks", dataSaver = "dataSaver",
                          wifiOnlyMedia = "wifiOnlyMedia", mixWithOthers = "mixWithOthers",
                          smartThumbnails = "smartThumbnails", twoPageLandscape = "twoPageLandscape", fallbackSite = "fallbackSite",
+                         stripEXIF = "stripEXIF", autoTagDownloads = "autoTagDownloads", panicGesture = "panicGesture", panicAction = "panicAction",
                          doubleTapAction = "doubleTapAction", swipeUpAction = "swipeUpAction", swipeDownAction = "swipeDownAction"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
@@ -66,7 +67,7 @@ final class AppSettings: ObservableObject {
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
                           readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
                           detectClipboardLinks, dataSaver, wifiOnlyMedia, mixWithOthers,
-                          smartThumbnails, twoPageLandscape, fallbackSite, doubleTapAction, swipeUpAction, swipeDownAction]
+                          smartThumbnails, twoPageLandscape, fallbackSite, stripEXIF, autoTagDownloads, panicGesture, panicAction, doubleTapAction, swipeUpAction, swipeDownAction]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -146,6 +147,13 @@ final class AppSettings: ObservableObject {
 
     /// Square thumbnails are cropped around the interesting part of the picture.
     @Published var smartThumbnails: Bool = true { didSet { d.set(smartThumbnails, forKey: K.smartThumbnails) } }
+    /// Remove camera data (EXIF, GPS, XMP) from downloaded pictures.
+    @Published var stripEXIF: Bool = false { didSet { d.set(stripEXIF, forKey: K.stripEXIF) } }
+    /// Add hidden visual tags (on-device recognition) to downloaded pictures, for Library search.
+    @Published var autoTagDownloads: Bool = false { didSet { d.set(autoTagDownloads, forKey: K.autoTagDownloads) } }
+    /// Panic gesture: "off", "shake" or "twoFingerSwipe"; what it shows: "blur" or "calculator".
+    @Published var panicGesture: String = "off" { didSet { d.set(panicGesture, forKey: K.panicGesture) } }
+    @Published var panicAction: String = "blur" { didSet { d.set(panicAction, forKey: K.panicAction) } }
     /// Site offered when a search fails because the site is down or busy ("" = none).
     @Published var fallbackSite: String = "" { didSet { d.set(fallbackSite, forKey: K.fallbackSite) } }
     /// Two posts side by side when the phone is sideways (like an open book).
@@ -245,6 +253,10 @@ final class AppSettings: ObservableObject {
         smartThumbnails = d.object(forKey: K.smartThumbnails) as? Bool ?? true
         twoPageLandscape = d.object(forKey: K.twoPageLandscape) as? Bool ?? true
         fallbackSite = d.string(forKey: K.fallbackSite) ?? ""
+        stripEXIF = d.object(forKey: K.stripEXIF) as? Bool ?? false
+        autoTagDownloads = d.object(forKey: K.autoTagDownloads) as? Bool ?? false
+        panicGesture = d.string(forKey: K.panicGesture) ?? "off"
+        panicAction = d.string(forKey: K.panicAction) ?? "blur"
         doubleTapAction = d.string(forKey: K.doubleTapAction) ?? "zoom"
         swipeUpAction = d.string(forKey: K.swipeUpAction) ?? "hide"
         swipeDownAction = d.string(forKey: K.swipeDownAction) ?? "close"

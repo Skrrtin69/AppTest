@@ -21,10 +21,11 @@ enum OverlayWindow {
         window = w
         // Only intercept touches while locked or covered.
         cancellable = LockManager.shared.$isLocked
-            .combineLatest(LockManager.shared.$obscured)
+            .combineLatest(LockManager.shared.$obscured, PanicManager.shared.$active)
             .receive(on: DispatchQueue.main)
-            .sink { locked, obscured in
-                w.passthrough = !(locked || obscured)
+            .sink { locked, obscured, panic in
+                // The panic cover must catch every touch too.
+                w.passthrough = !(locked || obscured || panic)
                 if locked { w.makeKey() }
             }
     }
@@ -44,12 +45,16 @@ final class PassthroughWindow: UIWindow {
 private struct OverlayRoot: View {
     @ObservedObject private var lock = LockManager.shared
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var panic = PanicManager.shared
 
     var body: some View {
         ZStack {
             if lock.obscured && !lock.isLocked {
                 Color(UIColor.systemBackground).ignoresSafeArea()
                     .overlay(Image(systemName: "lock.fill").font(.largeTitle).foregroundColor(.secondary))
+            }
+            if panic.active && !lock.isLocked {
+                PanicCover().transition(.opacity)
             }
             if lock.isLocked {
                 LockScreenView().transition(.opacity)

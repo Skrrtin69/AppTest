@@ -126,6 +126,12 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("reverseSearchSettings")
                     Toggle("Offer to open copied links", isOn: $settings.detectClipboardLinks)
+                    NavigationLink(destination: FollowedView()) { Label("Followed Artists", systemImage: "person.badge.plus") }
+                        .accessibilityIdentifier("followedArtists")
+                    NavigationLink(destination: WiFiTransferView()) { Label("Wi-Fi Transfer", systemImage: "wifi") }
+                        .accessibilityIdentifier("wifiTransfer")
+                    NavigationLink(destination: LocalDuplicatesView()) { Label("Find Duplicates", systemImage: "square.on.square") }
+                        .accessibilityIdentifier("findDuplicates")
                 } header: { Text("Tools") } footer: {
                     Text("When you copy a link to a post or search on one of your sites and come back to MediaDeck, it offers to open it here. iOS asks for permission when you tap Open.")
                 }
@@ -173,6 +179,10 @@ struct SettingsView: View {
                             .accessibilityLabel("Simultaneous downloads")
                     }
                     Toggle("Background downloads", isOn: $settings.backgroundDownloads)
+                    Toggle("Strip EXIF data (camera, GPS)", isOn: $settings.stripEXIF)
+                        .accessibilityIdentifier("stripEXIF")
+                    Toggle("Auto-tag downloads (on this phone)", isOn: $settings.autoTagDownloads)
+                        .accessibilityIdentifier("autoTag")
                     Toggle("Ask before big downloads on cellular", isOn: $settings.warnOnCellular)
                     Picker("Skip files larger than", selection: $settings.maxDownloadMB) {
                         Text("No limit").tag(0.0)
@@ -289,9 +299,19 @@ struct SettingsView: View {
                         Text("Locks the app with a 4-digit code (and optionally \(lock.biometryName)) whenever you leave it.")
                             .font(.footnote).foregroundColor(.secondary)
                     }
+                    Picker("Panic gesture", selection: $settings.panicGesture) {
+                        Text("Off").tag("off"); Text("Shake the phone").tag("shake"); Text("Two-finger swipe down").tag("twoFingerSwipe")
+                    }
+                    .accessibilityIdentifier("panicGesture")
+                    if settings.panicGesture != "off" {
+                        Picker("Panic shows", selection: $settings.panicAction) {
+                            Text("Blur").tag("blur"); Text("Calculator").tag("calculator")
+                        }
+                        .accessibilityIdentifier("panicAction")
+                    }
                 } header: { Text("Security") } footer: {
                     if lock.hasPasscode && !lock.decoyActive {
-                        Text("A decoy passcode opens MediaDeck looking unused: no favorites, collections, history or downloads, and only the demo sites. Nothing is deleted, and nothing new is saved. Your real passcode brings everything back.")
+                        Text("Panic: the gesture covers the app at once. Blur: tap three times to uncover. Calculator: type your passcode and press =, or without a passcode hold AC for two seconds. A decoy passcode opens MediaDeck looking unused: no favorites, collections, history or downloads, and only the demo sites. Nothing is deleted, and nothing new is saved. Your real passcode brings everything back.")
                     }
                 }
 

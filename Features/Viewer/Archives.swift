@@ -42,6 +42,11 @@ enum CBZExporter {
             try? FileManager.default.removeItem(at: out)
             try ZipWriter.write(entries, to: out)
             try? FileManager.default.removeItem(at: dir)
+            // A copy stays in the app (Downloads/Archives), available over Wi-Fi Transfer.
+            let keep = DownloadManager.root.appendingPathComponent("Archives", isDirectory: true)
+            try? FileManager.default.createDirectory(at: keep, withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: keep.appendingPathComponent(out.lastPathComponent))
+            try? FileManager.default.copyItem(at: out, to: keep.appendingPathComponent(out.lastPathComponent))
             ToastCenter.shared.show(failed == 0 ? "\(entries.count) pages packed. Choose where to save it."
                                     : "\(entries.count) pages packed, \(failed) couldn't be downloaded.",
                                     style: failed == 0 ? .success : .error)

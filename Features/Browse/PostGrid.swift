@@ -103,6 +103,7 @@ struct GridCell: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var store = LibraryStore.shared
     @ObservedObject private var viewed = ViewedStore.shared
+    @ObservedObject private var progress = ReadingProgress.shared
     @State private var loadedRatio: CGFloat?
 
     var blurred: Bool { settings.blurThumbnails && !viewed.isRevealed(post.key) }
@@ -165,6 +166,20 @@ struct GridCell: View {
                         .font(.caption2.weight(.bold)).foregroundColor(.white)
                         .padding(4).background(Circle().fill(Color.black.opacity(0.55))).padding(3)
                         .accessibilityLabel(favoriteSync.isSynced(post) ? "Saved to account" : "Saved on this phone")
+                }
+            }
+            .overlay(alignment: .bottom) {
+                // Gallery reading progress.
+                if post.isGallery, let m = progress.mark(post.key) {
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            Rectangle().fill(Color.black.opacity(0.5))
+                            Rectangle().fill(Color.accentColor).frame(width: g.size.width * CGFloat(m.page + 1) / CGFloat(max(m.total, 1)))
+                        }
+                    }
+                    .frame(height: 4)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .accessibilityLabel("Read to page \(m.page + 1) of \(m.total)")
                 }
             }
             .overlay(alignment: .bottomLeading) {

@@ -12,6 +12,12 @@ struct InfoPanel: View {
     @State private var translating: String?
     @State private var translation = ""
     @ObservedObject private var translations = TagTranslations.shared
+    @ObservedObject private var follows = FollowStore.shared
+
+    /// Tags the site marks as artist / creator.
+    var artistTags: [String] {
+        post.tags.filter { ["artist", "creator"].contains(post.tagCategories?[$0]?.lowercased() ?? "") }
+    }
     struct InfoTag: Identifiable { let id = UUID(); let tag: String }
     var adapter: GenericAdapter? { AdapterRegistry.shared.adapter(for: post.siteID) }
 
@@ -29,6 +35,9 @@ struct InfoPanel: View {
     @ViewBuilder
     func tagMenu(_ tag: String, hidden: Bool) -> some View {
         Button { onTag(tag) } label: { Label("Search \(tag)", systemImage: "magnifyingglass") }
+        Button { FollowStore.shared.toggle(tag) } label: {
+            FollowStore.shared.isFollowing(tag) ? Label("Unfollow", systemImage: "person.badge.minus") : Label("Follow (download new posts)", systemImage: "person.badge.plus")
+        }
         Button { translating = tag; translation = TagTranslations.shared.map[tag.lowercased()] ?? "" } label: {
             Label(TagTranslations.shared.map[tag.lowercased()] == nil ? "Translate Tag…" : "Edit Translation…", systemImage: "character.bubble")
         }
@@ -79,6 +88,19 @@ struct InfoPanel: View {
                                 ToastCenter.shared.show("Muted \(u). Unmute in Settings › Tag Blacklist.", style: .success)
                             }
                             .buttonStyle(.bordered).disabled(muted)
+                        }
+                    }
+                }
+                if !artistTags.isEmpty {
+                    Section("Artist") {
+                        ForEach(artistTags, id: \.self) { a in
+                            HStack {
+                                Text(TagTranslations.shared.display(a))
+                                Spacer()
+                                Button(follows.isFollowing(a) ? "Following" : "Follow Artist") { follows.toggle(a) }
+                                    .buttonStyle(.bordered)
+                                    .accessibilityIdentifier("followArtist")
+                            }
                         }
                     }
                 }

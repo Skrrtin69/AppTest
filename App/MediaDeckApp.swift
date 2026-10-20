@@ -24,6 +24,7 @@ struct MediaDeckApp: App {
                     ClipboardWatcher.shared.check()
                     ShareInbox.process()
                     SearchWatch.shared.checkIfDue()
+                    Task { await FollowStore.shared.checkIfDue() }
                 }
             case .inactive:
                 break
@@ -80,6 +81,8 @@ final class BootModel: ObservableObject {
         ClipboardWatcher.shared.check()
         ShareInbox.process()
         WidgetFeedWriter.scheduleUpdate()
+        PanicManager.shared.installSwipe()
+        Task { await FollowStore.shared.checkIfDue() }
         // Cached files not opened within the chosen number of days.
         Task.detached(priority: .background) { await ImageCache.shared.expire() }
         if let e = CoreDataStack.shared.loadError {

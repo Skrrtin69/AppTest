@@ -439,6 +439,8 @@ extension DownloadManager: URLSessionDownloadDelegate {
             } catch {
                 try FileManager.default.copyItem(at: location, to: dest)
             }
+            // Optional clean-up and tagging (Settings › Downloads).
+            DownloadPostProcess.run(dest, itemID: id)
             update(id) { $0.state = .completed; $0.progress = 1; $0.error = nil }
             if let m = mo(id) { m.resumeData = nil; CoreDataStack.shared.save() }
         } catch {
@@ -494,5 +496,76 @@ extension DownloadManager: URLSessionDownloadDelegate {
             self.backgroundCompletionHandler?()
             self.backgroundCompletionHandler = nil
         }
+    }
+}
+
+// MARK: - Local files: import and rename
+
+extension DownloadManager {
+    /// Adds a file that came from elsewhere (Wi-Fi transfer) to the Library as a finished item.
+    @discardableResult
+    func importLocalFile(_ source: URL, name: String) throws -> DownloadItem {
+        let safe = name.components(separatedBy: CharacterSet(charactersIn: "/\:*?\"<>|")).joined(separator: "_").nonEmpty ?? "file"
+        var rel = "Imported/\(safe)"
+        var n = 2
+        while FileManager.default.fileExists(atPath: Self.root.appendingPathComponent(rel).path) {
+            rel = "Imported/\((safe as NSString).deletingPathExtension)-\(n).\((safe as NSString).pathExtension)"; n += 1
+        }
+        let dest = Self.root.appendingPathComponent(rel)
+        try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: source, to: dest)
+        let ext = dest.pathExtension.lowercased()
+        let type: MediaType = ["mp4", "mov", "m4v", "webm"].contains(ext) ? .video : (ext == "gif" ? .gif : .image)
+        let id = UUID().uuidString
+        let post = Post(id: (safe as NSString).deletingPathExtension, siteID: "imported", thumbnailURL: dest, mediaURL: dest,
+                        mediaType: type, tags: ["imported"], sourceURL: nil, metadata: [:])
+        let item = DownloadItem(id: id, post: post, state: .completed, progress: 1,
+                                bytesTotal: Int64((try? dest.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0),
+                                relativePath: rel, error: nil, createdAt: Date(), remoteURL: dest)
+        items.append(item)
+        persist(item)
+        DownloadPostProcess.run(dest, itemID: id)
+        return item
+    }
+
+    /// Renames finished downloads from a template: {id} {site} {index} {type} {date} {ext}
+    /// {name} (the current name). Files stay in their folder. Returns how many were renamed.
+    @discardableResult
+    func rename(_ ids: [String], template: String) -> Int {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        let date = f.string(from: Date())
+        var done = 0
+        for (i, id) in ids.enumerated() {
+            guard let item = items.first(where: { $0.id == id }), let old = item.fileURL, let rel = item.relativePath else { continue }
+            let ext = old.pathExtension
+            var name = template
+                .replacingOccurrences(of: "{id}", with: item.post.id)
+                .replacingOccurrences(of: "{site}", with: item.post.siteID)
+                .replacingOccurrences(of: "{index}", with: String(format: "%03d", i + 1))
+                .replacingOccurrences(of: "{type}", with: item.post.mediaType.rawValue)
+                .replacingOccurrences(of: "{date}", with: date)
+                .replacingOccurrences(of: "{name}", with: old.deletingPathExtension().lastPathComponent)
+                .replacingOccurrences(of: "{ext}", with: ext)
+            name = name.components(separatedBy: CharacterSet(charactersIn: "/\:*?\"<>|
+")).joined(separator: "_")
+                .trimmingCharacters(in: .whitespaces)
+            if (name as NSString).pathExtension.isEmpty, !ext.isEmpty { name += ".\(ext)" }
+            guard !name.isEmpty, name != old.lastPathComponent else { continue }
+            let folder = (rel as NSString).deletingLastPathComponent
+            var newRel = folder.isEmpty ? name : "\(folder)/\(name)"
+            var n = 2
+            while FileManager.default.fileExists(atPath: Self.root.appendingPathComponent(newRel).path) {
+                let base = (name as NSString).deletingPathExtension, e = (name as NSString).pathExtension
+                newRel = (folder.isEmpty ? "" : "\(folder)/") + "\(base)-\(n)" + (e.isEmpty ? "" : ".\(e)"); n += 1
+            }
+            do {
+                try FileManager.default.moveItem(at: old, to: Self.root.appendingPathComponent(newRel))
+                update(id) { $0.relativePath = newRel }
+                done += 1
+            } catch {
+                DebugLog.log("Rename", "\(old.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+        return done
     }
 }

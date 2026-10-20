@@ -12,14 +12,23 @@ struct LibraryView: View {
     @State private var viewer: ViewerRequest?
     @State private var confirmDelete = false
     @State private var showQueue = false
+    @State private var advanced = false
+    @State private var renaming: [String]?
+    @State private var reversing: PostBatch?
+    @ObservedObject private var autoTags = AutoTags.shared
 
     var items: [DownloadItem] {
         let q = search.lowercased().trimmingCharacters(in: .whitespaces)
+        if advanced {
+            // Filters like size:>5MB ratio:>2:1 source:demo-a type:video, plus words.
+            return LibraryQuery.filter(downloads.completed.reversed().filter { siteFilter == nil || $0.post.siteID == siteFilter }, q)
+        }
         return downloads.completed.reversed().filter { item in
             (siteFilter == nil || item.post.siteID == siteFilter) &&
             (q.isEmpty || item.filename.lowercased().contains(q) || item.post.siteID.lowercased().contains(q) ||
              registry.displayName(for: item.post.siteID).lowercased().contains(q) ||
-             item.post.tags.contains { $0.lowercased().contains(q) })
+             item.post.tags.contains { $0.lowercased().contains(q) } ||
+             autoTags.labels(item.id).contains { $0.lowercased().contains(q) })
         }
     }
 
@@ -65,7 +74,7 @@ struct LibraryView: View {
                 if selecting { selectionBar }
             }
             .themedBackground()
-            .searchable(text: $search, prompt: "Search filename, tags, site")
+            .searchable(text: $search, prompt: advanced ? "size:>5MB ratio:>2:1 source:site type:video" : "Search filename, tags, site")
             .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -82,6 +91,11 @@ struct LibraryView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack {
+                        Button { advanced.toggle(); Haptics.tap()
+                            ToastCenter.shared.show(advanced ? "Advanced search: size:>5MB ratio:>2:1 source:site type:video" : "Simple search")
+                        } label: { Image(systemName: advanced ? "line.3.horizontal.decrease.circle.fill" : "text.magnifyingglass") }
+                        .accessibilityLabel(advanced ? "Advanced search on" : "Advanced search off")
+                        .accessibilityIdentifier("advancedSearch")
                         Button { showQueue = true } label: {
                             Image(systemName: downloads.queue.isEmpty ? "arrow.down.circle" : "arrow.down.circle.fill")
                                 .overlay(alignment: .topTrailing) {
@@ -100,6 +114,8 @@ struct LibraryView: View {
             }
             .fullScreenCover(item: $viewer) { ViewerView(posts: $0.posts, startIndex: $0.index, isLocal: true) }
             .sheet(isPresented: $showQueue) { DownloadsView() }
+            .sheet(item: Binding(get: { renaming.map { RenameRequest(ids: $0) } }, set: { renaming = $0?.ids })) { BulkRenameSheet(ids: $0.ids) }
+            .sheet(item: $reversing) { MassReverseSheet(posts: $0.posts) }
             .confirmationDialog("Delete \(selected.count) item(s) from this device?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     downloads.removeWithUndo(Array(selected)); selected = []; selecting = false
@@ -146,10 +162,19 @@ struct LibraryView: View {
                 .disabled(picked.isEmpty).accessibilityLabel("Export selected to Files")
             Button { downloads.exportZIP(picked) } label: { Image(systemName: "doc.zipper") }
                 .disabled(picked.isEmpty).accessibilityLabel("Export selected as ZIP")
+            Button { renaming = picked.map(\.id) } label: { Image(systemName: "character.cursor.ibeam") }
+                .disabled(picked.isEmpty).accessibilityLabel("Rename selected")
+            Button { reversing = PostBatch(posts: localPosts(picked)) } label: { Image(systemName: "magnifyingglass.circle") }
+                .disabled(picked.isEmpty).accessibilityLabel("Reverse search selected")
             Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
                 .disabled(picked.isEmpty).accessibilityLabel("Delete selected")
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(.thinMaterial)
     }
+}
+
+struct RenameRequest: Identifiable {
+    let ids: [String]
+    var id: String { ids.joined(separator: ",") }
 }

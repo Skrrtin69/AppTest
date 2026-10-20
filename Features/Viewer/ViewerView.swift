@@ -19,6 +19,7 @@ struct ViewerView: View {
     @State private var quickHide: PostBatch?
     @State private var editing: PostBatch?
     @State private var archivePage: AccountView.WebPageRequest?
+    @State private var betterFor: PostBatch?
     @ObservedObject private var dominant = DominantColors.shared
     @State private var sizes: [String: CGSize] = [:]
     // Vertical drag: swipe down to close; left edge = brightness, right edge = volume.
@@ -107,6 +108,7 @@ struct ViewerView: View {
         .sheet(item: $quickHide) { QuickHideSheet(post: $0.posts[0]) }
         .sheet(item: $editing) { MediaEditorView(post: $0.posts[0]) }
         .sheet(item: $archivePage) { ThemedWebPage(url: $0.url, prefillUsername: "") }
+        .sheet(item: $betterFor) { b in BetterVersionSheet(post: b.posts[0], currentSize: sizes[b.posts[0].key]) }
     }
 
     /// The horizontal pager: one post per page, or two side by side in landscape.
@@ -455,6 +457,9 @@ struct ViewerView: View {
                             : Label("Read Later", systemImage: "bookmark")
                     }
                     Button { reverseFor = PostBatch(posts: [p]) } label: { Label("Reverse Search", systemImage: "magnifyingglass.circle") }
+                    if p.mediaType != .video {
+                        Button { betterFor = PostBatch(posts: [p]) } label: { Label("Find Better Version", systemImage: "arrow.up.forward.app") }
+                    }
                     Button { quickHide = PostBatch(posts: [p]) } label: { Label("Hide Posts Like This…", systemImage: "eye.slash") }
                     if p.isGallery {
                         Divider()
