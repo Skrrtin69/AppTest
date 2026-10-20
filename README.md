@@ -290,6 +290,13 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 ---
 
+## Tag post counts
+
+- **While typing:** search suggestions show how many posts use each tag, for example `blue (8)`. A tag with 0 posts is dimmed.
+- **On a post:** in the viewer's Info panel, hold a tag and choose **Tag Info**. It looks the exact tag up through the site's suggestions and shows *Tag · Posts · Category*, with a Search button. The category is the one the post gives the tag. If the post has none, the category comes from the suggestion; numbered categories are shown as names (0 general, 1 artist, 3 copyright, 4 character, 5 meta).
+- **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
+- **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
+
 ## What's new (Phases 1–20)
 
 **Playback and errors**

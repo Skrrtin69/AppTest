@@ -90,3 +90,11 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 ## 17. Resolver: plain-text "Missing authentication" answers
 - **Fixed:** the owner's live site answers its legacy API with plain text "Missing authentication…" and 200 OK. The resolver treated that like a webpage and skipped the path, ending at "Check this address". A short non-JSON answer containing an auth phrase now stops the resolver at that address and shows Requires Authentication. Probes keep the 5-second limit.
 - **Verified on the phone:** the demo `/legacy` board answers its API that way (plain text, 200). Typing `127.0.0.1:8765/legacy` and tapping Analyze stopped at `http://127.0.0.1:8765/legacy/index.php?page=dapi&s=post&q=index&json=1&tags={tags}&pid={page}` with the Requires Authentication banner and "Log in to find my key". The demo board accepts the Vault key and user ID, so the rest of the flow can be run there too; that would save a demo adapter, so it wasn't run.
+
+## 18. Tag post counts
+- **Verified on the phone against the demo server:**
+  - Auto-Configure set `tagCountPath: post_count` (high confidence).
+  - Typing "bl" showed `blue (8)`, `deep_blue (8)` and a dimmed `bl_unused (0)`.
+  - Tag Info on "red" showed "Tag: red, Posts: 7, Category: Color".
+  - The demo adapter was deleted afterwards.
+- **Owner's Danbooru adapter:** Tag Info said "black_hair" isn't listed. The adapter's `autocompletePath` is `tags.json?q={query}`, which that site ignores (it returns its newest tags). Change it to `tags.json?search[name_matches]={query}*&search[order]=count` in the adapter's editor, or run Auto-Configure again, which now rejects the old address. The owner's adapter was not changed.
