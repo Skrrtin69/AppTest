@@ -97,7 +97,7 @@ struct PhotoReverseSearchView: View {
             }
         }
         .sheet(item: $verifyPage) { page in
-            CloudflareVerifyView(url: page.url) { ua in
+            CloudflareVerifyView(url: page.url, exact: true) { ua in
                 CloudflarePass.save(ua, for: page.url.host ?? "")
                 Task { await search() }
             }

@@ -191,9 +191,12 @@ enum ReverseSearch {
             let cf = h.value(forHTTPHeaderField: "cf-ray") != nil || (h.value(forHTTPHeaderField: "Server") ?? "").lowercased().contains("cloudflare")
             DebugLog.log("Reverse", "\(engine.name): HTTP \(h.statusCode) · \(type ?? "no type") · cloudflare: \(cf ? "yes" : "no") · cf-mitigated: \(h.value(forHTTPHeaderField: "cf-mitigated") ?? "–") · \(data.count) B: \(body.prefix(500))")
             // Cloudflare's check page: only a pass from a real browser gets through.
-            if AutoConfigurator.isCloudflareCheck(h, data: data), let scheme = url.scheme, let host = url.host,
-               let root = URL(string: "\(scheme)://\(host)/") {
-                throw CloudflareChallenge(engineName: engine.name, root: root)
+            // The page to pass it on is the guarded address itself, without the query (the
+            // engine's home page is often not guarded, so passing there gives no pass).
+            if AutoConfigurator.isCloudflareCheck(h, data: data), var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                c.query = nil
+                c.fragment = nil
+                if let page = c.url { throw CloudflareChallenge(engineName: engine.name, root: page) }
             }
         }
         let parsed = try? JSONSerialization.jsonObject(with: data)
@@ -520,7 +523,7 @@ struct ReverseSearchSheet: View {
             .overlay { if opening { ProgressView().padding(24).background(RoundedRectangle(cornerRadius: 12).fill(.thinMaterial)) } }
             .fullScreenCover(item: $viewer) { ViewerView(posts: $0.posts, startIndex: $0.index) }
             .sheet(item: $verifyPage) { page in
-                CloudflareVerifyView(url: page.url) { ua in
+                CloudflareVerifyView(url: page.url, exact: true) { ua in
                     CloudflarePass.save(ua, for: page.url.host ?? "")
                     if let e = engine { Task { await run(e) } }
                 }

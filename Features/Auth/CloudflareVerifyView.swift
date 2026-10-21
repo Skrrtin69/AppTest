@@ -6,6 +6,9 @@ import WebKit
 /// browser's User-Agent is reported (the pass only works with that same User-Agent).
 struct CloudflareVerifyView: View {
     let url: URL
+    /// Open `url` as it is instead of the site's home page: for a check that only guards
+    /// one address (e.g. a reverse engine's search page while its home page is open).
+    var exact: Bool = false
     let onVerified: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model = Model()
@@ -33,7 +36,7 @@ struct CloudflareVerifyView: View {
         return URL(string: "\(scheme)://\(host)\(u.port.map { ":\($0)" } ?? "")/")
     }
 
-    var root: URL { Self.siteRoot(of: url.absoluteString) ?? url }
+    var root: URL { exact ? url : (Self.siteRoot(of: url.absoluteString) ?? url) }
 
     var body: some View {
         NavigationView {
