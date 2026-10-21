@@ -1,5 +1,7 @@
 import SwiftUI
 import PhotosUI
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Reverse search for a picture from the Photo Library (Settings › Tools): pick a photo,
 /// choose which of your sites to look for, and see the matches in a grid. A match on one of
@@ -10,6 +12,11 @@ struct PhotoReverseSearchView: View {
     @State private var image: UIImage?
     @State private var showPicker = false
     @State private var showSites = false
+    /// The picked photo is being read (it may have to come down from iCloud).
+    @State private var loadingPhoto = false
+    /// A photo arrived; the site sheet opens once the picker has fully gone (presenting
+    /// while it's still closing is silently ignored by iOS).
+    @State private var sitesPending = false
     @State private var engineID: String?
     /// Adapter IDs to keep matches for; empty with `allSites` on means no filtering.
     @State private var selected: Set<String> = []
@@ -56,16 +63,29 @@ struct PhotoReverseSearchView: View {
         }
         .navigationTitle("Reverse Search Image")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showPicker) {
-            PhotoPicker { picked in
-                showPicker = false
-                guard let picked = picked else { return }
-                image = picked
-                matches = nil
+        .sheet(isPresented: $showPicker, onDismiss: {
+            DebugLog.log("PhotoPick", "picker closed (photo ready: \(sitesPending), still loading: \(loadingPhoto))")
+            presentSitesIfReady()
+        }) {
+            PhotoPicker(onStart: {
+                // Close the picker at once and read the photo in the background.
+                loadingPhoto = true
                 error = nil
-                // Then choose the sites to check.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showSites = true }
-            }
+                showPicker = false
+            }, onPick: { result in
+                loadingPhoto = false
+                switch result {
+                case .success(let picked):
+                    image = picked
+                    matches = nil
+                    error = nil
+                    sitesPending = true
+                    presentSitesIfReady()
+                case .failure(let why):
+                    if case .cancelled = why { return }
+                    error = why.message
+                }
+            })
             .ignoresSafeArea()
         }
         .sheet(isPresented: $showSites) {
@@ -78,10 +98,23 @@ struct PhotoReverseSearchView: View {
         .fullScreenCover(item: $viewer) { ViewerView(posts: $0.posts, startIndex: $0.index) }
     }
 
+    /// Opens the site sheet when a photo has arrived and the picker is gone.
+    func presentSitesIfReady() {
+        guard sitesPending, !showPicker else { return }
+        sitesPending = false
+        // A short beat after the picker's dismissal finishes, so the new sheet isn't dropped.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            DebugLog.log("PhotoPick", "showing Sites to Check")
+            showSites = true
+        }
+    }
+
     var pictureCard: some View {
         HStack(spacing: 14) {
             Group {
-                if let img = image {
+                if loadingPhoto {
+                    ProgressView().accessibilityLabel("Loading photo")
+                } else if let img = image {
                     Image(uiImage: img).resizable().scaledToFill()
                 } else {
                     Image(systemName: "photo.on.rectangle").font(.largeTitle).foregroundColor(.secondary)
@@ -240,9 +273,23 @@ private struct SitePickerSheet: View {
 }
 
 /// The system photo picker (one picture). Works on iOS 15, where SwiftUI's PhotosPicker
-/// isn't available.
+/// isn't available. The photo is read as a downsampled image (at most 2000 px) from the
+/// file's own data (HEIC, PNG, very large or iCloud photos), with the UIImage loader as a
+/// fallback, and every step is written to the Debug Console.
 struct PhotoPicker: UIViewControllerRepresentable {
-    let onPick: (UIImage?) -> Void
+    enum Failure: Error {
+        case cancelled
+        case unreadable(String)
+        var message: String {
+            switch self {
+            case .cancelled: return ""
+            case .unreadable(let why): return why
+            }
+        }
+    }
+
+    let onStart: () -> Void
+    let onPick: (Result<UIImage, Failure>) -> Void
 
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration()
@@ -254,19 +301,71 @@ struct PhotoPicker: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ vc: PHPickerViewController, context: Context) {}
-    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+    func makeCoordinator() -> Coordinator { Coordinator(onStart: onStart, onPick: onPick) }
+
+    static let maxPixel: CGFloat = 2000
+
+    /// A downsampled image from encoded data (JPEG, HEIC, PNG...), without decoding the
+    /// whole full-size picture first.
+    static func downsampled(_ data: Data) -> UIImage? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
+    }
 
     final class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        let onPick: (UIImage?) -> Void
-        init(onPick: @escaping (UIImage?) -> Void) { self.onPick = onPick }
+        let onStart: () -> Void
+        let onPick: (Result<UIImage, Failure>) -> Void
+        init(onStart: @escaping () -> Void, onPick: @escaping (Result<UIImage, Failure>) -> Void) {
+            self.onStart = onStart
+            self.onPick = onPick
+        }
+
+        private func finish(_ r: Result<UIImage, Failure>) {
+            DispatchQueue.main.async { self.onPick(r) }
+        }
 
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else {
-                onPick(nil)
+            guard let provider = results.first?.itemProvider else {
+                DebugLog.log("PhotoPick", "picker closed with no selection (cancelled)")
+                DispatchQueue.main.async { self.onStart(); self.onPick(.failure(.cancelled)) }
                 return
             }
-            provider.loadObject(ofClass: UIImage.self) { object, _ in
-                DispatchQueue.main.async { self.onPick(object as? UIImage) }
+            let types = provider.registeredTypeIdentifiers
+            DebugLog.log("PhotoPick", "picked: types \(types.joined(separator: ", ")), UIImage loadable: \(provider.canLoadObject(ofClass: UIImage.self))")
+            DispatchQueue.main.async { self.onStart() }
+            let started = Date()
+            // 1. The file's own data, downsampled (for iCloud photos this waits for the download).
+            let type = types.first { UTType($0)?.conforms(to: .image) == true } ?? UTType.image.identifier
+            provider.loadDataRepresentation(forTypeIdentifier: type) { data, err in
+                let ms = Int(Date().timeIntervalSince(started) * 1000)
+                if let data = data, let img = PhotoPicker.downsampled(data) {
+                    DebugLog.log("PhotoPick", "read \(data.count) B of \(type) in \(ms) ms -> \(Int(img.size.width))x\(Int(img.size.height))")
+                    self.finish(.success(img))
+                    return
+                }
+                DebugLog.log("PhotoPick", "data of \(type) unusable after \(ms) ms (\(err?.localizedDescription ?? "couldn't decode \(data?.count ?? 0) B")); trying UIImage")
+                // 2. The system's own image loader.
+                guard provider.canLoadObject(ofClass: UIImage.self) else {
+                    self.finish(.failure(.unreadable("This photo couldn't be read (\(err?.localizedDescription ?? "unsupported format")).")))
+                    return
+                }
+                provider.loadObject(ofClass: UIImage.self) { object, err2 in
+                    if let img = object as? UIImage {
+                        DebugLog.log("PhotoPick", "UIImage loader gave \(Int(img.size.width))x\(Int(img.size.height))")
+                        self.finish(.success(img))
+                    } else {
+                        let why = err2?.localizedDescription ?? err?.localizedDescription ?? "unknown error"
+                        DebugLog.log("PhotoPick", "UIImage loader failed: \(why)")
+                        self.finish(.failure(.unreadable("This photo couldn't be read (\(why)). If it's stored in iCloud, check the connection and try again.")))
+                    }
+                }
             }
         }
     }
