@@ -215,3 +215,10 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 - **Fix:** the photo is read from its data and decoded with ImageIO (which handles WebP, HEIC and very large photos), with the UIImage loader as a fallback. Errors are shown on screen. The site sheet opens after both the photo and the picker's dismissal are done, and every step is logged.
 - **Verified on the phone with the same WebP:** "read 160992 B of org.webmproject.webp → 1920x1080", then the picker closed (before the photo was ready), then "showing Sites to Check". A demo-engine search then uploaded a 196 KB JPEG and returned 5 matches.
 - The demo engine was deleted afterwards; the owner's SauceNAO engine was never used.
+
+## 29. HTTP 403 from the reverse engine on photo search
+- **Reported by the owner:** the photo search on their SauceNAO engine answered HTTP 403.
+- **Change:**
+  - Every reverse-engine request now carries a Safari User-Agent for the phone's iOS version (e.g. `… iPhone OS 16_2 … Version/16.2 Mobile/15E148 Safari/604.1`), unless the request already has one. Redirected uploads keep it.
+  - Any non-2xx answer is logged as `[Reverse]` with the status, content type, whether Cloudflare answered (cf-ray / Server), cf-mitigated, and the first 500 characters of the body. The owner's API key is masked if it appears.
+- **Not tested here:** the engine itself, to save the owner's quota. The owner will test, and the `[Reverse]` line will show whether a remaining 403 is a Cloudflare page or the engine's own message.
