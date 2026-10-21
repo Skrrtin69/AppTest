@@ -17,6 +17,8 @@ struct PhotoReverseSearchView: View {
     /// A photo arrived; the site sheet opens once the picker has fully gone (presenting
     /// while it's still closing is silently ignored by iOS).
     @State private var sitesPending = false
+    @State private var challenge: ReverseSearch.CloudflareChallenge?
+    @State private var verifyPage: CloudflareVerifyPage?
     @State private var engineID: String?
     /// Adapter IDs to keep matches for; empty with `allSites` on means no filtering.
     @State private var selected: Set<String> = []
@@ -55,7 +57,7 @@ struct PhotoReverseSearchView: View {
                     HStack { ProgressView(); Text("Searching \(engine?.name ?? "")…").foregroundColor(.secondary) }
                 }
                 if let e = error {
-                    Label(e, systemImage: "exclamationmark.triangle").foregroundColor(.red)
+                    ReverseErrorView(message: e, challenge: challenge) { verifyPage = CloudflareVerifyPage(url: $0) }
                 }
                 if matches != nil { results }
             }
@@ -91,6 +93,12 @@ struct PhotoReverseSearchView: View {
         .sheet(isPresented: $showSites) {
             SitePickerSheet(sites: sites, selected: $selected, allSites: $allSites) {
                 showSites = false
+                Task { await search() }
+            }
+        }
+        .sheet(item: $verifyPage) { page in
+            CloudflareVerifyView(url: page.url) { ua in
+                CloudflarePass.save(ua, for: page.url.host ?? "")
                 Task { await search() }
             }
         }
@@ -172,12 +180,13 @@ struct PhotoReverseSearchView: View {
     func search() async {
         guard let img = image, let e = engine else { return }
         guard let jpeg = ReverseSearch.uploadJPEG(img) else { error = "Couldn't prepare this photo."; return }
-        running = true; error = nil; matches = nil
+        running = true; error = nil; matches = nil; challenge = nil
         defer { running = false }
         do {
             matches = try await ReverseSearch.run(e, jpeg: jpeg)
             DebugLog.log("Reverse", "photo: \(matches?.count ?? 0) matches, \(shown.count) on the chosen sites (\(allSites ? "all" : selected.sorted().joined(separator: ", ")))")
         } catch {
+            challenge = error as? ReverseSearch.CloudflareChallenge
             self.error = error.localizedDescription
         }
     }

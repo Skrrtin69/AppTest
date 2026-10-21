@@ -174,9 +174,10 @@ enum ReverseSearch {
     private static func perform(_ engine: ReverseEngine, _ request: URLRequest) async throws -> [ReverseMatch] {
         guard let url = request.url else { throw AppError.message("The engine's request address isn't valid.") }
         var req = request
-        // Engines behind Cloudflare refuse requests that don't look like a browser's.
+        // Engines behind Cloudflare refuse requests that don't look like a browser's. After a
+        // check was passed in the in-app browser, its exact User-Agent goes with the pass.
         if req.value(forHTTPHeaderField: "User-Agent") == nil {
-            req.setValue(browserUserAgent, forHTTPHeaderField: "User-Agent")
+            req.setValue(CloudflarePass.userAgent(for: url.host ?? "") ?? browserUserAgent, forHTTPHeaderField: "User-Agent")
         }
         let (data, response) = try await uploadSession.data(for: req)
         let http = response as? HTTPURLResponse
@@ -189,6 +190,11 @@ enum ReverseSearch {
             if !key.isEmpty { body = body.replacingOccurrences(of: key, with: "•••") }
             let cf = h.value(forHTTPHeaderField: "cf-ray") != nil || (h.value(forHTTPHeaderField: "Server") ?? "").lowercased().contains("cloudflare")
             DebugLog.log("Reverse", "\(engine.name): HTTP \(h.statusCode) · \(type ?? "no type") · cloudflare: \(cf ? "yes" : "no") · cf-mitigated: \(h.value(forHTTPHeaderField: "cf-mitigated") ?? "–") · \(data.count) B: \(body.prefix(500))")
+            // Cloudflare's check page: only a pass from a real browser gets through.
+            if AutoConfigurator.isCloudflareCheck(h, data: data), let scheme = url.scheme, let host = url.host,
+               let root = URL(string: "\(scheme)://\(host)/") {
+                throw CloudflareChallenge(engineName: engine.name, root: root)
+            }
         }
         let parsed = try? JSONSerialization.jsonObject(with: data)
         // Engines report failures as a negative header.status (often with HTTP 200) or as an
@@ -362,6 +368,15 @@ extension ReverseSearch {
 
     /// Keeps the method and uploaded body if the engine redirects (URLSession would otherwise
     /// turn the POST into an empty GET, and the engine would see no picture).
+    /// Cloudflare stood in front of the engine.
+    struct CloudflareChallenge: LocalizedError {
+        let engineName: String
+        let root: URL
+        var errorDescription: String? {
+            "\(engineName) is behind a Cloudflare check. Tap Verify: the site opens, Cloudflare checks the browser (tap the box if it asks), and the search runs again."
+        }
+    }
+
     /// Safari on this iPhone's iOS version (e.g. "… iPhone OS 16_2 … Version/16.2 …").
     static var browserUserAgent: String {
         let v = ProcessInfo.processInfo.operatingSystemVersion
@@ -468,6 +483,8 @@ struct ReverseSearchSheet: View {
     @State private var running = false
     @State private var viewer: ViewerRequest?
     @State private var opening = false
+    @State private var challenge: ReverseSearch.CloudflareChallenge?
+    @State private var verifyPage: CloudflareVerifyPage?
     /// Hide matches below this similarity.
     @State private var minSimilarity = 0.0
 
@@ -492,7 +509,7 @@ struct ReverseSearchSheet: View {
                     HStack { ProgressView(); Text("Searching \(engine?.name ?? "")…").foregroundColor(.secondary) }
                 }
                 if let e = error {
-                    Section { Label(e, systemImage: "exclamationmark.triangle").foregroundColor(.red) }
+                    Section { ReverseErrorView(message: e, challenge: challenge) { verifyPage = CloudflareVerifyPage(url: $0) } }
                 }
                 if let m = matches { matchSection(m) }
             }
@@ -502,6 +519,12 @@ struct ReverseSearchSheet: View {
             .task { if enabled.count == 1, matches == nil { await run(enabled[0]) } }
             .overlay { if opening { ProgressView().padding(24).background(RoundedRectangle(cornerRadius: 12).fill(.thinMaterial)) } }
             .fullScreenCover(item: $viewer) { ViewerView(posts: $0.posts, startIndex: $0.index) }
+            .sheet(item: $verifyPage) { page in
+                CloudflareVerifyView(url: page.url) { ua in
+                    CloudflarePass.save(ua, for: page.url.host ?? "")
+                    if let e = engine { Task { await run(e) } }
+                }
+            }
         }
     }
 
@@ -535,10 +558,13 @@ struct ReverseSearchSheet: View {
     }
 
     func run(_ e: ReverseEngine) async {
-        engine = e; running = true; error = nil; matches = nil
+        engine = e; running = true; error = nil; matches = nil; challenge = nil
         defer { running = false }
         do { matches = try await ReverseSearch.run(e, post: post) }
-        catch { self.error = error.localizedDescription }
+        catch {
+            challenge = error as? ReverseSearch.CloudflareChallenge
+            self.error = error.localizedDescription
+        }
     }
 }
 
@@ -840,6 +866,52 @@ struct ReverseJSONEditor: View {
         case .typeMismatch(_, let c), .valueNotFound(_, let c): return "a field has the wrong kind of value (\(c.codingPath.map(\.stringValue).joined(separator: ".")))."
         case .dataCorrupted: return "this isn't valid JSON (check commas and quotes)."
         @unknown default: return "the JSON couldn't be read."
+        }
+    }
+}
+
+/// The User-Agent of the in-app browser that passed a site's Cloudflare check: the pass
+/// (cf_clearance cookie, kept in the shared cookie store) only works with that same one.
+enum CloudflarePass {
+    private static let key = "cfPassUserAgents"
+
+    static func userAgent(for host: String) -> String? {
+        (UserDefaults.standard.dictionary(forKey: key) as? [String: String])?[host.lowercased()]
+    }
+
+    static func save(_ ua: String, for host: String) {
+        guard !ua.isEmpty, !host.isEmpty else { return }
+        var all = (UserDefaults.standard.dictionary(forKey: key) as? [String: String]) ?? [:]
+        all[host.lowercased()] = ua
+        UserDefaults.standard.set(all, forKey: key)
+        DebugLog.log("Reverse", "Cloudflare pass for \(host) kept with the browser's User-Agent")
+    }
+}
+
+/// Opens a page to pass a reverse engine's Cloudflare check.
+struct CloudflareVerifyPage: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// The error line, with a Verify button when Cloudflare was in the way.
+struct ReverseErrorView: View {
+    let message: String
+    let challenge: ReverseSearch.CloudflareChallenge?
+    let onVerify: (URL) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(message, systemImage: challenge == nil ? "exclamationmark.triangle" : "shield.lefthalf.filled")
+                .foregroundColor(challenge == nil ? .red : .orange)
+            if let c = challenge {
+                Button { onVerify(c.root) } label: {
+                    Label("Verify on \(c.root.host ?? "the site")", systemImage: "checkmark.shield")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("reverseVerify")
+            }
         }
     }
 }
