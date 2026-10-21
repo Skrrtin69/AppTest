@@ -207,3 +207,11 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 - **Found during testing:** the demo server didn't understand `id:N`, so opening a match on a demo adapter without a single-post address failed ("Post 10 wasn't found"). It now does, like real boards.
 - **Cleaned up:** the temporary demo adapter and the demo reverse engine were deleted. The owner's adapters (Danbooru Donmai, Gelbooru) and the SauceNAO engine are unchanged.
 - **Not tested:** a real engine with a library photo (to save the owner's quota), and the Browse menu entry, which wasn't added: the entry point is Settings › Tools.
+
+## 28. Reverse Search Image returned to "Choose Photo" without the site sheet
+- **Reproduced on the phone** with the owner's newest library item: the picker closed, the screen went back to "Choose Photo", and there was no error. The live system log showed the picker registering the item with a `(null)` UTI.
+- **New logging (`[PhotoPick]`):** `picked: types org.webmproject.webp, UIImage loadable: false`.
+- **Root cause:** the item is a WebP. On iOS 16.2, NSItemProvider can't load a WebP as a UIImage. The old code treated that as "nothing picked" and returned silently. The sheet was also opened on a fixed 0.5 s timer, which could race the picker's dismissal.
+- **Fix:** the photo is read from its data and decoded with ImageIO (which handles WebP, HEIC and very large photos), with the UIImage loader as a fallback. Errors are shown on screen. The site sheet opens after both the photo and the picker's dismissal are done, and every step is logged.
+- **Verified on the phone with the same WebP:** "read 160992 B of org.webmproject.webp → 1920x1080", then the picker closed (before the photo was ready), then "showing Sites to Check". A demo-engine search then uploaded a 196 KB JPEG and returned 5 matches.
+- The demo engine was deleted afterwards; the owner's SauceNAO engine was never used.

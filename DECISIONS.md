@@ -186,6 +186,8 @@ Choices made while building MediaDeck, and why.
 
 ## Reverse Search Image
 - **PHPicker, not SwiftUI PhotosPicker:** PhotosPicker needs iOS 16 and the app supports iOS 15. PHPickerViewController is the same system picker, and needs no Photos permission.
+- **Reading the picked photo:** the file's own data is read (`loadDataRepresentation` for its image type) and downsampled with ImageIO to at most 2000 px. The `UIImage` loader is only a fallback. On iOS 16.2 the picker can't give a WebP through the `UIImage` loader (`canLoadObject` is false), but ImageIO decodes it. Any failure is shown on screen, not dropped.
+- **Sheet order:** the picker closes as soon as a photo is chosen, and a spinner shows while it's read. "Sites to Check" opens only once the photo is ready **and** the picker's dismissal has finished (its onDismiss). Presenting a sheet while another is still closing is silently ignored by iOS.
 - **Always uploaded:** a library photo has no web address, so the engine's {url} parameter is left out and the JPEG is posted (multipart, the engine's upload field). This is the same request as the post-based search, which now shares its answer parsing (`perform`).
 - **Filtering after the search:** engines return matches for all sites, so filtering is done on the match links with the same site matching used for opening links (`LinkRouter.site(for:)`). The count shows "N of M matches are on the chosen sites".
 
