@@ -228,6 +228,7 @@ struct AutoConfigurator {
         guard builder.build() else { return .failure(.noMedia(rawJSON: raw)) }
         await builder.chooseMediaBase(adapter: adapter)
         await builder.probeAutocomplete(adapter: adapter)
+        await builder.probeFirstPage(adapter: adapter)
         builder.finish()
         return .success(AutoConfigProposal(config: builder.config, guesses: builder.guesses,
                                            sampleNodes: Array(items.prefix(5)), rawJSON: raw,

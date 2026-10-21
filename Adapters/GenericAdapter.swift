@@ -200,6 +200,14 @@ final class GenericAdapter: SiteAdapter {
         let url = try searchURL(tags: tags, options: options, page: page)
         let json = try await fetchJSON(url)
         guard let list = DottedPath.evaluate(config.searchResultsPath, in: json) else {
+            let body = (try? JSONSerialization.data(withJSONObject: json, options: [.fragmentsAllowed]))
+                .map { String(decoding: $0.prefix(300), as: UTF8.self) } ?? "?"
+            DebugLog.log("Search", "No '\(config.searchResultsPath)' in the answer from \(DebugLog.redact(url)): \(body)")
+            // Many APIs leave the list out entirely when nothing matched (e.g. only a count
+            // comes back). With no list of items anywhere in the answer, that's 0 results.
+            if Self.hasNoItemList(json) {
+                return SearchResult(posts: [], hasNextPage: false, currentPage: page, nextCursor: nil)
+            }
             throw AppError.pathNotFound(field: "List of results (searchResultsPath)", path: config.searchResultsPath)
         }
         guard let items = list as? [Any] else {
@@ -223,6 +231,17 @@ final class GenericAdapter: SiteAdapter {
         var result = SearchResult(posts: posts, hasNextPage: hasNext, currentPage: page, nextCursor: nextCursor)
         if session == nil { result.notes = GuestLimits.check(json: json, items: items, adapter: self, listPath: config.searchResultsPath) }
         return result
+    }
+
+    /// True when an answer holds no list of objects at all (just counts or a message), which
+    /// is how many APIs say "no results". A list somewhere else means the path is wrong.
+    static func hasNoItemList(_ json: Any, depth: Int = 0) -> Bool {
+        if let a = json as? [Any] { return a.isEmpty || !a.contains { $0 is [String: Any] } }
+        guard let d = json as? [String: Any], depth < 4 else { return true }
+        return d.values.allSatisfy { v in
+            if let a = v as? [Any] { return a.isEmpty || !a.contains { $0 is [String: Any] } }
+            return hasNoItemList(v, depth: depth + 1)
+        }
     }
 
     func fetchPost(id: String) async throws -> Post {

@@ -396,6 +396,34 @@ extension AutoConfigurator {
                 : "Each page is an object; its address is under '\(g.urlKey!)'.")
         }
 
+        /// Whether the site counts pages from 0 or 1: asks for page 0 and page 1 and compares
+        /// the post IDs. Different posts on page 0 mean page 0 is the first page (with 1 it
+        /// would be skipped, and searches with fewer results than a page come back empty).
+        mutating func probeFirstPage(adapter: GenericAdapter) async {
+            guard config.paginationStyle == .pageNumber, input.urlTemplate.contains("{page}") else { return }
+            let tags = input.sampleTag.split(separator: " ").map(String.init)
+            func ids(_ page: Int) async -> [String]? {
+                guard let url = try? adapter.searchURL(tags: tags, options: SearchOptions(), page: page),
+                      let (data, resp) = try? await adapter.fetchRaw(url, rateLimited: false),
+                      (200...299).contains(resp.statusCode),
+                      let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else { return nil }
+                let list = (DottedPath.evaluate(config.searchResultsPath, in: json) as? [Any]) ?? []
+                return list.compactMap { item in (item as? [String: Any]).flatMap { DottedPath.string(config.postIDPath, in: $0) } }
+            }
+            let zero = await ids(0) ?? []
+            let one = await ids(1) ?? []
+            if !zero.isEmpty, zero != one {
+                config.firstPageIndex = 0
+                set(.firstPageIndex, .high, one.isEmpty
+                    ? "Page 0 has results and page 1 is empty, so pages are counted from 0."
+                    : "Page 0 and page 1 return different posts, so pages are counted from 0 (starting at 1 would skip the first page).")
+            } else if !zero.isEmpty {
+                set(.firstPageIndex, .high, "Page 0 returns the same posts as page 1, so pages are counted from 1.")
+            } else {
+                set(.firstPageIndex, .high, "Page 0 returns nothing, so pages are counted from 1.")
+            }
+        }
+
         /// Tries common suggestion addresses next to the API (then at the site root); the first
         /// that answers with a list of tag-like items wins.
         mutating func probeAutocomplete(adapter: GenericAdapter) async {
