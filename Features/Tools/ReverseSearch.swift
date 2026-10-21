@@ -171,11 +171,25 @@ enum ReverseSearch {
     }
 
     /// Sends the request and reads the matches out of the engine's answer.
-    private static func perform(_ engine: ReverseEngine, _ req: URLRequest) async throws -> [ReverseMatch] {
-        guard let url = req.url else { throw AppError.message("The engine's request address isn't valid.") }
+    private static func perform(_ engine: ReverseEngine, _ request: URLRequest) async throws -> [ReverseMatch] {
+        guard let url = request.url else { throw AppError.message("The engine's request address isn't valid.") }
+        var req = request
+        // Engines behind Cloudflare refuse requests that don't look like a browser's.
+        if req.value(forHTTPHeaderField: "User-Agent") == nil {
+            req.setValue(browserUserAgent, forHTTPHeaderField: "User-Agent")
+        }
         let (data, response) = try await uploadSession.data(for: req)
         let http = response as? HTTPURLResponse
         let type = http?.value(forHTTPHeaderField: "Content-Type")
+        if let h = http, !(200..<300).contains(h.statusCode) {
+            // What the engine actually sent: a Cloudflare page, a key error, or something else.
+            let key = await ReverseEngineStore.shared.apiKey(for: engine.id)
+            var body = String(decoding: data.prefix(2000), as: UTF8.self)
+                .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+            if !key.isEmpty { body = body.replacingOccurrences(of: key, with: "•••") }
+            let cf = h.value(forHTTPHeaderField: "cf-ray") != nil || (h.value(forHTTPHeaderField: "Server") ?? "").lowercased().contains("cloudflare")
+            DebugLog.log("Reverse", "\(engine.name): HTTP \(h.statusCode) · \(type ?? "no type") · cloudflare: \(cf ? "yes" : "no") · cf-mitigated: \(h.value(forHTTPHeaderField: "cf-mitigated") ?? "–") · \(data.count) B: \(body.prefix(500))")
+        }
         let parsed = try? JSONSerialization.jsonObject(with: data)
         // Engines report failures as a negative header.status (often with HTTP 200) or as an
         // HTTP error; either way show their own message, cleaned of HTML.
@@ -348,6 +362,14 @@ extension ReverseSearch {
 
     /// Keeps the method and uploaded body if the engine redirects (URLSession would otherwise
     /// turn the POST into an empty GET, and the engine would see no picture).
+    /// Safari on this iPhone's iOS version (e.g. "… iPhone OS 16_2 … Version/16.2 …").
+    static var browserUserAgent: String {
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        let underscored = "\(v.majorVersion)_\(v.minorVersion)"
+        let dotted = "\(v.majorVersion).\(v.minorVersion)"
+        return "Mozilla/5.0 (iPhone; CPU iPhone OS \(underscored) like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/\(dotted) Mobile/15E148 Safari/604.1"
+    }
+
     static let uploadSession = URLSession(configuration: .default, delegate: RedirectKeeper(), delegateQueue: nil)
 
     final class RedirectKeeper: NSObject, URLSessionTaskDelegate {
