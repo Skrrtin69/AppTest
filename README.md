@@ -321,7 +321,7 @@ Failures are explained in plain English with one next step: bad address, unreach
 
 Settings › Tools › **Reverse Search Image**:
 1. **Choose Photo** opens the system photo picker. No Photos permission is needed: only the picture you pick is shared with the app.
-2. **Sites to Check** lists your enabled sites. **Check All** shows every match. Otherwise only matches that link to the sites you switch on are kept; from Check All, switching one site off keeps the others.
+2. **Sites to Check** lists your enabled sites. A match counts as on a site if **any** of its links is (engines often list several), and it then opens with that link. **Check All** shows every match. Otherwise only matches that link to the sites you switch on are kept; from Check All, switching one site off keeps the others.
 3. The picture is sent as a JPEG (at most 2000 px, transparency on white) to the engine chosen at the top. It is always uploaded, never sent as an address, since a photo on the phone has none.
 4. Matches appear in a grid, each with its similarity and the site it's on. Tapping a match on one of your sites opens that post in the app; other matches show their preview. Hold a match for Open Source Page, Copy Link and Save.
 

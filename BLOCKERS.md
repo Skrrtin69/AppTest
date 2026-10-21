@@ -230,3 +230,15 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
     - The browser passed by itself in about 3 seconds ("Verified. Trying the site again…"). The retry returned **8 matches**.
     - A second search went straight through (8 matches) with no check.
   - **First attempt opened the engine's home page:** that page isn't guarded, so no pass came and the sheet stayed open. It now opens the guarded address.
+
+## 30. Site filter showed outside matches with Check All off
+- **Causes, both in the app:**
+  1. Switching on every enabled site by hand turned Check All back on. The owner has exactly two sites, so picking Danbooru and Gelbooru showed everything.
+  2. Each match kept only its first link, so a match whose second or third link was on one of your sites could neither pass the filter nor open there.
+- **Fix:** every link of a match is kept. Check All off means strict filtering on any link, and the matching link is the one used to open the match. Check All is only changed by its own switch.
+- **Demo engine:** it now returns several links per match: one with two outside pages before the demo-site link, two with only outside pages, plus the demo site and the deleted post.
+- **Verified on the phone:**
+  - **Demo, only the demo site:** "3 of 5 matches are on the chosen sites". The match whose demo link was third was kept and labelled with the demo site; Copy Link gave `/a/view/2`, and a tap opened Site 127.0.0.1 A, ID 2.
+  - **Demo, Check All:** 5 matches, the multi-link one still labelled with the demo site.
+  - **Owner's SauceNAO with Check All off and Danbooru + Gelbooru switched on:** Check All stayed off, giving "0 of 8 matches are on the chosen sites". The Check All run showed all 8 (Patreon, FurAffinity, AniDB, Twitter, DeviantArt ×2, Pixiv ×2), none with a link on those sites.
+- The temporary demo adapter and demo engine were deleted.
