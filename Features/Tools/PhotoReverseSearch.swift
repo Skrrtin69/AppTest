@@ -218,8 +218,10 @@ private struct SitePickerSheet: View {
                 Section("Your sites") {
                     ForEach(sites, id: \.id) { c in
                         Toggle(c.displayName, isOn: Binding(get: { allSites || selected.contains(c.id) }, set: { on in
-                            if allSites { allSites = false; selected = [] }
+                            // Leaving "all" by switching one site off keeps the others on.
+                            if allSites { allSites = false; selected = Set(sites.map(\.id)) }
                             if on { selected.insert(c.id) } else { selected.remove(c.id) }
+                            if selected.count == sites.count { allSites = true; selected = [] }
                         }))
                     }
                 }
