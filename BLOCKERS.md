@@ -195,3 +195,15 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
 - **Fixed:** the page base is detected in Auto-Configure; a list-less answer means 0 results; an empty first page with a match count gets a clear message. All of these are logged.
 - **Owner's adapter:** with the owner's permission, Gelbooru's "First page number" was changed from 1 to 0. Verified: the same search now sends `pid=0` and gets 89,971 bytes of posts. Scrolling past the end gets the empty `pid=1` page, which now ends the list without an error.
 - **Not tested on the phone:** the Auto-Configure page-base probe (the live board needs the owner's key in the wizard).
+
+## 27. Page-base auto-detection and Reverse Search Image
+- **Pagination, verified on the phone:** demo legacy board 1 now behaves like the real board: `pid` from 0, the list under `post`, and no `post` key on an empty page. Auto-Configure on `127.0.0.1:8765/lb1` with tag `blue` (8 posts) proposed "First page number: 0. High confidence. Page 1 came back without results and page 0 had 8 posts, so pages are counted from 0." Nothing was saved.
+- **Reverse Search Image, verified on the phone (demo engine only; the owner's SauceNAO engine wasn't used):**
+  - The system photo picker opened and returned a screenshot from the library.
+  - The site sheet listed the enabled sites. With Check All, all 5 matches showed in the grid with similarity and site.
+  - With only the demo site, the screen showed "3 of 5 matches are on the chosen sites".
+  - Tapping the 96% match opened the real post through the adapter (Info: Site 127.0.0.1 A, ID 10).
+  - Switching one site off from Check All left the others on.
+- **Found during testing:** the demo server didn't understand `id:N`, so opening a match on a demo adapter without a single-post address failed ("Post 10 wasn't found"). It now does, like real boards.
+- **Cleaned up:** the temporary demo adapter and the demo reverse engine were deleted. The owner's adapters (Danbooru Donmai, Gelbooru) and the SauceNAO engine are unchanged.
+- **Not tested:** a real engine with a library photo (to save the owner's quota), and the Browse menu entry, which wasn't added: the entry point is Settings › Tools.

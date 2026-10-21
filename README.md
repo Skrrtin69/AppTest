@@ -317,6 +317,14 @@ Failures are explained in plain English with one next step: bad address, unreach
   - A gallery-style search, `/api/galleries/search?query={tags}&page={page}`; single galleries are then expected at `/api/gallery/{id}`.
   - Suggestion addresses using `search[name_matches]` get a `*` added to the typed text automatically.
 
+## Reverse Search Image (photos from your library)
+
+Settings › Tools › **Reverse Search Image**:
+1. **Choose Photo** opens the system photo picker. No Photos permission is needed: only the picture you pick is shared with the app.
+2. **Sites to Check** lists your enabled sites. **Check All** shows every match. Otherwise only matches that link to the sites you switch on are kept; from Check All, switching one site off keeps the others.
+3. The picture is sent as a JPEG (at most 2000 px, transparency on white) to the engine chosen at the top. It is always uploaded, never sent as an address, since a photo on the phone has none.
+4. Matches appear in a grid, each with its similarity and the site it's on. Tapping a match on one of your sites opens that post in the app; other matches show their preview. Hold a match for Open Source Page, Copy Link and Save.
+
 ## Tag post counts
 
 - **While typing:** search suggestions show how many posts use each tag, for example `blue (8)`. A tag with 0 posts is dimmed.
