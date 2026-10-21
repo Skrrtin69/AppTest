@@ -184,6 +184,11 @@ Choices made while building MediaDeck, and why.
 - **Legacy suggestion addresses:** `index.php?page=autocomplete2&term={query}&type=tag_query&limit=10` and `public/autocomplete.php?q={query}` are tried before the older `q=` forms. The name key prefers `value` over `label`, because legacy boards put the real tag in `value` and a display form ("blue eyes") in `label`.
 - **Rejecting false suggestion addresses:** Auto-Configure rejected nothing before, and the owner's Danbooru adapter got `tags.json?q={query}`. That site ignores `q` and returns its newest tags, so suggestions were unrelated and Tag Info found nothing. Now at least one of the first 20 suggestions must contain the typed text. `tags.json?search[name_matches]={query}*&search[order]=count` was added to the address shapes tried. Square brackets in addresses are now percent-encoded, which older iOS versions require.
 
+## Reverse engines behind Cloudflare
+- **Headers aren't enough:** the owner's engine started answering every request (upload or address, any User-Agent) with Cloudflare's managed challenge (`cf-mitigated: challenge`, "Just a moment..."). Only a pass earned in a real browser gets through.
+- **Verify flow:** a challenge on an engine shows "Verify on <host>". The in-app browser opens the **guarded address itself** (the request address without its query). The engine's home page isn't guarded, so passing there gives no pass. It closes when Cloudflare hands out a new cf_clearance, and the search runs again.
+- **The pass:** cf_clearance goes into the shared cookie store, which the upload session uses. The browser's exact User-Agent is kept per host (`CloudflarePass`) and sent with later engine requests, because the pass is tied to it. Without a pass, a Safari User-Agent for the phone's iOS version is sent.
+
 ## Reverse Search Image
 - **PHPicker, not SwiftUI PhotosPicker:** PhotosPicker needs iOS 16 and the app supports iOS 15. PHPickerViewController is the same system picker, and needs no Photos permission.
 - **Reading the picked photo:** the file's own data is read (`loadDataRepresentation` for its image type) and downsampled with ImageIO to at most 2000 px. The `UIImage` loader is only a fallback. On iOS 16.2 the picker can't give a WebP through the `UIImage` loader (`canLoadObject` is false), but ImageIO decodes it. Any failure is shown on screen, not dropped.

@@ -222,3 +222,11 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
   - Every reverse-engine request now carries a Safari User-Agent for the phone's iOS version (e.g. `… iPhone OS 16_2 … Version/16.2 Mobile/15E148 Safari/604.1`), unless the request already has one. Redirected uploads keep it.
   - Any non-2xx answer is logged as `[Reverse]` with the status, content type, whether Cloudflare answered (cf-ray / Server), cf-mitigated, and the first 500 characters of the body. The owner's API key is masked if it appears.
 - **Not tested here:** the engine itself, to save the owner's quota. The owner will test, and the `[Reverse]` line will show whether a remaining 403 is a Cloudflare page or the engine's own message.
+
+- **Follow-up (owner's go-ahead to use the quota):** the Safari User-Agent alone still got the 403. The new log line showed `HTTP 403 · text/html · cloudflare: yes · cf-mitigated: challenge · <title>Just a moment...</title>`. From this PC, every request to the engine's search address was challenged too, uploads and address searches alike, with any User-Agent.
+  - **Fix:** detect the check, show "Verify on saucenao.com", open the guarded search address in the in-app browser, keep the pass with that browser's User-Agent, and retry.
+  - **Verified on the phone with the owner's SauceNAO engine and newest photo:**
+    - The first try showed the Verify button.
+    - The browser passed by itself in about 3 seconds ("Verified. Trying the site again…"). The retry returned **8 matches**.
+    - A second search went straight through (8 matches) with no check.
+  - **First attempt opened the engine's home page:** that page isn't guarded, so no pass came and the sheet stayed open. It now opens the guarded address.
