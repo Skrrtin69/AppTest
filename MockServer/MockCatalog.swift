@@ -115,10 +115,13 @@ enum MockCatalog {
             let minute = Calendar.current.component(.minute, from: Date())
             return items.filter { ($0.n + minute) % 5 == 0 }.sorted { $0.n > $1.n }
         }
-        let include = words.filter { !$0.hasPrefix("-") }
+        // "id:N" finds one post, as on real boards (used to open a single post by its ID).
+        let ids = words.compactMap { $0.hasPrefix("id:") ? Int($0.dropFirst(3)) : nil }
+        let include = words.filter { !$0.hasPrefix("-") && !$0.hasPrefix("id:") }
         let exclude = words.filter { $0.hasPrefix("-") }.map { String($0.dropFirst()) }
         var result = items.filter { item in
-            include.allSatisfy { item.tags.contains($0) } && !exclude.contains { item.tags.contains($0) }
+            (ids.isEmpty || ids.contains(item.n))
+                && include.allSatisfy { item.tags.contains($0) } && !exclude.contains { item.tags.contains($0) }
         }
         if let r = rating?.nonEmpty, r != "any" {
             result = result.filter { $0.rating == r }
