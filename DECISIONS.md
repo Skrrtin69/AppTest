@@ -184,6 +184,12 @@ Choices made while building MediaDeck, and why.
 - **Legacy suggestion addresses:** `index.php?page=autocomplete2&term={query}&type=tag_query&limit=10` and `public/autocomplete.php?q={query}` are tried before the older `q=` forms. The name key prefers `value` over `label`, because legacy boards put the real tag in `value` and a display form ("blue eyes") in `label`.
 - **Rejecting false suggestion addresses:** Auto-Configure rejected nothing before, and the owner's Danbooru adapter got `tags.json?q={query}`. That site ignores `q` and returns its newest tags, so suggestions were unrelated and Tag Info found nothing. Now at least one of the first 20 suggestions must contain the typed text. `tags.json?search[name_matches]={query}*&search[order]=count` was added to the address shapes tried. Square brackets in addresses are now percent-encoded, which older iOS versions require.
 
+## Page numbering and empty answers
+- **Detected, not assumed:** Auto-Configure used to set "First page number" to 1 for every site. It now requests page 0 and page 1 for the sample tag and compares post IDs. Different posts (or posts only on page 0) mean the site counts from 0. The same posts, or nothing on page 0, mean it counts from 1.
+- **A missing results list:** many APIs leave the list out when nothing matched (only a count comes back). If the answer holds no list of objects anywhere, it's treated as 0 results. If a list exists elsewhere, the path really is wrong and the Field Mapper error stays.
+- **Empty first page with a count:** when page 1 comes back without a list but the answer reports matches (count/total > 0), the app says so ("…says 86 posts match, but the first page it sent is empty…") and points to "First page number". It doesn't silently show "No results".
+- **Logged:** every answer without the results list is written to the Debug Console (`[Search]`, first 300 characters, address with secrets masked).
+
 ## VLCKit player behaviour
 - **Tap = controls:** video pages now receive the viewer's single tap (as pictures do), so a tap toggles the viewer's controls. The built-in player and VLCKit no longer pause on tap; the Pause button does that.
 - **Controls above VLC's view:** VLC's video output draws over SwiftUI views placed beside it. The control bar was there but invisible: the accessibility tree had it at y=652, while screenshots showed only video. The controls are now hosted inside the same UIKit container, above VLC's drawing view.

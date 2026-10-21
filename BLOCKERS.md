@@ -181,3 +181,17 @@ No flow is blocked. Every flow in the spec was driven on the device (iPhone 13, 
   - **Background while paused:** left at 0:09; it came back paused, showing the frame at 0:10 (VLC resumes at the nearest keyframe), and Play continued from there.
 - **Found during testing:** the controls had been invisible under VLC's video since VLCKit was added; scenePhase never reached the viewer; and a Play/reopen race. All three are fixed.
 - **Not changed:** the web player (ogv.js) still pauses on tap, because it has no control bar. It's only used when VLCKit is off.
+
+## 26. Multi-tag searches failing on the legacy board ("path 'post' … nothing was found")
+- **Real trace from the phone (owner's Gelbooru adapter):**
+  - Request: `index.php?page=dapi&s=post&q=index&json=1&tags=the_elder_scrolls%20animated&pid=1&api_key=•••&user_id=•••` returned 200 with 51 bytes.
+  - Answer: `{"@attributes":{"limit":100,"count":86,"offset":0}}`. 86 posts match, but there was no `post` list.
+- **Root cause:** the adapter had "First page number" = 1 (Auto-Configure always set 1), while the API's `pid` counts from 0. Every first page was really the second page (items 100–199).
+  - Searches with more than 100 results looked fine, but skipped the newest 100 posts. For example, single-tag `the_elder_scrolls` loaded pid 1, 2, 3 and never pid 0.
+  - Searches with 100 or fewer results (common with two or more tags) got an empty second page, and the API leaves `post` out when a page is empty.
+- **Ruled out by the trace:**
+  - Tag joining: tags are sent as `%20`, which the API accepts.
+  - Cross-site suggestions: the request held exactly the two typed tags, both valid on this site. Note that the suggestion list does merge this site's autocomplete with tags known from history and favorites on every site.
+- **Fixed:** the page base is detected in Auto-Configure; a list-less answer means 0 results; an empty first page with a match count gets a clear message. All of these are logged.
+- **Owner's adapter:** with the owner's permission, Gelbooru's "First page number" was changed from 1 to 0. Verified: the same search now sends `pid=0` and gets 89,971 bytes of posts. Scrolling past the end gets the empty `pid=1` page, which now ends the list without an error.
+- **Not tested on the phone:** the Auto-Configure page-base probe (the live board needs the owner's key in the wizard).
