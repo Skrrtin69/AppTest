@@ -206,6 +206,11 @@ final class GenericAdapter: SiteAdapter {
             // Many APIs leave the list out entirely when nothing matched (e.g. only a count
             // comes back). With no list of items anywhere in the answer, that's 0 results.
             if Self.hasNoItemList(json) {
+                // The first page is empty although the site says posts match: the adapter is
+                // asking for the second page (pages counted from 1 on a site that counts from 0).
+                if page == 1, let n = Self.reportedCount(json), n > 0 {
+                    throw AppError.message("\(config.displayName) says \(n) posts match, but the first page it sent is empty. This adapter counts pages from \(config.firstPageIndex); the site probably counts from \(config.firstPageIndex - 1). Set \"First page number\" to \(config.firstPageIndex - 1) in Edit Adapter, or run Auto-Configure again.")
+                }
                 return SearchResult(posts: [], hasNextPage: false, currentPage: page, nextCursor: nil)
             }
             throw AppError.pathNotFound(field: "List of results (searchResultsPath)", path: config.searchResultsPath)
@@ -242,6 +247,17 @@ final class GenericAdapter: SiteAdapter {
             if let a = v as? [Any] { return a.isEmpty || !a.contains { $0 is [String: Any] } }
             return hasNoItemList(v, depth: depth + 1)
         }
+    }
+
+    /// A total the answer reports for the whole search ("count", "total"…), if any.
+    static func reportedCount(_ json: Any, depth: Int = 0) -> Int? {
+        guard let d = json as? [String: Any], depth < 3 else { return nil }
+        for k in ["count", "total", "total_count", "totalCount", "post_count", "results"] {
+            if let n = d[k] as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() { return n.intValue }
+            if let t = d[k] as? String, let n = Int(t) { return n }
+        }
+        for v in d.values { if let n = reportedCount(v, depth: depth + 1) { return n } }
+        return nil
     }
 
     func fetchPost(id: String) async throws -> Post {
