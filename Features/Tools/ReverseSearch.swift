@@ -41,8 +41,11 @@ struct ReverseMatch: Identifiable {
     let id = UUID()
     let similarity: Double?
     let thumbnail: URL?
-    let source: URL?
+    /// The link used to open the match (its page, or the post on one of your sites).
+    var source: URL?
     let title: String?
+    /// Every source link the engine gave for this match (e.g. all of ext_urls), in order.
+    var links: [URL] = []
     /// Artist names and the series/work, when the engine's answer has them.
     var creators: [String] = []
     var material: String? = nil
@@ -229,7 +232,9 @@ enum ReverseSearch {
             let thumb = link(engine.thumbnailPath) ?? MatchGuess.thumbnail(node)
             let source = link(engine.sourceURLPath) ?? MatchGuess.source(node, excluding: thumb)
             let title = engine.titlePath?.nonEmpty.flatMap { DottedPath.string($0, in: node) } ?? MatchGuess.title(node)
-            return ReverseMatch(similarity: sim, thumbnail: thumb, source: source, title: title,
+            var links = source.map { [$0] } ?? []
+            for u in MatchGuess.links(node, excluding: thumb) where !links.contains(u) { links.append(u) }
+            return ReverseMatch(similarity: sim, thumbnail: thumb, source: source, title: title, links: links,
                                 creators: MatchGuess.creators(node), material: MatchGuess.material(node))
         }
         .sorted { ($0.similarity ?? 0) > ($1.similarity ?? 0) }
@@ -446,6 +451,15 @@ enum MatchGuess {
         return (named ?? all.first(where: { !$0.0.contains("thumb") })).flatMap { httpURL($0.1) }
     }
 
+    /// Every web link under a key like url/urls/ext_urls/source/link/page (not the thumbnail).
+    static func links(_ node: Any, excluding thumb: URL?) -> [URL] {
+        var out: [URL] = []
+        for (k, v) in pairs(node) where !k.contains("thumb") && ["url", "source", "link", "page"].contains(where: { k.contains($0) }) {
+            if let u = httpURL(v), u != thumb, !out.contains(u) { out.append(u) }
+        }
+        return out
+    }
+
     /// data.creator (text or list), else member/author/artist names.
     static func creators(_ node: Any) -> [String] {
         let p = pairs(node)
@@ -531,7 +545,8 @@ struct ReverseSearchSheet: View {
         }
     }
 
-    func matchSection(_ all: [ReverseMatch]) -> some View {
+    func matchSection(_ found: [ReverseMatch]) -> some View {
+        let all = found.compactMap { $0.preferringYourSites() }
         let m = all.filter { ($0.similarity ?? 100) >= minSimilarity }
         return Section {
             if !all.isEmpty {
@@ -916,5 +931,25 @@ struct ReverseErrorView: View {
                 .accessibilityIdentifier("reverseVerify")
             }
         }
+    }
+}
+
+extension ReverseMatch {
+    /// The match pointed at a link on one of your enabled sites, when it has one: in
+    /// `sites` if given (only those count), otherwise any enabled site. Nil when `sites` is
+    /// given and none of the match's links is on them.
+    @MainActor
+    func preferringYourSites(_ sites: Set<String>? = nil) -> ReverseMatch? {
+        let candidates = links.isEmpty ? (source.map { [$0] } ?? []) : links
+        let mine = candidates.first { u in
+            guard let site = LinkRouter.site(for: u) else { return false }
+            return sites.map { $0.contains(site.id) } ?? true
+        }
+        if let best = mine {
+            var m = self
+            m.source = best
+            return m
+        }
+        return sites == nil ? self : nil
     }
 }

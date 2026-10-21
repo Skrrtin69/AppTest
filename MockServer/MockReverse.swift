@@ -31,11 +31,20 @@ enum MockReverse {
             let n = (abs(seed) + k * 7) % MockCatalog.count + 1
             let item = MockCatalog.items[n - 1]
             // The last match points at a post that no longer exists (dead-link demo).
-            // Odd matches point outside the demo sites, so filtering by site can be seen.
-            let link = k == sims.count - 1 ? "\(origin)/a/view/999" : (k % 2 == 1 ? "https://example.org/posts/\(n)" : "\(origin)/a/view/\(n)")
+            // Links like a real engine's ext_urls: some matches list an outside page first and
+            // the demo site second, some only outside pages, so site filtering and routing to
+            // the right link can be seen. The last one points at a deleted post.
+            let links: [String]
+            switch k {
+            case 0: links = ["\(origin)/a/view/\(n)"]
+            case 1: links = ["https://example.org/posts/\(n)", "https://example.net/art/\(n)", "\(origin)/a/view/\(n)"]
+            case 2: links = ["https://example.net/art/\(n)"]
+            case 3: links = ["https://example.org/posts/\(n)", "https://example.net/art/\(n)"]
+            default: links = ["\(origin)/a/view/999"]
+            }
             return [
                 "header": ["similarity": String(format: "%.1f", sim), "thumbnail": "\(origin)/media/\(item.thumbFile)"],
-                "data": ["title": "Demo post #\(n)", "urls": [link],
+                "data": ["title": "Demo post #\(n)", "urls": links,
                          "creator": [item.tags.first { MockCatalog.colors.contains($0) } ?? "gray"],
                          "material": item.tags.first { MockCatalog.patterns.contains($0) } ?? "grid"],
             ]

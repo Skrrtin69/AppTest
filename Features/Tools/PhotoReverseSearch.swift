@@ -33,11 +33,11 @@ struct PhotoReverseSearchView: View {
     var engine: ReverseEngine? { engines.first { $0.id == engineID } ?? engines.first }
     var sites: [AdapterConfig] { registry.enabledConfigs }
 
-    /// Matches on the chosen sites (all of them with Check All).
+    /// Check All: every match (opening through one of your sites when a match links there).
+    /// Otherwise only matches with at least one link on a chosen site, opening that link.
     var shown: [ReverseMatch] {
         guard let all = matches else { return [] }
-        if allSites { return all }
-        return all.filter { m in m.source.flatMap { LinkRouter.site(for: $0)?.id }.map { selected.contains($0) } ?? false }
+        return all.compactMap { $0.preferringYourSites(allSites ? nil : selected) }
     }
 
     var body: some View {
@@ -263,7 +263,6 @@ private struct SitePickerSheet: View {
                             // Leaving "all" by switching one site off keeps the others on.
                             if allSites { allSites = false; selected = Set(sites.map(\.id)) }
                             if on { selected.insert(c.id) } else { selected.remove(c.id) }
-                            if selected.count == sites.count { allSites = true; selected = [] }
                         }))
                     }
                 }
