@@ -138,6 +138,16 @@ enum MockVault {
     static func legacyBoard(_ name: String, _ sub: String, req: HTTPRequest, origin: String) -> HTTPResponse {
         func tags(_ q: String) -> [(tag: String, count: Int)] { MockCatalog.suggestions(q.lowercased()).map { ($0.tag, $0.count) } }
         switch sub {
+        case "/index.php" where req.query["page"] == "dapi" && name == "lb1":
+            // Like the real board: pid counts from 0, the list is under "post", and an empty
+            // page leaves "post" out entirely (only the count comes back).
+            let all = MockCatalog.search(tagQuery: req.query["tags"] ?? "", sort: nil, rating: nil)
+            let pid = max(0, Int(req.query["pid"] ?? "0") ?? 0)
+            let start = pid * MockCatalog.pageSize
+            let slice = start < all.count ? Array(all[start..<min(all.count, start + MockCatalog.pageSize)]) : []
+            var body: [String: Any] = ["@attributes": ["limit": MockCatalog.pageSize, "count": all.count, "offset": 0]]
+            if !slice.isEmpty { body["post"] = slice.map { MockRoutes.siteAPost($0, origin: origin) } }
+            return .json(body)
         case "/index.php" where req.query["page"] == "dapi":
             return MockRoutes.siteA("/posts.json", req: req, origin: origin)
         case "/index.php" where req.query["page"] == "autocomplete2" && name == "lb1":

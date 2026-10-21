@@ -137,6 +137,10 @@ struct SettingsView: View {
                             Text("\(ReverseEngineStore.shared.engines.filter(\.enabled).count) on").foregroundColor(.secondary) }
                     }
                     .accessibilityIdentifier("reverseSearchSettings")
+                    NavigationLink(destination: PhotoReverseSearchView()) {
+                        Label("Reverse Search Image", systemImage: "photo.on.rectangle.angled")
+                    }
+                    .accessibilityIdentifier("photoReverseSearch")
                     Toggle("Offer to open copied links", isOn: $settings.detectClipboardLinks)
                     NavigationLink(destination: FollowedView()) { Label("Followed Artists", systemImage: "person.badge.plus") }
                         .accessibilityIdentifier("followedArtists")

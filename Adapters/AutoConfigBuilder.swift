@@ -396,6 +396,11 @@ extension AutoConfigurator {
                 : "Each page is an object; its address is under '\(g.urlKey!)'.")
         }
 
+        mutating func useZeroBasedPages(_ reason: String) {
+            config.firstPageIndex = 0
+            set(.firstPageIndex, .high, reason)
+        }
+
         /// Whether the site counts pages from 0 or 1: asks for page 0 and page 1 and compares
         /// the post IDs. Different posts on page 0 mean page 0 is the first page (with 1 it
         /// would be skipped, and searches with fewer results than a page come back empty).

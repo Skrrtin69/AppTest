@@ -202,7 +202,7 @@ struct AutoConfigurator {
         if contentType.contains("text/html") || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<") {
             return .failure(.notJSON(snippet: String(bodyText.prefix(160))))
         }
-        let json: Any
+        var json: Any
         do {
             json = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
         } catch {
@@ -210,6 +210,18 @@ struct AutoConfigurator {
         }
         guard json is [String: Any] || json is [Any] else {
             return .failure(.notJSON(snippet: String(bodyText.prefix(160))))
+        }
+        // The first page came back without results: the site may count pages from 0, so
+        // page "1" was really the second page. Ask for page 0; if it has posts, use them.
+        var zeroBasedCount: Int?
+        if Self.findResultArray(json) == nil, input.urlTemplate.contains("{page}"),
+           let url0 = try? adapter.searchURL(tags: input.sampleTag.split(separator: " ").map(String.init), options: SearchOptions(), page: 0),
+           let (d0, r0) = try? await adapter.fetchRaw(url0), (200...299).contains(r0.statusCode),
+           let j0 = try? JSONSerialization.jsonObject(with: d0, options: [.fragmentsAllowed]),
+           let l0 = Self.findResultArray(j0), let items0 = DottedPath.evaluate(l0.path, in: j0) as? [Any], !items0.isEmpty {
+            DebugLog.log("Probe", "Page 1 had no results; page 0 has \(items0.count), so pages count from 0")
+            json = j0
+            zeroBasedCount = items0.count
         }
         let raw = (try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]))
             .map { String(decoding: $0, as: UTF8.self) } ?? bodyText
@@ -228,7 +240,11 @@ struct AutoConfigurator {
         guard builder.build() else { return .failure(.noMedia(rawJSON: raw)) }
         await builder.chooseMediaBase(adapter: adapter)
         await builder.probeAutocomplete(adapter: adapter)
-        await builder.probeFirstPage(adapter: adapter)
+        if let n = zeroBasedCount {
+            builder.useZeroBasedPages("Page 1 came back without results and page 0 had \(n) posts, so pages are counted from 0.")
+        } else {
+            await builder.probeFirstPage(adapter: adapter)
+        }
         builder.finish()
         return .success(AutoConfigProposal(config: builder.config, guesses: builder.guesses,
                                            sampleNodes: Array(items.prefix(5)), rawJSON: raw,

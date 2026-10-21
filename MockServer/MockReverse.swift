@@ -31,7 +31,8 @@ enum MockReverse {
             let n = (abs(seed) + k * 7) % MockCatalog.count + 1
             let item = MockCatalog.items[n - 1]
             // The last match points at a post that no longer exists (dead-link demo).
-            let link = k == sims.count - 1 ? "\(origin)/a/view/999" : "\(origin)/a/view/\(n)"
+            // Odd matches point outside the demo sites, so filtering by site can be seen.
+            let link = k == sims.count - 1 ? "\(origin)/a/view/999" : (k % 2 == 1 ? "https://example.org/posts/\(n)" : "\(origin)/a/view/\(n)")
             return [
                 "header": ["similarity": String(format: "%.1f", sim), "thumbnail": "\(origin)/media/\(item.thumbFile)"],
                 "data": ["title": "Demo post #\(n)", "urls": [link],

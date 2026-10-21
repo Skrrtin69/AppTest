@@ -143,6 +143,36 @@ enum ReverseSearch {
             req.httpBody = body
             DebugLog.log("Reverse", "upload \(jpeg.count) B as \(field) to \(DebugLog.redact(url))")
         }
+        return try await perform(engine, req)
+    }
+
+    /// Runs one engine for a picture that isn't online (e.g. from the Photo Library): it's
+    /// always uploaded, whatever the engine's mode; any {url} parameter is left out.
+    static func run(_ engine: ReverseEngine, jpeg: Data) async throws -> [ReverseMatch] {
+        let key = await ReverseEngineStore.shared.apiKey(for: engine.id)
+        let template = engine.requestURL.replacingOccurrences(of: "127.0.0.1:\(MockServer.defaultPort)", with: "127.0.0.1:\(MockServer.shared.port)")
+        let url = try requestURL(template, key: key, picture: URL(string: "about:blank")!, upload: true)
+        var req = URLRequest(url: url, timeoutInterval: 90)
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        let field = engine.uploadField?.nonEmpty ?? "file"
+        let boundary = "MediaDeck-\(UUID().uuidString)"
+        var body = Data()
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"\(field)\"; filename=\"image.jpg\"\r\n".utf8))
+        body.append(Data("Content-Type: image/jpeg\r\n\r\n".utf8))
+        body.append(jpeg)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        req.httpMethod = "POST"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.setValue(String(body.count), forHTTPHeaderField: "Content-Length")
+        req.httpBody = body
+        DebugLog.log("Reverse", "upload \(jpeg.count) B (photo) as \(field) to \(DebugLog.redact(url))")
+        return try await perform(engine, req)
+    }
+
+    /// Sends the request and reads the matches out of the engine's answer.
+    private static func perform(_ engine: ReverseEngine, _ req: URLRequest) async throws -> [ReverseMatch] {
+        guard let url = req.url else { throw AppError.message("The engine's request address isn't valid.") }
         let (data, response) = try await uploadSession.data(for: req)
         let http = response as? HTTPURLResponse
         let type = http?.value(forHTTPHeaderField: "Content-Type")
@@ -208,6 +238,24 @@ extension ReverseSearch {
             throw AppError.message("The engine's request address isn't a valid http(s) address.")
         }
         return url
+    }
+
+    /// A JPEG of a picture for uploading: at most 2000 px on the long side, transparency
+    /// flattened onto white.
+    static func uploadJPEG(_ image: UIImage) -> Data? {
+        let maxSide: CGFloat = 2000
+        let size = image.size
+        let scale = min(1, maxSide / max(size.width, size.height, 1))
+        let target = CGSize(width: (size.width * scale).rounded(), height: (size.height * scale).rounded())
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let resized = UIGraphicsImageRenderer(size: target, format: format).image { ctx in
+            UIColor.white.setFill()
+            ctx.fill(CGRect(origin: .zero, size: target))
+            image.draw(in: CGRect(origin: .zero, size: target))
+        }
+        return resized.jpegData(compressionQuality: 0.9)
     }
 
     /// A still JPEG of the post (max 2000 px): the picture itself, the first frame of a GIF,
