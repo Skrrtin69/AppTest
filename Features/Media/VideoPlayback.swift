@@ -131,6 +131,8 @@ struct MediaVideoView: View {
     @State private var webAttempt = 0
     /// The page's player reported an error (decoder, network): shown at once, no waiting.
     @State private var webError: String?
+    /// Which video (address + attempt) webReady / webError belong to.
+    @State private var watchedKey: String?
     @ObservedObject private var network = NetworkSpeed.shared
 
     var body: some View {
@@ -207,11 +209,17 @@ struct MediaVideoView: View {
     }
 
     func watchStart() async {
-        // The pager re-runs this task (onAppear) for pages that never left while you swipe.
-        // A video that already started, or already showed its error, keeps that state:
-        // resetting it would leave "Loading video..." over a playing video (the player
-        // reports "ready" once), then the timeout card. Retry resets it.
-        if webReady || webError != nil { return }
+        // The pager re-runs this task (onAppear) for pages that never left while you swipe,
+        // and can hand this view's state to another post. A video that already started, or
+        // already showed its error, keeps that state (resetting it left "Loading video..."
+        // over a playing video, then the timeout card); a different video or a Retry starts over.
+        let key = "\(url.absoluteString)#\(webAttempt)"
+        if watchedKey == key, webReady || webError != nil { return }
+        if watchedKey != key {
+            watchedKey = key
+            webReady = false
+            webError = nil
+        }
         webTimedOut = false
         let limit = network.videoTimeout
         try? await Task.sleep(nanoseconds: UInt64(limit * 1_000_000_000))
@@ -231,12 +239,7 @@ extension MediaVideoView {
             Text(message).font(.subheadline).multilineTextAlignment(.center)
                 .accessibilityIdentifier("webVideoError")
             HStack(spacing: 10) {
-                Button {
-                    webReady = false
-                    webError = nil
-                    webTimedOut = false
-                    webAttempt += 1
-                } label: { Label("Retry", systemImage: "arrow.clockwise") }
+                Button { webAttempt += 1 } label: { Label("Retry", systemImage: "arrow.clockwise") }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("webVideoRetry")
                 if !url.isFileURL {

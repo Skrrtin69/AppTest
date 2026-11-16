@@ -146,7 +146,17 @@ private struct VLCSurface: UIViewRepresentable {
     }
 
     func updateUIView(_ v: UIView, context: Context) {
-        context.coordinator.host?.rootView = controls
+        let c = context.coordinator
+        c.host?.rootView = controls
+        // The pager can hand this view to another page (another player) without making a
+        // new one. Move the view to that player; otherwise the old player keeps drawing
+        // here (wrong video, or sound over black) and the new one never starts.
+        if c.model !== model, let video = c.video {
+            c.model?.surfaceGone(video)
+            c.model = model
+            DebugLog.log("VLC", "Video surface handed to another post")
+            model.load(url, into: video)
+        }
     }
 }
 
@@ -253,6 +263,9 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     func surfaceGone(_ view: UIView) {
         guard loaded, surface == nil || surface === view else { return }
         close("surface removed")
+        // Never reopen into a view that left the screen (it may still be alive, waiting
+        // for reuse): wait for load(_:into:) to bring a surface.
+        surface = nil
     }
 
     /// The current post plays; the others pause (their streams stay open, so going back is
