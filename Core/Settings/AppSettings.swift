@@ -167,7 +167,7 @@ final class AppSettings: ObservableObject {
     @Published var twoPageLandscape: Bool = true { didSet { d.set(twoPageLandscape, forKey: K.twoPageLandscape) } }
     /// Viewer gestures: what a double tap / swipe up / swipe down does.
     @Published var doubleTapAction: String = "zoom" { didSet { d.set(doubleTapAction, forKey: K.doubleTapAction) } }
-    @Published var swipeUpAction: String = "hide" { didSet { d.set(swipeUpAction, forKey: K.swipeUpAction) } }
+    @Published var swipeUpAction: String = "info" { didSet { d.set(swipeUpAction, forKey: K.swipeUpAction) } }
     @Published var swipeDownAction: String = "close" { didSet { d.set(swipeDownAction, forKey: K.swipeDownAction) } }
 
     var mediaWaitsForWiFi: Bool { wifiOnlyMedia && NetworkStatus.shared.onMeteredData }
@@ -268,7 +268,7 @@ final class AppSettings: ObservableObject {
         panicGesture = d.string(forKey: K.panicGesture) ?? "off"
         panicAction = d.string(forKey: K.panicAction) ?? "blur"
         doubleTapAction = d.string(forKey: K.doubleTapAction) ?? "zoom"
-        swipeUpAction = d.string(forKey: K.swipeUpAction) ?? "hide"
+        swipeUpAction = d.string(forKey: K.swipeUpAction) ?? "info"
         swipeDownAction = d.string(forKey: K.swipeDownAction) ?? "close"
     }
 

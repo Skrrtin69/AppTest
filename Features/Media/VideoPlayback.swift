@@ -133,6 +133,8 @@ struct MediaVideoView: View {
     @State private var webError: String?
     /// Which video (address + attempt) webReady / webError belong to.
     @State private var watchedKey: String?
+    /// The video that already had its one silent retry.
+    @State private var autoRetried: URL?
     @ObservedObject private var network = NetworkSpeed.shared
 
     var body: some View {
@@ -141,7 +143,7 @@ struct MediaVideoView: View {
             case .none:
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             case .some(.native):
-                NativeVideoView(url: nativeURL ?? url, isActive: isActive, showControls: showControls, onFinished: onFinished, onTap: onTap) {
+                NativeVideoView(url: nativeURL ?? url, resumeKey: url, isActive: isActive, showControls: showControls, onFinished: onFinished, onTap: onTap) {
                     Task {
                         await PlaybackRouter.shared.markFailed(url)
                         path = .web
@@ -151,7 +153,7 @@ struct MediaVideoView: View {
                 VLCVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
                              loop: !settings.autoAdvance, showControls: showControls, onFinished: onFinished, onTap: onTap,
                              onReady: { webReady = true; webError = nil },
-                             onError: { webError = $0 }, onStatus: { engine = $0 })
+                             onError: { reportError($0) }, onStatus: { engine = $0 })
                     .id(webAttempt)
                     .overlay { loadingOverlay }
                     .task(id: "\(url.absoluteString)#\(webAttempt)") { await watchStart() }
@@ -159,7 +161,7 @@ struct MediaVideoView: View {
                 WebVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
                              loop: !settings.autoAdvance, onFinished: onFinished,
                              onReady: { webReady = true; webError = nil },
-                             onError: { webError = $0 }) { engine = $0 }
+                             onError: { reportError($0) }) { engine = $0 }
                     .id(webAttempt)
                     .overlay(alignment: .bottomTrailing) {
                         if showControls { SpeedButton().padding(.trailing, 70).padding(.bottom, 145) }
@@ -194,11 +196,14 @@ struct MediaVideoView: View {
                             } else {
                                 ZStack {
                                     Color.black.opacity(0.35)
-                                    ProgressView("Loading video...")
-                                        .progressViewStyle(.circular)
-                                        .tint(.white)
-                                        .foregroundColor(.white)
-                                        .font(.subheadline)
+                                    VStack(spacing: 6) {
+                                        ProgressView("Loading video...")
+                                            .progressViewStyle(.circular)
+                                            .tint(.white)
+                                            .foregroundColor(.white)
+                                            .font(.subheadline)
+                                        LoadingProgressText(url: url)
+                                    }
                                         .padding(18)
                                         .background(RoundedRectangle(cornerRadius: 14).fill(Color.black.opacity(0.6)))
                                 }
@@ -206,6 +211,18 @@ struct MediaVideoView: View {
                                 .accessibilityIdentifier("webVideoLoading")
                             }
                         }
+    }
+
+    /// Many failures are a dropped connection: the first error for a video retries once
+    /// without showing anything; a second one shows the card.
+    func reportError(_ message: String) {
+        if autoRetried != url {
+            autoRetried = url
+            DebugLog.log("Video", "Error (\(message)): retrying once before showing it")
+            webAttempt += 1
+        } else {
+            webError = message
+        }
     }
 
     func watchStart() async {
@@ -287,16 +304,32 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
     var onFinished: (() -> Void)?
     /// Whether this video's page is the one on screen (kept current by the view).
     var isActivePage = false
+    /// The post's own address: the key for the saved playback spot.
+    let resumeKey: URL
+    /// Picked up from a saved spot; announced once when playback starts.
+    private var resumedFrom: Double?
+    /// Touch-and-hold 2×: whether it was playing before, to go back to that on release.
+    private var playingBeforeHold = false
+    private var holding = false
+    /// The layer Picture in Picture is tied to (the view can be rebuilt with a new layer).
+    private weak var pipLayer: AVPlayerLayer?
 
-    init(url: URL) {
+    init(url: URL, resumeKey: URL? = nil) {
+        self.resumeKey = resumeKey ?? url
         let item = AVPlayerItem(asset: AVURLAsset.withSiteHeaders(url))
         player = AVPlayer(playerItem: item)
         super.init()
         player.isMuted = AppSettings.shared.startMuted
+        if let t = VideoResumeStore.shared.position(for: self.resumeKey) {
+            resumedFrom = t
+            current = t
+            player.seek(to: CMTime(seconds: t, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        }
         // Loop by default.
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 guard let self = self else { return }
+                VideoResumeStore.shared.clear(self.resumeKey)
                 if AppSettings.shared.autoAdvance, let done = self.onFinished {
                     done()          // auto-advance: the viewer moves to the next post
                 } else {
@@ -308,8 +341,10 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] t in
             Task { @MainActor in
                 guard let self = self, !self.isScrubbing else { return }
-                self.current = t.seconds.isFinite ? t.seconds : 0
-                if let d = self.player.currentItem?.duration.seconds, d.isFinite { self.duration = d }
+                let now = t.seconds.isFinite ? t.seconds : 0
+                if now != self.current { self.current = now }
+                if let d = self.player.currentItem?.duration.seconds, d.isFinite, d != self.duration { self.duration = d }
+                if self.isPlaying { VideoResumeStore.shared.save(now, duration: self.duration, for: self.resumeKey) }
             }
         }
         statusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
@@ -323,7 +358,10 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
 
     /// Called once the video's layer exists.
     func attach(layer: AVPlayerLayer) {
-        guard pip == nil, AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        // Already tied to this layer, or floating right now: keep it.
+        if pip != nil && (pipLayer === layer || pipActive) { return }
+        pipLayer = layer
         let c = AVPictureInPictureController(playerLayer: layer)
         c?.delegate = self
         // Going to the Home Screen while a video plays continues it in a floating window.
@@ -356,6 +394,13 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         Task { @MainActor in self.pipActive = true; VideoController.floating = self }
     }
 
+    /// The floating window's "back to the app" button. Without this the button does nothing.
+    /// The video's page is still on screen (or was closed, in which case PiP just ends).
+    nonisolated func pictureInPictureController(_ c: AVPictureInPictureController,
+                                                restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void) {
+        completionHandler(true)
+    }
+
     nonisolated func pictureInPictureControllerDidStopPictureInPicture(_ c: AVPictureInPictureController) {
         Task { @MainActor in
             self.pipActive = false
@@ -369,6 +414,7 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
 
     /// Called when the view goes away; removes observers so the player can be released.
     func teardown() {
+        if duration > 0 { VideoResumeStore.shared.save(player.currentTime().seconds, duration: duration, for: resumeKey, force: true) }
         player.pause()
         if let t = timeObserver { player.removeTimeObserver(t); timeObserver = nil }
         if let e = endObserver { NotificationCenter.default.removeObserver(e); endObserver = nil }
@@ -379,10 +425,44 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
     func play() {
         player.rate = Float(AppSettings.shared.playbackSpeed)
         isPlaying = true
+        if let r = resumedFrom {
+            resumedFrom = nil
+            ToastCenter.shared.show("Resumed at \(VideoResumeStore.format(r))", actionTitle: "Start Over") { [weak self] in
+                self?.current = 0
+                self?.seek(to: 0)
+                if let k = self?.resumeKey { VideoResumeStore.shared.clear(k) }
+            }
+        }
+    }
+
+    /// Double tap on a side: back or forward by `seconds`, kept inside the video.
+    func skip(by seconds: Double) {
+        var t = player.currentTime().seconds
+        if !t.isFinite { t = current }
+        t += seconds
+        if duration > 0 { t = min(t, duration - 0.25) }
+        t = max(0, t)
+        current = t
+        seek(to: t)
+    }
+
+    /// Touch and hold: 2× while held, then back to how it was.
+    func hold(_ on: Bool) {
+        guard on != holding else { return }
+        holding = on
+        if on {
+            playingBeforeHold = isPlaying
+            player.rate = 2
+            isPlaying = true
+        } else if playingBeforeHold {
+            player.rate = Float(AppSettings.shared.playbackSpeed)
+        } else {
+            pause()
+        }
     }
 
     func applySpeed() {
-        if isPlaying { player.rate = Float(AppSettings.shared.playbackSpeed) }
+        if isPlaying, !holding { player.rate = Float(AppSettings.shared.playbackSpeed) }
     }
     func pause() { player.pause(); isPlaying = false }
     func toggle() { isPlaying ? pause() : play() }
@@ -394,6 +474,8 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
 
 struct NativeVideoView: View {
     let url: URL
+    /// The post's own address (the key for the saved playback spot).
+    var resumeKey: URL? = nil
     let isActive: Bool
     var showControls: Bool = true
     var onFinished: (() -> Void)? = nil
@@ -402,9 +484,21 @@ struct NativeVideoView: View {
 
     @StateObject private var holder = ControllerHolder()
 
+    /// Owns the player for as long as the page exists. The pager fires onDisappear for
+    /// pages that aren't really leaving, so the player is released here, when SwiftUI drops
+    /// the page, not on onDisappear (which restarted the video from the beginning).
     final class ControllerHolder: ObservableObject {
         @Published var controller: VideoController?
+        deinit {
+            guard let c = controller else { return }
+            Task { @MainActor in
+                // A video in Picture in Picture keeps playing after the viewer closes.
+                if c.pipActive { c.viewGone = true } else { c.teardown() }
+            }
+        }
     }
+
+    private var key: URL { resumeKey ?? url }
 
     var body: some View {
         ZStack {
@@ -414,21 +508,21 @@ struct NativeVideoView: View {
                 Color.black
             }
         }
-        .onAppear {
-            if holder.controller == nil { holder.controller = VideoController(url: url) }
-            if let c = holder.controller {
-                c.isActivePage = isActive
-                c.onFinished = { [weak c] in if c?.isActivePage == true { onFinished?() } }
-            }
-        }
-        .onDisappear {
-            // A video in Picture in Picture keeps playing after the viewer closes.
-            if let c = holder.controller, c.pipActive {
-                c.viewGone = true
-            } else {
-                holder.controller?.teardown()
-            }
+        .onAppear(perform: prepare)
+        .onChange(of: key) { _ in prepare() }
+    }
+
+    /// Makes the player if there isn't one for this post. (The pager can hand this view's
+    /// state to another post: a player for a different video is replaced.)
+    private func prepare() {
+        if let c = holder.controller, c.resumeKey != key {
+            if c.pipActive { c.viewGone = true } else { c.teardown() }
             holder.controller = nil
+        }
+        if holder.controller == nil { holder.controller = VideoController(url: url, resumeKey: key) }
+        if let c = holder.controller {
+            c.isActivePage = isActive
+            c.onFinished = { [weak c] in if c?.isActivePage == true { onFinished?() } }
         }
     }
 }
@@ -444,11 +538,11 @@ private struct NativeVideoContent: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             PlayerLayerView(player: controller.player, onLayer: { controller.attach(layer: $0) })
-                .contentShape(Rectangle())
-                // A tap shows or hides the controls; pausing is the Pause button's job.
-                .onTapGesture { onTap?() }
                 .accessibilityIdentifier("videoSurface")
-                .accessibilityLabel(controller.isPlaying ? "Video playing, tap for controls" : "Video paused, tap for controls")
+            // A tap shows or hides the controls (pausing is the Pause button's job); double tap
+            // a side to skip 10 s; touch and hold for 2×.
+            VideoGestureLayer(isPlaying: controller.isPlaying, onTap: { onTap?() },
+                              onSkip: { controller.skip(by: $0) }, onHold: { controller.hold($0) })
             if !controller.isPlaying {
                 Image(systemName: "play.circle.fill").font(.system(size: 64)).foregroundColor(.white.opacity(0.85))
                     .allowsHitTesting(false)

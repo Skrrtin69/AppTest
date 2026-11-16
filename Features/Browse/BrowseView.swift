@@ -471,12 +471,15 @@ struct SearchTabView: View {
             } else {
                 ScrollViewReader { proxy in
                 ScrollView {
-                    // Lazy, so the marker disappears once scrolled well past: that's when the
-                    // floating "back to top" button shows.
-                    LazyVStack(spacing: 0) {
+                    // A plain VStack: the grid inside is already lazy. A LazyVStack around it
+                    // treated the whole grid as one huge row and re-estimated its height while
+                    // scrolling back up from the bottom, which threw the list back toward the top.
+                    // The "back to top" button follows the scroll offset instead.
+                    VStack(spacing: 0) {
                     Color.clear.frame(height: 1).id("gridTop")
-                        .onAppear { withAnimation(.easeInOut(duration: 0.2)) { showTopButton = false } }
-                        .onDisappear { withAnimation(.easeInOut(duration: 0.2)) { showTopButton = true } }
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: GridTopOffsetKey.self, value: g.frame(in: .named("searchScroll")).minY)
+                        })
                     PostGrid(posts: visible, selecting: tab.selecting, selected: tab.selected, showSource: tab.isMerged,
                              onTap: { i in
                                  if tab.selecting { tab.toggleSelect(visible[i]) } else { Haptics.tap(); onOpen(visible, i) }
@@ -487,6 +490,12 @@ struct SearchTabView: View {
                         footer
                     }
                     }
+                }
+                .coordinateSpace(name: "searchScroll")
+                .onPreferenceChange(GridTopOffsetKey.self) { y in
+                    // About two screens down; only a change redraws.
+                    let show = y < -1200
+                    if show != showTopButton { withAnimation(.easeInOut(duration: 0.2)) { showTopButton = show } }
                 }
                 .refreshable { await tab.refresh() }
                 .onChange(of: tab.scrollToTopToken) { _ in withAnimation { proxy.scrollTo("gridTop", anchor: .top) } }
@@ -720,3 +729,9 @@ struct SearchHistorySheet: View {
     }
 }
 
+
+/// Where the top of a search grid is, relative to its scroll view (negative = scrolled down).
+private struct GridTopOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}

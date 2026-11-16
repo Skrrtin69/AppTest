@@ -329,11 +329,13 @@ private final class ProxyStreamer: NSObject, URLSessionDataDelegate {
             return
         }
         DebugLog.log("Proxy", "206 headers after \(Int(Date().timeIntervalSince(started) * 1000)) ms · \(headers["Content-Range"] ?? "")")
+        ProxyProgress.shared.began(url, contentRange: headers["Content-Range"])
         completionHandler(.allow)
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         sent += data.count
+        ProxyProgress.shared.received(url, bytes: data.count)
         conn.send(content: data, completion: .contentProcessed { [weak dataTask] error in
             // The player closed the connection (seek, next video): stop downloading.
             if error != nil { dataTask?.cancel() }

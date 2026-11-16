@@ -98,8 +98,9 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("doubleTapPicker")
                     Picker("Swipe up on a post", selection: $settings.swipeUpAction) {
-                        Text("Hide posts like this").tag("hide"); Text("Info").tag("info"); Text("Favorite").tag("favorite")
-                        Text("Download").tag("download"); Text("Read Later").tag("readLater"); Text("Nothing").tag("none")
+                        Text("Info").tag("info"); Text("Hide posts like this").tag("hide"); Text("Favorite").tag("favorite")
+                        Text("Download").tag("download"); Text("Download on Wi-Fi").tag("wifiDownload")
+                        Text("Read Later").tag("readLater"); Text("Nothing").tag("none")
                     }
                     .accessibilityIdentifier("swipeUpPicker")
                     Picker("Swipe down", selection: $settings.swipeDownAction) {

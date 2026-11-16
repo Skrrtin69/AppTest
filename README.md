@@ -306,6 +306,16 @@ Failures are explained in plain English with one next step: bad address, unreach
 - **What's inside a .webm:** the first 64 KB are read before choosing a player. An MP4 that is only *named* .webm plays in AVPlayer (through the local server under a .mp4 name). H.264/HEVC inside Matroska can't be decoded by ogv.js; that needs VLCKit.
 - **Tapping a video** shows or hides the controls (in the built-in player and in VLCKit); it never pauses. Pause with the Pause button on the control bar. The bar sits above the viewer's bottom toolbar and the home indicator. (The web player, used only when VLCKit is off, still pauses on tap: its WebAssembly decoder has no control bar.)
 - **Leaving the app mid-video (VLCKit):** the stream is closed when the app goes to the background, because iOS closes the local server's connections anyway. On return it reopens at the same time and plays on if it was playing. If it was paused, it shows the paused frame.
+- **Video gestures (built-in player and VLCKit):**
+  - **Double-tap the left or right third** to go back or forward 10 s. Double taps in a row add up (the bubble shows 10 s, 20 s…). A double tap in the middle third shows or hides the controls, like a single tap.
+  - **Touch and hold** to play at 2× while your finger is down. Letting go returns to the chosen speed (and pauses again if the video was paused).
+  - A single tap now waits about a quarter of a second to make sure it isn't a double tap.
+- **Resume where you left off:** videos of a minute or more remember where you stopped (the last 300 videos). Reopening one continues there, with a **Start Over** button in the message. The spot is forgotten when a video plays to the end, or within 5 s of either end.
+- **Silent retry:** when a web or VLC video fails, it's retried once without showing anything. The Retry / Open in Safari card only appears if the retry fails too.
+- **Loading progress:** under "Loading video..." the web player and VLCKit show how much has come in, e.g. **4.2 MB of 47 MB**.
+- **On mobile data with "Full-size media only on Wi-Fi":** the play button shows the file size (**Play on Mobile Data · 47 MB**). If the site has a smaller video version, **Play Lighter Version · 8 MB** plays that instead.
+- **Picture in Picture** works in the built-in player (MP4 and other formats AVPlayer plays). The floating window's "back to the app" button returns to the viewer. VLCKit and the web player (WebM) have no Picture in Picture.
+- **Paging between videos (VLCKit):** the viewer's pager reuses and rebuilds video views while you swipe. Each VLC player follows the view it draws into, plays only on the current post and pauses on the others, so going back to a video no longer leaves "Loading video...", an error card, or sound over a black screen.
 - **Use VLCKit for Video (Faster, Larger App):** Settings › Reading & Viewer, on by default (turn it off to use the web player). WebM and MKV then play in VLCKit (native ARM code, several threads) instead of the web player. VLCKit is in every copy of the app (about 39 MB), so the switch only picks the player. VLC decodes in software: iOS doesn't let apps use a hardware VP9 decoder.
 
 ## Cloudflare and other ways sites ask for keys
@@ -391,7 +401,8 @@ Settings › Tools › **Reverse Search Image**:
 - **Copied links:** copy a link to a post or search on one of your sites, come back to MediaDeck, and tap **Open** on the message.
 - **Picture-color background:** the viewer's background button now also cycles to a dark version of each picture's main color.
 - **Data Saver** (Settings › Battery and data): pictures open in their smaller version first, with a **Load Full Resolution** button. Choose Off, On mobile data, or Always.
-- **Swipe up on a post** (or ⋯ › Hide Posts Like This) to hide every post with one of its tags, or mute its uploader. Each one can be undone from the message.
+- **Hide posts like this** (⋯ › Hide Posts Like This, or swipe up if you choose that gesture in Settings › Reading) hides every post with one of its tags, or mutes its uploader. Each one can be undone from the message. Swipe up now opens Info by default.
+- **Download on Wi-Fi** (⋯ in the viewer, or as the swipe-up gesture): on mobile data the post waits in Library › Downloads › *Waiting for Wi-Fi* and starts by itself the next time MediaDeck is open on Wi-Fi. On Wi-Fi it downloads right away.
 - **Mute uploaders:** the Info panel shows the uploader with a Mute button when the adapter maps one. Add `"uploader": "<path>"` to `metadataPaths`; Auto-Configure does this when it sees a field like `uploader` or `author`. Muted uploaders appear in the Tag Blacklist as `uploader:name`.
 
 **Privacy and management (Phase 13)**
@@ -422,7 +433,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Smart square thumbnails** (Settings › Appearance, on by default): square thumbnails are cropped around the most eye-catching part of the picture instead of always the middle. The analysis runs on the phone in the background, and each result is remembered.
 - **Smart collections** (Favorites › Collections › New Smart Collection): rules such as has all / any / none of some tags, from certain sites, of a type, by an uploader, or added recently. Matching favorites appear by themselves.
 - **Suggestions everywhere:** while typing, suggestions come from the site (every site in an All Sites tab) plus tags already on your phone: favorites, Read Later, open results, history and your translations.
-- **Gestures** (Settings › Reading): choose what a double tap (Zoom, Favorite, Info, Next post, Read Later, Nothing), a swipe up (Hide posts like this, Info, Favorite, Download, Read Later, Nothing) and a swipe down (Close / Nothing) do.
+- **Gestures** (Settings › Reading): choose what a double tap (Zoom, Favorite, Info, Next post, Read Later, Nothing), a swipe up (Info — the default — Hide posts like this, Favorite, Download, Download on Wi-Fi, Read Later, Nothing) and a swipe down (Close / Nothing) do.
 - **Edit Picture** (viewer ⋯): rotate, flip, crop to 1:1 / 4:5 / 16:9, plus brightness, contrast and saturation. Share the result, or save it to Photos or Files. The original is never changed.
 
 **On-device intelligence and background work (Phase 17)**

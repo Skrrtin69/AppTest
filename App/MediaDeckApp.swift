@@ -75,6 +75,8 @@ final class BootModel: ObservableObject {
         }
         AdapterRegistry.shared.bootstrap()
         DownloadManager.shared.bootstrap()
+        // Posts saved for Wi-Fi start downloading once the phone is on Wi-Fi.
+        WifiDownloadQueue.shared.start()
         BrowseModel.shared.ensureTab()
         AppRouter.shared.markReady()
         ready = true

@@ -9,13 +9,25 @@ final class NetworkStatus {
     private(set) var isCellular = false
     private(set) var isExpensive = false
 
+    /// Posted on the main queue when the connection switches between metered and not.
+    static let changed = Notification.Name("MediaDeckNetworkStatusChanged")
+
     private init() {
         monitor.pathUpdateHandler = { [weak self] path in
-            self?.isCellular = path.usesInterfaceType(.cellular) && !path.usesInterfaceType(.wifi)
-            self?.isExpensive = path.isExpensive
+            guard let self = self else { return }
+            let wasMetered = self.onMeteredData
+            self.isCellular = path.usesInterfaceType(.cellular) && !path.usesInterfaceType(.wifi)
+            self.isExpensive = path.isExpensive
+            // Also on the first answer, so anything waiting for Wi-Fi can start at launch.
+            if wasMetered != self.onMeteredData || !self.reported {
+                self.reported = true
+                DispatchQueue.main.async { NotificationCenter.default.post(name: Self.changed, object: nil) }
+            }
         }
         monitor.start(queue: DispatchQueue(label: "network.status"))
     }
+
+    private var reported = false
 
     /// True when downloads would use mobile data (or a metered hotspot).
     var onMeteredData: Bool { isCellular || isExpensive }

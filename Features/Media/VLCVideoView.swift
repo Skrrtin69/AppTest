@@ -34,7 +34,7 @@ struct VLCVideoView: View {
     var body: some View {
         // The controls live inside the same UIKit container, above VLC's drawing view:
         // VLC's video output draws over SwiftUI views placed next to it.
-        VLCSurface(model: model, url: Self.sourceURL(url, siteID: siteID),
+        VLCSurface(model: model, url: Self.sourceURL(url, siteID: siteID), resumeKey: url,
                    controls: VLCControls(model: model, showControls: showControls, onTap: onTap))
         // Playback follows isActive only. The pager fires onAppear/onDisappear for pages
         // that aren't really coming or going while you swipe, so they don't open or close
@@ -75,11 +75,10 @@ private struct VLCControls: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // A tap shows or hides the controls; pausing is the Pause button's job.
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture { onTap?() }
-                .accessibilityLabel(model.isPlaying ? "Video playing, tap for controls" : "Video paused, tap for controls")
+            // A tap shows or hides the controls (pausing is the Pause button's job); double tap
+            // a side to skip 10 s; touch and hold for 2×.
+            VideoGestureLayer(isPlaying: model.isPlaying, onTap: { onTap?() },
+                              onSkip: { model.skip(by: $0) }, onHold: { model.hold($0) })
             if model.started, !model.isPlaying {
                 Image(systemName: "play.circle.fill").font(.system(size: 64)).foregroundColor(.white.opacity(0.85))
                     .allowsHitTesting(false)
@@ -111,6 +110,8 @@ private struct VLCControls: View {
 private struct VLCSurface: UIViewRepresentable {
     let model: VLCPlayerModel
     let url: URL
+    /// The post's own address (the key for the saved playback spot).
+    let resumeKey: URL
     let controls: VLCControls
 
     final class Coordinator {
@@ -141,6 +142,7 @@ private struct VLCSurface: UIViewRepresentable {
         context.coordinator.host = host
         context.coordinator.model = model
         context.coordinator.video = video
+        model.resumeKey = resumeKey
         model.load(url, into: video)
         return container
     }
@@ -155,6 +157,7 @@ private struct VLCSurface: UIViewRepresentable {
             c.model?.surfaceGone(video)
             c.model = model
             DebugLog.log("VLC", "Video surface handed to another post")
+            model.resumeKey = resumeKey
             model.load(url, into: video)
         }
     }
@@ -195,6 +198,13 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     /// When the app last stopped the stream itself: VLC can report that stop as an error
     /// a moment later, which must not show the error card.
     private var lastStop: Date?
+    /// The post's own address: the key for the saved playback spot.
+    var resumeKey: URL?
+    /// Picked up from a saved spot; announced once when playback starts.
+    private var resumedFrom: Double?
+    /// Touch-and-hold 2×.
+    private var holding = false
+    private var playingBeforeHold = false
     /// Reopened while not playing: play to the first frame (muted), then pause on it.
     private var pauseOnStart = false
     private var mutedBeforePeek = false
@@ -248,7 +258,11 @@ final class VLCPlayerModel: NSObject, ObservableObject {
             firstURL = url
             player.delegate = self
             player.drawable = view
-            player.media = Self.media(url, startMs: 0)
+            if let k = resumeKey, let t = VideoResumeStore.shared.position(for: k) {
+                resumedFrom = t
+                resumeAtMs = Int32(t * 1000)
+            }
+            player.media = Self.media(url, startMs: resumeAtMs)
             if AppSettings.shared.startMuted { player.audio?.isMuted = true }
             if active { start() }
             return
@@ -291,6 +305,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         guard loaded, !closed else { return }
         let t = player.time.intValue
         if t > 0 { resumeAtMs = t }
+        saveSpot(force: true)
         endPeek()
         closed = true
         readySent = false
@@ -336,7 +351,44 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         player.position = p
     }
 
-    func setRate(_ r: Double) { player.rate = Float(r) }
+    func setRate(_ r: Double) {
+        guard !holding else { return }
+        player.rate = Float(r)
+    }
+
+    /// Double tap on a side: back or forward by `seconds`.
+    func skip(by seconds: Double) {
+        guard loaded, !closed else { return }
+        let lengthMs = player.media?.length.intValue ?? 0
+        var target = Double(player.time.intValue) + seconds * 1000
+        if lengthMs > 0 { target = min(target, Double(lengthMs) - 250) }
+        target = max(0, target)
+        player.time = VLCTime(int: Int32(target))
+        if lengthMs > 0 { position = Float(target / Double(lengthMs)) }
+    }
+
+    /// Touch and hold: 2× while held, then back to how it was.
+    func hold(_ on: Bool) {
+        guard loaded, !closed, on != holding else { return }
+        holding = on
+        if on {
+            playingBeforeHold = player.isPlaying
+            endPeek()
+            player.rate = 2
+            if !player.isPlaying { player.play() }
+        } else {
+            player.rate = Float(AppSettings.shared.playbackSpeed)
+            if !playingBeforeHold { player.pause() }
+        }
+    }
+
+    /// Remembers where this video is (long videos only; see VideoResumeStore).
+    fileprivate func saveSpot(force: Bool = false) {
+        guard let k = resumeKey, let length = player.media?.length.intValue, length > 0 else { return }
+        let now = Double(player.time.intValue) / 1000
+        guard now > 0 else { return }
+        VideoResumeStore.shared.save(now, duration: Double(length) / 1000, for: k, force: force)
+    }
 
     /// Control Center, a notification, the app switcher: pause, remember to carry on.
     func pauseForInactive() {
@@ -369,8 +421,19 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     }
 
     private func releasePlayer() {
+        if loaded, !closed { saveSpot(force: true) }
         player.delegate = nil
         player.stop()
+    }
+
+    fileprivate func announceResume() {
+        guard let r = resumedFrom else { return }
+        resumedFrom = nil
+        ToastCenter.shared.show("Resumed at \(VideoResumeStore.format(r))", actionTitle: "Start Over") { [weak self] in
+            guard let self = self else { return }
+            if let k = self.resumeKey { VideoResumeStore.shared.clear(k) }
+            self.seek(to: 0)
+        }
     }
     #else
     func pauseForInactive() {}
@@ -382,6 +445,10 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     func togglePause() {}
     func seek(to p: Float) {}
     func setRate(_ r: Double) {}
+    func skip(by seconds: Double) {}
+    func hold(_ on: Bool) {}
+    fileprivate func saveSpot(force: Bool = false) {}
+    fileprivate func announceResume() {}
     private func releasePlayer() {}
     #endif
 
@@ -393,6 +460,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         DebugLog.log("VLC", "Playing after \(ms) ms")
         onStatus?("VLCKit (native decoder)")
         onReady?()
+        if active { announceResume() }
     }
 }
 
@@ -417,6 +485,7 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
                 readySent = false
                 onError?("VLC couldn't play this video.")
             case .ended:
+                if let k = resumeKey { VideoResumeStore.shared.clear(k) }
                 if loop {
                     lastStop = Date()
                     player.stop()
@@ -442,10 +511,13 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
                 player.pause()
                 endPeek()
             }
-            position = p
-            duration = length
-            isPlaying = player.isPlaying
-            timeText = Self.format(now) + " / " + Self.format(length)
+            // Only publish what changed: each change redraws the controls.
+            if position != p { position = p }
+            if duration != length { duration = length }
+            if isPlaying != player.isPlaying { isPlaying = player.isPlaying }
+            let text = Self.format(now) + " / " + Self.format(length)
+            if timeText != text { timeText = text }
+            if player.isPlaying { saveSpot() }
         }
     }
 

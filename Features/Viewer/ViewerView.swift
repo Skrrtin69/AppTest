@@ -409,6 +409,7 @@ struct ViewerView: View {
         case "favorite": store.toggleFavorite(p); Haptics.tap()
         case "download": Task { await DownloadManager.shared.enqueue([p]) }; ToastCenter.shared.show("Downloading")
         case "readLater": ReadLaterStore.shared.toggle(p)
+        case "wifiDownload": WifiDownloadQueue.shared.add([p])
         case "next": advance()
         case "close": dismiss()
         default: break
@@ -469,6 +470,12 @@ struct ViewerView: View {
                             label: { Label("Copy Source URL", systemImage: "link") }
                         Button { UIApplication.shared.open(s) } label: { Label("Open Source", systemImage: "safari") }
                     }
+                    if !isLocal {
+                        Button { WifiDownloadQueue.shared.add([p]) } label: {
+                            Label(WifiDownloadQueue.shared.contains(p) ? "Waiting for Wi-Fi" : "Download on Wi-Fi", systemImage: "wifi")
+                        }
+                        .disabled(WifiDownloadQueue.shared.contains(p))
+                    }
                     Divider()
                     Button { ReadLaterStore.shared.toggle(p) } label: {
                         ReadLaterStore.shared.contains(p) ? Label("Remove from Read Later", systemImage: "bookmark.slash")
@@ -526,6 +533,17 @@ struct ViewerPage: View {
 
     @ObservedObject private var settings = AppSettings.shared
     @State private var videoAllowed = false
+    /// Chosen on the mobile-data screen: play the site's smaller video instead.
+    @State private var lighterVideo: URL?
+    @State private var fullSize: Int64?
+    @State private var lighterSize: Int64?
+
+    /// The site's smaller version, when it is a video too (some sites give a still there).
+    var lighterVideoURL: URL? {
+        guard let s = post.sampleURL, s != post.mediaURL,
+              ["mp4", "webm", "mov", "m4v", "m3u8"].contains(s.pathExtension.lowercased()) else { return nil }
+        return s
+    }
 
     var body: some View {
         Group {
@@ -534,20 +552,37 @@ struct ViewerPage: View {
             } else if post.isGallery {
                 GalleryPage(post: post, isActive: isActive, onTap: { onTap(0.5) }, onFinished: onFinished)
             } else if post.mediaType == .video && settings.mediaWaitsForWiFi && !videoAllowed {
-                // Wi-Fi only: a still and a button instead of streaming on mobile data.
+                // Wi-Fi only: a still and buttons (with the file sizes) instead of streaming on mobile data.
                 ZStack {
                     CachedAsyncImage(url: post.thumbnailURL, maxPixel: 900, contentMode: .scaleAspectFit)
-                    Button { videoAllowed = true } label: {
-                        Label("Play on Mobile Data", systemImage: "play.circle.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 14).padding(.vertical, 8)
-                            .background(Capsule().fill(Color.black.opacity(0.65)))
-                            .foregroundColor(.white)
+                    VStack(spacing: 10) {
+                        Button { videoAllowed = true } label: {
+                            Label("Play on Mobile Data" + (fullSize.map { " · " + ProxyProgress.mb($0) } ?? ""), systemImage: "play.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(Capsule().fill(Color.black.opacity(0.65)))
+                                .foregroundColor(.white)
+                        }
+                        .accessibilityIdentifier("playOnMobileData")
+                        if let light = lighterVideoURL {
+                            Button { lighterVideo = light; videoAllowed = true } label: {
+                                Label("Play Lighter Version" + (lighterSize.map { " · " + ProxyProgress.mb($0) } ?? ""), systemImage: "leaf.fill")
+                                    .font(.subheadline.weight(.semibold))
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    .background(Capsule().fill(Color.black.opacity(0.65)))
+                                    .foregroundColor(.white)
+                            }
+                            .accessibilityIdentifier("playLighterOnMobileData")
+                        }
                     }
-                    .accessibilityIdentifier("playOnMobileData")
+                }
+                .task(id: post.key) {
+                    // Only the pages near the current one ask, and only the size (a HEAD request).
+                    fullSize = await MediaSize.shared.size(of: post.mediaURL, siteID: post.siteID)
+                    if let light = lighterVideoURL { lighterSize = await MediaSize.shared.size(of: light, siteID: post.siteID) }
                 }
             } else if post.mediaType == .video {
-                MediaVideoView(url: post.mediaURL, isActive: isActive, showControls: showControls, siteID: post.siteID,
+                MediaVideoView(url: lighterVideo ?? post.mediaURL, isActive: isActive, showControls: showControls, siteID: post.siteID,
                                onFinished: onFinished, onTap: { onTap(0.5) })
             } else {
                 FullImagePage(post: post, aspect: aspect, isActive: isActive, onFinished: onFinished,

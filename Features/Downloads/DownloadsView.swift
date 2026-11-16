@@ -3,15 +3,17 @@ import SwiftUI
 /// The download queue: per-item progress with pause/resume, retry and cancel.
 struct DownloadsView: View {
     @ObservedObject private var manager = DownloadManager.shared
+    @ObservedObject private var wifiQueue = WifiDownloadQueue.shared
 
     var body: some View {
         NavigationView {
             Group {
-                if manager.queue.isEmpty {
+                if manager.queue.isEmpty && wifiQueue.entries.isEmpty {
                     EmptyStateView(icon: "arrow.down.circle", title: "No active downloads",
                                    message: "Finished downloads move to the Library tab.")
                 } else {
                     List {
+                        WifiQueueSection()
                         if manager.failedCount > 0 {
                             Button { manager.retryFailed() } label: {
                                 Label("Retry All Failed (\(manager.failedCount))", systemImage: "arrow.clockwise")
