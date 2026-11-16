@@ -207,9 +207,12 @@ struct MediaVideoView: View {
     }
 
     func watchStart() async {
-        webReady = false
+        // The pager re-runs this task (onAppear) for pages that never left while you swipe.
+        // A video that already started, or already showed its error, keeps that state:
+        // resetting it would leave "Loading video..." over a playing video (the player
+        // reports "ready" once), then the timeout card. Retry resets it.
+        if webReady || webError != nil { return }
         webTimedOut = false
-        webError = nil
         let limit = network.videoTimeout
         try? await Task.sleep(nanoseconds: UInt64(limit * 1_000_000_000))
         if !Task.isCancelled, !webReady {
@@ -228,7 +231,12 @@ extension MediaVideoView {
             Text(message).font(.subheadline).multilineTextAlignment(.center)
                 .accessibilityIdentifier("webVideoError")
             HStack(spacing: 10) {
-                Button { webAttempt += 1 } label: { Label("Retry", systemImage: "arrow.clockwise") }
+                Button {
+                    webReady = false
+                    webError = nil
+                    webTimedOut = false
+                    webAttempt += 1
+                } label: { Label("Retry", systemImage: "arrow.clockwise") }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("webVideoRetry")
                 if !url.isFileURL {

@@ -36,13 +36,13 @@ struct VLCVideoView: View {
         // VLC's video output draws over SwiftUI views placed next to it.
         VLCSurface(model: model, url: Self.sourceURL(url, siteID: siteID),
                    controls: VLCControls(model: model, showControls: showControls, onTap: onTap))
-        .onAppear { sync(); model.setOnScreen(true) }
+        // Playback follows isActive only. The pager fires onAppear/onDisappear for pages
+        // that aren't really coming or going while you swipe, so they don't open or close
+        // anything; the stream closes when its surface is removed or the page is unloaded.
+        .onAppear { sync() }
         .onChange(of: isActive) { _ in sync() }
         .onChange(of: speed) { _ in sync() }
         .onChange(of: loop) { _ in sync() }
-        // Swiping to another post: close the stream. Coming back reopens it at the same
-        // time (see setOnScreen), with the delegate still attached so "ready" is reported.
-        .onDisappear { model.setOnScreen(false) }
     }
 
     private func sync() {
@@ -176,11 +176,9 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     /// The view VLC draws into. VLC ties its video output to the view it started on, so a
     /// new view needs the stream reopened on it; otherwise the sound plays over black.
     private weak var surface: UIView?
-    /// The page is on screen (onAppear / onDisappear).
-    private var onScreen = false
     private var inBackground = false
-    /// The stream is closed (page swiped away, app in the background, or a new surface)
-    /// and reopens at resumeAtMs.
+    /// The stream is closed (app in the background, or its surface was replaced or removed)
+    /// and reopens at resumeAtMs when the page is the current one.
     private var closed = false
     private var resumeAtMs: Int32 = 0
     private var wasPlaying = false
@@ -248,7 +246,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         // A new surface for a player that already exists: move the stream onto it.
         DebugLog.log("VLC", "New video surface: reopening the stream on it")
         close("new surface")
-        if onScreen, !inBackground { reopen(play: active) }
+        if active, !inBackground { reopen(play: true) }
     }
 
     /// SwiftUI removed a surface. If VLC is still drawing into it, close the stream.
@@ -257,20 +255,15 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         close("surface removed")
     }
 
-    /// The page came on screen or went off it.
-    func setOnScreen(_ on: Bool) {
-        onScreen = on
-        guard loaded else { return }
-        if on {
-            if closed, !inBackground { reopen(play: active) }
-        } else {
-            close("off screen")
-        }
-    }
-
+    /// The current post plays; the others pause (their streams stay open, so going back is
+    /// instant). A closed stream reopens only for the current post.
     func setActive(_ on: Bool) {
         active = on
-        guard loaded, !closed else { return }
+        guard loaded else { return }
+        if closed {
+            if on, !inBackground { reopen(play: true) }
+            return
+        }
         if on { start() } else if player.isPlaying { player.pause() }
     }
 
@@ -354,7 +347,9 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         guard loaded else { return }
         defer { wasPlaying = false }
         if closed {
-            if onScreen { reopen(play: wasPlaying && active) }
+            // Only the current post reopens now (paused on its frame if it was paused);
+            // the others reopen when you swipe to them.
+            if active { reopen(play: wasPlaying) }
         } else if wasPlaying, active {
             player.play()
         }
@@ -370,7 +365,6 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     func resumeFromBackground() {}
     func load(_ url: URL, into view: UIView) { onError?("VLCKit isn't included in this build.") }
     func surfaceGone(_ view: UIView) {}
-    func setOnScreen(_ on: Bool) {}
     func setActive(_ on: Bool) {}
     func togglePause() {}
     func seek(to p: Float) {}
