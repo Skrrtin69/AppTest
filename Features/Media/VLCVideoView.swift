@@ -36,11 +36,13 @@ struct VLCVideoView: View {
         // VLC's video output draws over SwiftUI views placed next to it.
         VLCSurface(model: model, url: Self.sourceURL(url, siteID: siteID),
                    controls: VLCControls(model: model, showControls: showControls, onTap: onTap))
-        .onAppear { sync() }
+        .onAppear { sync(); model.setOnScreen(true) }
         .onChange(of: isActive) { _ in sync() }
         .onChange(of: speed) { _ in sync() }
         .onChange(of: loop) { _ in sync() }
-        .onDisappear { model.stop() }
+        // Swiping to another post: close the stream. Coming back reopens it at the same
+        // time (see setOnScreen), with the delegate still attached so "ready" is reported.
+        .onDisappear { model.setOnScreen(false) }
     }
 
     private func sync() {
@@ -111,8 +113,16 @@ private struct VLCSurface: UIViewRepresentable {
     let url: URL
     let controls: VLCControls
 
-    final class Coordinator { var host: UIHostingController<VLCControls>? }
+    final class Coordinator {
+        var host: UIHostingController<VLCControls>?
+        weak var model: VLCPlayerModel?
+        weak var video: UIView?
+    }
     func makeCoordinator() -> Coordinator { Coordinator() }
+
+    static func dismantleUIView(_ v: UIView, coordinator: Coordinator) {
+        if let video = coordinator.video { coordinator.model?.surfaceGone(video) }
+    }
 
     func makeUIView(context: Context) -> UIView {
         let container = UIView()
@@ -129,6 +139,8 @@ private struct VLCSurface: UIViewRepresentable {
         host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         container.addSubview(host.view)
         context.coordinator.host = host
+        context.coordinator.model = model
+        context.coordinator.video = video
         model.load(url, into: video)
         return container
     }
@@ -151,22 +163,36 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     var onReady: (() -> Void)?
     var onError: ((String) -> Void)?
     var onStatus: ((String) -> Void)?
+    /// "Ready" was reported for the stream that is open now. Reset on every reopen and after
+    /// an error, so the "Loading video..." overlay always hears when the video really plays.
     private var readySent = false
     private var active = false
     private var loaded = false
     private var opened: Date?
-    /// Background handling: where to pick up, whether it was playing, and whether the
-    /// stream was closed.
+    /// Rebuilds the stream's address (after the background the local server may be on a
+    /// different port).
     var reopenURL: (() -> URL)?
+    private var firstURL: URL?
+    /// The view VLC draws into. VLC ties its video output to the view it started on, so a
+    /// new view needs the stream reopened on it; otherwise the sound plays over black.
+    private weak var surface: UIView?
+    /// The page is on screen (onAppear / onDisappear).
+    private var onScreen = false
+    private var inBackground = false
+    /// The stream is closed (page swiped away, app in the background, or a new surface)
+    /// and reopens at resumeAtMs.
+    private var closed = false
     private var resumeAtMs: Int32 = 0
     private var wasPlaying = false
-    private var suspended = false
-    /// Reopened while paused: play to the first frame (muted), then pause on it.
+    /// When the app last stopped the stream itself: VLC can report that stop as an error
+    /// a moment later, which must not show the error card.
+    private var lastStop: Date?
+    /// Reopened while not playing: play to the first frame (muted), then pause on it.
     private var pauseOnStart = false
     private var mutedBeforePeek = false
 
     // iOS closes the local server's connections while the app is away, so VLC's stream
-    // would be dead on return: stop it in the background and reopen it at the same time.
+    // would be dead on return: close it in the background and reopen it at the same time.
     // (App notifications, not scenePhase: the viewer is presented outside the SwiftUI scene,
     // where scenePhase never changes.)
     override init() {
@@ -182,51 +208,120 @@ final class VLCPlayerModel: NSObject, ObservableObject {
             nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor [weak self] in
                     await MockServer.shared.ensureReady()
-                    guard let self = self, let url = self.reopenURL?() else { return }
-                    self.resume(from: url)
+                    self?.resumeFromBackground()
                 }
             },
         ]
     }
 
     private var observers: [NSObjectProtocol] = []
-    deinit { observers.forEach { NotificationCenter.default.removeObserver($0) } }
+    deinit {
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        releasePlayer()
+    }
 
     #if canImport(MobileVLCKit)
     private let player = VLCMediaPlayer()
 
-    func load(_ url: URL, into view: UIView) {
-        guard !loaded else { return }
-        loaded = true
+    private static func media(_ url: URL, startMs: Int32) -> VLCMedia {
         let media = VLCMedia(url: url)
         // Milliseconds of network buffer: enough to ride out short stalls, small enough to start fast.
-        media.addOptions(["network-caching": 1000])
-        player.media = media
-        player.drawable = view
-        player.delegate = self
-        if AppSettings.shared.startMuted { player.audio?.isMuted = true }
-        if active { start() }
+        var options: [AnyHashable: Any] = ["network-caching": 1000]
+        if startMs > 0 { options["start-time"] = Double(startMs) / 1000 }
+        media.addOptions(options)
+        return media
+    }
+
+    /// Called each time SwiftUI builds the surface.
+    func load(_ url: URL, into view: UIView) {
+        surface = view
+        guard loaded else {
+            loaded = true
+            firstURL = url
+            player.delegate = self
+            player.drawable = view
+            player.media = Self.media(url, startMs: 0)
+            if AppSettings.shared.startMuted { player.audio?.isMuted = true }
+            if active { start() }
+            return
+        }
+        // A new surface for a player that already exists: move the stream onto it.
+        DebugLog.log("VLC", "New video surface: reopening the stream on it")
+        close("new surface")
+        if onScreen, !inBackground { reopen(play: active) }
+    }
+
+    /// SwiftUI removed a surface. If VLC is still drawing into it, close the stream.
+    func surfaceGone(_ view: UIView) {
+        guard loaded, surface == nil || surface === view else { return }
+        close("surface removed")
+    }
+
+    /// The page came on screen or went off it.
+    func setOnScreen(_ on: Bool) {
+        onScreen = on
+        guard loaded else { return }
+        if on {
+            if closed, !inBackground { reopen(play: active) }
+        } else {
+            close("off screen")
+        }
     }
 
     func setActive(_ on: Bool) {
         active = on
-        guard loaded else { return }
+        guard loaded, !closed else { return }
         if on { start() } else if player.isPlaying { player.pause() }
     }
 
     private func start() {
+        endPeek()
         if opened == nil { opened = Date() }
         player.play()
     }
 
-    func togglePause() {
-        // Play pressed before the app's own reopen ran: reopen now and play.
-        if suspended, let url = reopenURL?() {
-            wasPlaying = true
-            resume(from: url)
-            return
+    /// Stops the stream and notes where to pick up. The delegate stays attached.
+    private func close(_ why: String) {
+        guard loaded, !closed else { return }
+        let t = player.time.intValue
+        if t > 0 { resumeAtMs = t }
+        endPeek()
+        closed = true
+        readySent = false
+        lastStop = Date()
+        player.stop()
+        DebugLog.log("VLC", "Closed (\(why)) at \(resumeAtMs) ms")
+    }
+
+    /// Opens the stream again on the current surface at the saved time.
+    private func reopen(play: Bool) {
+        guard loaded, closed, let view = surface, let url = reopenURL?() ?? firstURL else { return }
+        closed = false
+        readySent = false
+        opened = Date()
+        player.delegate = self
+        player.drawable = view
+        player.media = Self.media(url, startMs: resumeAtMs)
+        if !play {
+            // Show the paused frame instead of a black screen.
+            pauseOnStart = true
+            mutedBeforePeek = player.audio?.isMuted ?? false
+            player.audio?.isMuted = true
         }
+        player.play()
+        DebugLog.log("VLC", "Reopened at \(resumeAtMs) ms\(play ? ", playing" : ", paused")")
+    }
+
+    private func endPeek() {
+        guard pauseOnStart else { return }
         pauseOnStart = false
+        player.audio?.isMuted = mutedBeforePeek
+    }
+
+    func togglePause() {
+        // Play pressed while the stream is closed: reopen now and play.
+        if closed { reopen(play: true); return }
+        endPeek()
         if player.isPlaying { player.pause() } else { player.play() }
     }
 
@@ -237,62 +332,50 @@ final class VLCPlayerModel: NSObject, ObservableObject {
 
     func setRate(_ r: Double) { player.rate = Float(r) }
 
-    func stop() {
-        player.delegate = nil
-        player.stop()
-    }
-
     /// Control Center, a notification, the app switcher: pause, remember to carry on.
     func pauseForInactive() {
-        guard loaded, !suspended, player.isPlaying else { return }
+        guard loaded, !closed, player.isPlaying else { return }
         wasPlaying = true
         player.pause()
     }
 
-    /// The app went to the background: note the time and close the stream.
+    /// The app went to the background: close the stream (iOS drops the connection anyway).
     func suspend() {
-        guard loaded, !suspended else { return }
-        if player.isPlaying { wasPlaying = true }
-        resumeAtMs = max(0, player.time.intValue)
-        suspended = true
-        player.stop()
-        DebugLog.log("VLC", "Background: stopped at \(resumeAtMs) ms (was \(wasPlaying ? "playing" : "paused"))")
+        inBackground = true
+        guard loaded else { return }
+        if !closed, player.isPlaying { wasPlaying = true }
+        close("background")
     }
 
-    /// Back in the foreground: reopen the stream at the saved time (a new connection to the
-    /// local server), and play again if it was playing.
-    func resume(from url: URL) {
+    /// Back in the foreground: reopen the stream if this page is on screen, and play again
+    /// if it was playing.
+    func resumeFromBackground() {
+        inBackground = false
         guard loaded else { return }
         defer { wasPlaying = false }
-        guard suspended else {
-            if wasPlaying, active { player.play() }
-            return
-        }
-        suspended = false
-        let media = VLCMedia(url: url)
-        media.addOptions(["network-caching": 1000, "start-time": Double(resumeAtMs) / 1000])
-        player.media = media
-        if wasPlaying, active {
-            player.play()
-        } else {
-            // Show the paused frame instead of a black screen.
-            pauseOnStart = true
-            mutedBeforePeek = player.audio?.isMuted ?? false
-            player.audio?.isMuted = true
+        if closed {
+            if onScreen { reopen(play: wasPlaying && active) }
+        } else if wasPlaying, active {
             player.play()
         }
-        DebugLog.log("VLC", "Foreground: reopened at \(resumeAtMs) ms\(wasPlaying && active ? ", playing" : ", paused")")
+    }
+
+    private func releasePlayer() {
+        player.delegate = nil
+        player.stop()
     }
     #else
     func pauseForInactive() {}
     func suspend() {}
-    func resume(from url: URL) {}
+    func resumeFromBackground() {}
     func load(_ url: URL, into view: UIView) { onError?("VLCKit isn't included in this build.") }
+    func surfaceGone(_ view: UIView) {}
+    func setOnScreen(_ on: Bool) {}
     func setActive(_ on: Bool) {}
     func togglePause() {}
     func seek(to p: Float) {}
     func setRate(_ r: Double) {}
-    func stop() {}
+    private func releasePlayer() {}
     #endif
 
     fileprivate func markReady() {
@@ -312,16 +395,23 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
         let state = player.state
         DispatchQueue.main.async { [self] in
             isPlaying = player.isPlaying
+            // Events from a stream the app closed itself don't count.
+            guard !closed else { return }
             switch state {
             case .playing:
                 markReady()
             case .error:
-                // Errors from the stream being closed for the background don't count.
-                guard !suspended else { return }
+                if let s = lastStop, Date().timeIntervalSince(s) < 2 {
+                    DebugLog.log("VLC", "Ignored an error right after closing the previous stream")
+                    return
+                }
                 DebugLog.log("VLC", "Playback error")
+                // If it plays after all, report "ready" again so the error card goes away.
+                readySent = false
                 onError?("VLC couldn't play this video.")
             case .ended:
                 if loop {
+                    lastStop = Date()
                     player.stop()
                     player.play()
                 } else {
@@ -338,12 +428,12 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
         let length = Double(player.media?.length.intValue ?? 0) / 1000
         let now = Double(player.time.intValue) / 1000
         DispatchQueue.main.async { [self] in
+            guard !closed else { return }
             markReady()
-            // Reopened while paused: the first time update means a frame is on screen.
+            // Reopened while not playing: the first time update means a frame is on screen.
             if pauseOnStart {
-                pauseOnStart = false
                 player.pause()
-                player.audio?.isMuted = mutedBeforePeek
+                endPeek()
             }
             position = p
             duration = length
