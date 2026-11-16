@@ -87,7 +87,7 @@ final class AppSettings: ObservableObject {
     @Published var maxDownloads: Int = 3 { didSet { d.set(maxDownloads, forKey: K.maxDownloads) } }
     @Published var cacheLimitMB: Int = 300 { didSet { d.set(cacheLimitMB, forKey: K.cacheLimitMB) } }
     @Published var slideshowInterval: Double = 5 { didSet { d.set(slideshowInterval, forKey: K.slideshowInterval) } }
-    @Published var blacklist: [String] = [] { didSet { d.set(blacklist, forKey: K.blacklist) } }
+    @Published var blacklist: [String] = [] { didSet { d.set(blacklist, forKey: K.blacklist); blacklistSet = Set(blacklist.map { $0.lowercased() }) } }
     @Published var hapticsTap: Bool = true { didSet { d.set(hapticsTap, forKey: K.hapticsTap) } }
     @Published var hapticsResult: Bool = true { didSet { d.set(hapticsResult, forKey: K.hapticsResult) } }
     @Published var backgroundDownloads: Bool = true { didSet { d.set(backgroundDownloads, forKey: K.backgroundDownloads) } }
@@ -224,6 +224,7 @@ final class AppSettings: ObservableObject {
         cacheLimitMB = Self.clamp(d.object(forKey: K.cacheLimitMB) as? Int ?? 300, 50, 4000)
         slideshowInterval = min(30, max(2, d.object(forKey: K.slideshowInterval) as? Double ?? 5))
         blacklist = d.stringArray(forKey: K.blacklist) ?? []
+        blacklistSet = Set(blacklist.map { $0.lowercased() })
         hapticsTap = d.object(forKey: K.hapticsTap) as? Bool ?? true
         hapticsResult = d.object(forKey: K.hapticsResult) as? Bool ?? true
         backgroundDownloads = d.object(forKey: K.backgroundDownloads) as? Bool ?? true
@@ -274,7 +275,9 @@ final class AppSettings: ObservableObject {
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }
 
-    var blacklistSet: Set<String> { Set(blacklist.map { $0.lowercased() }) }
+    /// Lowercased blacklist, kept up to date when the list changes (it was rebuilt for every
+    /// post checked, on every redraw).
+    private(set) var blacklistSet: Set<String> = []
 
     func isBlacklisted(_ post: Post) -> Bool {
         Self.hides(post, blacklistSet)

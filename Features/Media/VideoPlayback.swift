@@ -32,6 +32,10 @@ actor PlaybackRouter {
         // HLS streams list no tracks until they play, so the check below would wrongly send
         // them to the web player; AVPlayer is the stream player.
         if url.pathExtension.lowercased() == "m3u8" { cache[url] = .native; return .native }
+        // AVPlayer's own formats go straight to it: asking first cost up to 8 s before the
+        // player even existed. If one turns out unplayable, the player's failure switches it
+        // to the web player / VLC (markFailed).
+        if ["mp4", "m4v", "mov"].contains(url.pathExtension.lowercased()) { cache[url] = .native; return .native }
         // WebM/MKV: look inside first. An MP4 with the wrong name goes to AVPlayer; real
         // Matroska goes straight to the web player or VLC, skipping AVPlayer's slow refusal.
         if ["webm", "mkv"].contains(url.pathExtension.lowercased()), let s = await MediaSniffer.sniff(url) {
@@ -55,16 +59,20 @@ actor PlaybackRouter {
                 break
             }
         }
-        let playable = await Self.isPlayable(AVURLAsset.withSiteHeaders(url))
-        let path: PlaybackPath = playable ? .native : .web
-        cache[url] = path
+        let answer = await Self.check(AVURLAsset.withSiteHeaders(url))
+        let path: PlaybackPath = answer == true ? .native : .web
+        // A check that ran out of time says nothing about the file: don't remember it.
+        if answer != nil { cache[url] = path }
         NSLog("[Playback] %@ → %@", url.lastPathComponent, path.rawValue)
         return path == .native ? .native : other
     }
 
-    private static func isPlayable(_ asset: AVURLAsset) async -> Bool {
+    private static func isPlayable(_ asset: AVURLAsset) async -> Bool { await check(asset) ?? false }
+
+    /// true / false, or nil when the check ran out of time.
+    private static func check(_ asset: AVURLAsset) async -> Bool? {
         // Race the playability check against a timeout so a slow server can't hang the viewer.
-        let playable: Bool = await withTaskGroup(of: Bool?.self) { group in
+        let playable: Bool?? = await withTaskGroup(of: Bool?.self) { group in
             group.addTask {
                 guard let p = try? await asset.load(.isPlayable), p else { return false }
                 let tracks = (try? await asset.loadTracks(withMediaType: .video)) ?? []
@@ -74,11 +82,12 @@ actor PlaybackRouter {
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
                 return nil
             }
-            let first = await group.next() ?? nil
+            let first = await group.next()
             group.cancelAll()
-            return first ?? false
+            return first
         }
-        return playable
+        // group.next(): nil only if no task finished; the inner nil is the timeout.
+        return playable ?? nil
     }
 
     /// Native playback failed after routing; remember to use the web player next time.

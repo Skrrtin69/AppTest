@@ -509,10 +509,13 @@ struct ViewerView: View {
         .background(LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom))
     }
 
+    /// Fetches the neighbours' pictures ahead of time: the same file each page will show
+    /// (the smaller one with Data Saver, Wi-Fi only or Prefer Lighter), never while the
+    /// current post is a video (it needs the bandwidth), and not galleries' extra pages.
     func prefetchNeighbors() {
-        guard !posts.isEmpty, !settings.savingPower else { return }
+        guard !posts.isEmpty, !settings.savingPower, current?.mediaType != .video else { return }
         let range = max(0, index - 2)...min(posts.count - 1, index + 2)
-        let urls = range.filter { $0 != index }.map { posts[$0] }.filter { $0.mediaType != .video }.map { $0.mediaURL }
+        let urls = range.filter { $0 != index }.map { posts[$0] }.filter { $0.mediaType != .video }.map(FullImagePage.defaultURL)
         ImagePipeline.shared.prefetch(urls, client: current.flatMap { AdapterRegistry.shared.adapter(for: $0.siteID)?.client })
     }
 }
@@ -608,10 +611,18 @@ struct FullImagePage: View {
     @State private var wantsFull = false
 
     /// The address shown: with Data Saver on, the smaller version until Load Full Resolution.
-    var shownURL: URL {
-        if settings.mediaWaitsForWiFi && !wantsFull { return post.thumbnailURL }
-        if settings.dataSaverActive && !wantsFull { return post.sampleURL ?? post.thumbnailURL }
-        return settings.viewerPrefersLighter ? (post.sampleURL ?? post.mediaURL) : post.mediaURL
+    var shownURL: URL { wantsFull ? Self.fullURL(post) : Self.defaultURL(post) }
+
+    /// What a page shows before Load Full Resolution (also what the viewer prefetches).
+    static func defaultURL(_ post: Post) -> URL {
+        let settings = AppSettings.shared
+        if settings.mediaWaitsForWiFi { return post.thumbnailURL }
+        if settings.dataSaverActive { return post.sampleURL ?? post.thumbnailURL }
+        return fullURL(post)
+    }
+
+    static func fullURL(_ post: Post) -> URL {
+        AppSettings.shared.viewerPrefersLighter ? (post.sampleURL ?? post.mediaURL) : post.mediaURL
     }
 
     var body: some View {

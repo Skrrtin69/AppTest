@@ -35,13 +35,19 @@ final class ImagePipeline {
         // No client given: use the adapter that owns this host, so its headers still apply.
         let c = client ?? NetworkClient.forMedia(url)
         if let d = await ImageCache.shared.data(for: url, siteID: c.siteID) { return d }
-        let data: Data = try await semaphore.run {
-            // Media requests skip the adapter's API rate limit; the semaphore bounds them instead.
-            try await c.mediaData(for: url)
+        // The viewer's neighbour prefetch and the page itself often ask for the same file at
+        // the same moment: they share one download.
+        return try await inFlight.run(url) { [semaphore] in
+            let data: Data = try await semaphore.run {
+                // Media requests skip the adapter's API rate limit; the semaphore bounds them instead.
+                try await c.mediaData(for: url)
+            }
+            await ImageCache.shared.store(data, for: url, siteID: c.siteID)
+            return data
         }
-        await ImageCache.shared.store(data, for: url, siteID: c.siteID)
-        return data
     }
+
+    private let inFlight = InFlightDownloads()
 
     /// Decoded image, downsampled to `maxPixel` (0 = full size). GIFs come back animated.
     func image(for url: URL, maxPixel: CGFloat = 0, animate: Bool = true, client: NetworkClient? = nil) async throws -> UIImage {
@@ -97,11 +103,19 @@ final class ImagePipeline {
 
         // GIF, animated WebP and APNG all come through ImageIO with per-frame delays.
         if animate, count > 1 {
+            // Every frame is decoded up front, so the size is chosen for all frames together
+            // (a 300-frame GIF at full size could take over a gigabyte).
+            let budgeted = animatedMaxPixel(src, frames: min(count, 300), requested: maxPixel)
+            if budgeted > 0 { opts[kCGImageSourceThumbnailMaxPixelSize] = budgeted }
+            func animFrame(_ i: Int) -> CGImage? {
+                budgeted > 0 ? CGImageSourceCreateThumbnailAtIndex(src, i, opts as CFDictionary)
+                    : CGImageSourceCreateImageAtIndex(src, i, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
+            }
             var images: [UIImage] = []
             var duration: Double = 0
             // Cap frames to keep memory reasonable.
             for i in 0..<min(count, 300) {
-                guard let cg = frame(i) else { continue }
+                guard let cg = animFrame(i) else { continue }
                 images.append(UIImage(cgImage: cg))
                 duration += frameDelay(src, i)
             }
@@ -109,6 +123,22 @@ final class ImagePipeline {
         }
         guard let cg = frame(0) else { throw AppError.message("The image data is damaged or in an unknown format.") }
         return UIImage(cgImage: cg)
+    }
+
+    /// Decoded size (long side) for an animation: at most `animationBudget` bytes for all frames.
+    /// 0 = full size fits.
+    static let animationBudget = 96.0 * 1024 * 1024
+    static func animatedMaxPixel(_ src: CGImageSource, frames: Int, requested: CGFloat) -> CGFloat {
+        guard let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let w = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.doubleValue,
+              let h = (props[kCGImagePropertyPixelHeight] as? NSNumber)?.doubleValue, w > 0, h > 0 else { return requested }
+        let long = max(w, h), short = min(w, h)
+        var side = requested > 0 ? min(Double(requested), long) : long
+        // bytes = side × (side × short/long) × 4 × frames
+        let bytes = side * side * (short / long) * 4 * Double(max(1, frames))
+        if bytes > animationBudget { side *= (animationBudget / bytes).squareRoot() }
+        side = max(side, min(160, long))
+        return side >= long ? 0 : CGFloat(side.rounded(.down))
     }
 
     /// Tall strips (webtoons) are limited by *width* instead of their long side, so they stay
@@ -199,5 +229,19 @@ final class ImagePipeline {
         guard let gif = props[kCGImagePropertyGIFDictionary] as? [CFString: Any] else { return 0.1 }
         let d = (gif[kCGImagePropertyGIFUnclampedDelayTime] as? Double) ?? (gif[kCGImagePropertyGIFDelayTime] as? Double) ?? 0.1
         return d < 0.02 ? 0.1 : d
+    }
+}
+
+
+/// One download per address at a time: later callers wait for the first one's result.
+private actor InFlightDownloads {
+    private var tasks: [URL: Task<Data, Error>] = [:]
+
+    func run(_ url: URL, _ work: @escaping @Sendable () async throws -> Data) async throws -> Data {
+        if let t = tasks[url] { return try await t.value }
+        let t = Task { try await work() }
+        tasks[url] = t
+        defer { tasks[url] = nil }
+        return try await t.value
     }
 }

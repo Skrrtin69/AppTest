@@ -19,7 +19,8 @@ struct BrowseView: View {
     @State private var showJump = false
     @State private var builderFor: SearchTabModel?
     @State private var jumpText = ""
-    @ObservedObject private var viewedStore = ViewedStore.shared
+    // (Not observing ViewedStore here: every swipe in the viewer marks a post viewed, which
+    // redrew this whole screen and every grid behind the viewer. The cells observe it.)
     @ObservedObject private var reviews = AdapterReviewStore.shared
     @FocusState private var searchFocused: Bool
 
