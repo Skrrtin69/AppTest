@@ -712,6 +712,14 @@ struct EmptyStateView: View {
 struct SearchHistorySheet: View {
     let onRun: (String, String) -> Void
     @Environment(\.dismiss) private var dismiss
+
+    /// Keeps the current tab as it is and runs this search next to it.
+    func openInNewTab(_ query: String, _ siteID: String) {
+        let site = AdapterRegistry.shared.config(for: siteID) != nil || siteID == SearchTabModel.mergedID
+            ? siteID : (AdapterRegistry.shared.enabledConfigs.first?.id ?? siteID)
+        BrowseModel.shared.openTab(siteID: site, query: query)
+        dismiss()
+    }
     @ObservedObject private var watch = SearchWatch.shared
     @ObservedObject private var store = LibraryStore.shared
     @ObservedObject private var registry = AdapterRegistry.shared
@@ -746,6 +754,9 @@ struct SearchHistorySheet: View {
                             .tint(.accentColor)
                         }
                         .contextMenu {
+                            Button { watch.markSeen(s.id); openInNewTab(s.query, s.siteID) } label: {
+                                Label("Open in New Tab", systemImage: "plus.square.on.square")
+                            }
                             Button { watch.toggle(s) } label: {
                                 Label(watch.isWatching(s.id) ? "Stop Watching" : "Watch for New Posts", systemImage: watch.isWatching(s.id) ? "bell.slash" : "bell")
                             }
@@ -764,12 +775,22 @@ struct SearchHistorySheet: View {
                                 Text(registry.displayName(for: h.siteID)).font(.caption).foregroundColor(.secondary)
                             }
                         }
+                        .contextMenu {
+                            Button { openInNewTab(h.query, h.siteID) } label: { Label("Open in New Tab", systemImage: "plus.square.on.square") }
+                            if !store.savedSearches.contains(where: { $0.query == h.query && $0.siteID == h.siteID }) {
+                                Button { store.saveSearch(name: "", query: h.query, siteID: h.siteID) } label: { Label("Save Search", systemImage: "bookmark") }
+                            }
+                            Button(role: .destructive) { store.deleteHistory(h) } label: { Label("Delete", systemImage: "trash") }
+                        }
                     }
                     .onDelete { idx in idx.map { store.history[$0] }.forEach(store.deleteHistory) }
                 }
             }
             .navigationTitle("Searches")
             .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom) {
+                Text("Hold a search to open it in a new tab.").font(.caption2).foregroundColor(.secondary).padding(.bottom, 4)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
                 ToolbarItem(placement: .destructiveAction) {

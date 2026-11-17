@@ -117,17 +117,18 @@ struct GridCell: View {
     /// The cell's width in pixels, so the thumbnail is decoded at the size it's shown.
     var cellPixels: CGFloat = 420
     @ObservedObject private var favoriteSync = FavoriteSync.shared
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var store = LibraryStore.shared
+    // Narrow observers: see GridObservers.swift.
+    @ObservedObject private var look = GridLook.shared
+    @ObservedObject private var marks = FavoriteMarks.shared
     @ObservedObject private var viewed = ViewedStore.shared
     @ObservedObject private var progress = ReadingProgress.shared
     @ObservedObject private var downloaded = DownloadedPosts.shared
     @State private var loadedRatio: CGFloat?
 
-    var blurred: Bool { settings.blurThumbnails && !viewed.isRevealed(post.key) }
-    var dimmed: Bool { settings.dimViewed && viewed.isViewed(post.key) && !selecting }
+    var blurred: Bool { look.v.blur && !viewed.isRevealed(post.key) }
+    var dimmed: Bool { look.v.dim && viewed.isViewed(post.key) && !selecting }
     /// Square cells of still pictures and videos (animated GIFs keep their animation).
-    var useSmartCrop: Bool { settings.smartThumbnails && aspect == .square && post.mediaType != .gif }
+    var useSmartCrop: Bool { look.v.smart && aspect == .square && post.mediaType != .gif }
 
     /// Long side to decode: enough to fill the cell sharply (a cropped square needs the
     /// picture's short side to cover it), rounded to steps of 64 so the cache isn't split
@@ -156,7 +157,7 @@ struct GridCell: View {
                         SmartThumbnail(url: post.thumbnailURL, client: AdapterRegistry.shared.adapter(for: post.siteID)?.client)
                     } else {
                         CachedAsyncImage(url: post.thumbnailURL, maxPixel: decodePixels,
-                                         animate: settings.gridGIFsAnimate,
+                                         animate: look.v.animate,
                                          client: AdapterRegistry.shared.adapter(for: post.siteID)?.client,
                                          onLoad: { img in
                                              if img.size.height > 0 { loadedRatio = img.size.width / img.size.height }
@@ -234,7 +235,7 @@ struct GridCell: View {
             }
             .overlay(alignment: .bottomLeading) {
                 HStack(spacing: 2) {
-                    if store.favoriteKeys.contains(post.key) {
+                    if marks.keys.contains(post.key) {
                         Image(systemName: "heart.fill").font(.caption2)
                             .foregroundColor(.pink)
                             .shadow(radius: 2)

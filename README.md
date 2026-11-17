@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–30)
+## What's new (Phases 1–31)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -526,6 +526,11 @@ Settings › Tools › **Reverse Search Image**:
 - **Downloads survive a lost connection:** when Wi-Fi or mobile data drops, cut-off downloads show *Connection lost. It continues when you're back online.* (one message for the whole queue, not one error each) and carry on from where they stopped as soon as the connection returns. A download gets up to three automatic tries; after that it fails as before, with Retry.
 - **Unfinished videos:** Favorites › Recent has an *Unfinished Videos* filter when any recent video was stopped partway; they continue where you left off.
 - **Lighter Library:** the Library screen redraws only when its items or the queue's size change, not on every percent of every running download.
+
+**Searches in tabs (Phase 31)**
+- **Open in New Tab** from the Searches sheet (clock button): hold a saved search or a recent search. The tab you're in stays as it is.
+- **Save a recent search** by holding it › *Save Search* (shown when it isn't saved yet), or *Delete* it.
+- **Fewer thumbnail redraws:** thumbnails now watch only the four settings they use (blur, dim, smart crop, GIF animation) and the list of favorites. Changing playback speed or another unrelated setting, or every search being added to history, used to redraw every visible thumbnail in every open tab.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 
