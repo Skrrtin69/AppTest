@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–22)
+## What's new (Phases 1–23)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -482,6 +482,12 @@ Settings › Tools › **Reverse Search Image**:
 - **Sort the Library:** the site-filter menu (top left) now has Newest First, Oldest First and Largest First, which is handy for freeing space.
 - **Hide Opened Posts** (Browse ⋯): search results leave out posts you've already opened in the viewer. If everything loaded so far is hidden, the grid offers **Load More**. Download All and Select All follow what's shown.
 - **Faster:** the image cache writes files without holding up reads, and only scans its folder when it may be over the limit (it scanned it twice every 25 pictures). At launch, the download list no longer looks up and saves every past download one by one, only the ones that were cut off. The Library's filter runs once per redraw instead of three times.
+
+**Sound, speed and what you have (Phase 23)**
+- **Mute button** in the built-in player's and VLCKit's controls. The choice carries over to every video for the rest of the session (it starts from Settings › Start videos muted). Before, the only way to silence a video was the phone's volume.
+- **More speeds:** tap the speed button for 1× → 1.5× → 2×, or touch and hold it for 0.5×, 0.75×, 1×, 1.25×, 1.5× and 2×. VLCKit's controls now have the speed button too.
+- **Downloaded badge:** thumbnails of posts already in your Library show a small ↓ next to the favorite heart, in every grid.
+- **Faster:** cached thumbnails are read from disk without holding up the ones already in memory. Queuing many downloads checks for duplicates with a lookup instead of scanning every past download per post, and deleting many Library items no longer compares each one against the whole list.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

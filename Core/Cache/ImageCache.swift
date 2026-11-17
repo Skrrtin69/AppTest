@@ -32,22 +32,32 @@ actor ImageCache {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
-    private func fileURL(_ key: String) -> URL { directory.appendingPathComponent(key) }
+    private nonisolated func fileURL(_ key: String) -> URL { directory.appendingPathComponent(key) }
 
     /// `siteID` also tags older entries (cached before sites were tracked) as they're used.
-    func data(for url: URL, siteID: String? = nil) -> Data? {
+    /// The memory check runs on the actor; the disk read doesn't, so one slow read no longer
+    /// holds up every other thumbnail that's already in memory.
+    nonisolated func data(for url: URL, siteID: String? = nil) async -> Data? {
         let key = Self.key(for: url)
-        if let s = siteID, siteIndex[key] == nil, FileManager.default.fileExists(atPath: fileURL(key).path) {
-            siteIndex[key] = s
-            indexDirty = true
-        }
-        if let d = memory.object(forKey: key as NSString) { return d as Data }
+        if let d = await memoryHit(key, siteID: siteID) { return d }
         let file = fileURL(key)
         guard let d = try? Data(contentsOf: file) else { return nil }
         // Touch for LRU.
         try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
-        memory.setObject(d as NSData, forKey: key as NSString, cost: d.count)
+        await remember(key, d)
         return d
+    }
+
+    private func memoryHit(_ key: String, siteID: String?) -> Data? {
+        if let s = siteID, siteIndex[key] == nil, FileManager.default.fileExists(atPath: fileURL(key).path) {
+            siteIndex[key] = s
+            indexDirty = true
+        }
+        return memory.object(forKey: key as NSString) as Data?
+    }
+
+    private func remember(_ key: String, _ d: Data) {
+        memory.setObject(d as NSData, forKey: key as NSString, cost: d.count)
     }
 
     /// Rough bytes on disk, so the folder is only scanned when it may be over the limit

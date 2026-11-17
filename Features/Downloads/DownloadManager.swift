@@ -25,7 +25,24 @@ final class DownloadManager: NSObject, ObservableObject {
     static let shared = DownloadManager()
     static let backgroundID = "com.skrrtin69.mediadeck.downloads"
 
-    @Published private(set) var items: [DownloadItem] = []
+    @Published private(set) var items: [DownloadItem] = [] {
+        didSet { scheduleDownloadedRefresh() }
+    }
+    private var downloadedRefreshPending = false
+
+    /// Recomputes which posts are in the Library at most once per run-loop turn (progress
+    /// updates change `items` many times a second) and tells the grids only when it changed.
+    private func scheduleDownloadedRefresh() {
+        guard !downloadedRefreshPending else { return }
+        downloadedRefreshPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.downloadedRefreshPending = false
+            var keys = Set<String>()
+            for i in self.items where i.state == .completed { keys.insert(i.post.key) }
+            DownloadedPosts.shared.update(keys)
+        }
+    }
 
     static var root: URL {
         let u = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Downloads", isDirectory: true)
@@ -184,9 +201,12 @@ final class DownloadManager: NSObject, ObservableObject {
                                     confirm: "Download") else { return }
         }
         var added = 0, skipped = 0
+        // Lookups by post and by file address (was a scan of every past download per post).
+        var byKey: [String: DownloadItem] = [:], byURL: [URL: DownloadItem] = [:]
+        for i in items where i.state != .failed { byKey[i.post.key] = i; byURL[i.remoteURL] = i }
         for (offset, post) in posts.enumerated() {
             // Duplicate check: same post or same file already downloaded, and the file is still there.
-            if let existing = items.first(where: { ($0.post.key == post.key || $0.remoteURL == post.mediaURL) && $0.state != .failed }) {
+            if let existing = byKey[post.key] ?? byURL[post.mediaURL] {
                 if existing.state != .completed || existing.fileURL.map({ FileManager.default.fileExists(atPath: $0.path) }) == true {
                     skipped += 1
                     continue
@@ -204,6 +224,8 @@ final class DownloadManager: NSObject, ObservableObject {
                                     relativePath: rel, error: nil, createdAt: Date(), remoteURL: url)
             items.removeAll { $0.post.key == post.key && $0.state == .failed }
             items.append(item)
+            byKey[post.key] = item
+            byURL[url] = item
             persist(item)
             added += 1
         }
@@ -369,7 +391,8 @@ final class DownloadManager: NSObject, ObservableObject {
             }
             if let m = mo(id) { ctx.delete(m) }
         }
-        items.removeAll { ids.contains($0.id) }
+        let gone = Set(ids)
+        items.removeAll { gone.contains($0.id) }
         CoreDataStack.shared.save()
     }
 
@@ -593,4 +616,13 @@ extension DownloadManager {
         }
         return done
     }
+}
+
+/// Keys of posts that are in the Library, for the small badge on grid thumbnails. Its own
+/// object, so the grids redraw only when this set changes, not on every download tick.
+final class DownloadedPosts: ObservableObject {
+    static let shared = DownloadedPosts()
+    @Published private(set) var keys: Set<String> = []
+    func update(_ new: Set<String>) { if new != keys { keys = new } }
+    func contains(_ key: String) -> Bool { !LockManager.shared.decoyActive && keys.contains(key) }
 }

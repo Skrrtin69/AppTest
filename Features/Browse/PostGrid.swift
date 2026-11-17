@@ -112,6 +112,7 @@ struct GridCell: View {
     @ObservedObject private var store = LibraryStore.shared
     @ObservedObject private var viewed = ViewedStore.shared
     @ObservedObject private var progress = ReadingProgress.shared
+    @ObservedObject private var downloaded = DownloadedPosts.shared
     @State private var loadedRatio: CGFloat?
 
     var blurred: Bool { settings.blurThumbnails && !viewed.isRevealed(post.key) }
@@ -202,11 +203,21 @@ struct GridCell: View {
                 }
             }
             .overlay(alignment: .bottomLeading) {
-                if store.favoriteKeys.contains(post.key) {
-                    Image(systemName: "heart.fill").font(.caption2)
-                        .foregroundColor(.pink).padding(5)
-                        .shadow(radius: 2)
+                HStack(spacing: 2) {
+                    if store.favoriteKeys.contains(post.key) {
+                        Image(systemName: "heart.fill").font(.caption2)
+                            .foregroundColor(.pink)
+                            .shadow(radius: 2)
+                    }
+                    // Already in the Library.
+                    if downloaded.contains(post.key) {
+                        Image(systemName: "arrow.down.circle.fill").font(.caption2)
+                            .foregroundColor(.white)
+                            .shadow(radius: 2)
+                            .accessibilityLabel("Downloaded")
+                    }
                 }
+                .padding(5)
             }
             .overlay {
                 if selecting {

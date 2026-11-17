@@ -94,6 +94,8 @@ private struct VLCControls: View {
                     Slider(value: Binding(get: { Double(model.position) }, set: { model.seek(to: Float($0)) }), in: 0...1)
                         .accessibilityIdentifier("vlcScrubber")
                     Text(model.timeText).font(.caption.monospacedDigit())
+                    MuteButton()
+                    SpeedButton()
                 }
                 .foregroundColor(.white)
                 .tint(.white)
@@ -102,6 +104,7 @@ private struct VLCControls: View {
                 .padding(.horizontal, 16).padding(.bottom, ScreenInsets.videoControlsBottom)
             }
         }
+        .onReceive(VideoSound.shared.$muted) { model.applyMute($0) }
         .ignoresSafeArea()
     }
 }
@@ -263,7 +266,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
                 resumeAtMs = Int32(t * 1000)
             }
             player.media = Self.media(url, startMs: resumeAtMs)
-            if AppSettings.shared.startMuted { player.audio?.isMuted = true }
+            player.audio?.isMuted = VideoSound.shared.muted
             if active { start() }
             return
         }
@@ -298,6 +301,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         endPeek()
         if opened == nil { opened = Date() }
         player.play()
+        player.audio?.isMuted = VideoSound.shared.muted
     }
 
     /// Stops the stream and notes where to pick up. The delegate stays attached.
@@ -336,7 +340,13 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     private func endPeek() {
         guard pauseOnStart else { return }
         pauseOnStart = false
-        player.audio?.isMuted = mutedBeforePeek
+        player.audio?.isMuted = VideoSound.shared.muted
+    }
+
+    /// The mute button: applies now, or after a silent paused-frame peek ends.
+    func applyMute(_ muted: Bool) {
+        guard loaded, !pauseOnStart else { return }
+        player.audio?.isMuted = muted
     }
 
     func togglePause() {

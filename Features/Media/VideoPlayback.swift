@@ -105,19 +105,47 @@ extension AVURLAsset {
     }
 }
 
-/// 1× → 1.5× → 2× → 1×, shared by both players.
+/// Tap: 1× → 1.5× → 2× → 1×. Touch and hold: every speed from 0.5× to 2×. Shared by the
+/// built-in player and VLCKit.
 struct SpeedButton: View {
     @ObservedObject private var settings = AppSettings.shared
-    var label: String {
-        settings.playbackSpeed == 1 ? "1×" : (settings.playbackSpeed == 1.5 ? "1.5×" : "2×")
+    static let speeds: [Double] = [0.5, 0.75, 1, 1.25, 1.5, 2]
+    /// 0.5×, 0.75×, 1×, 1.25×…
+    static func label(_ v: Double) -> String {
+        var t = String(format: "%.2f", v)
+        while t.hasSuffix("0") { t.removeLast() }
+        if t.hasSuffix(".") { t.removeLast() }
+        return t + "×"
     }
+    var label: String { Self.label(settings.playbackSpeed) }
     var body: some View {
-        Button { settings.cycleSpeed(); Haptics.tap() } label: {
+        Menu {
+            ForEach(Self.speeds, id: \.self) { v in
+                Button { settings.playbackSpeed = v } label: {
+                    if v == settings.playbackSpeed { Label(Self.label(v), systemImage: "checkmark") } else { Text(Self.label(v)) }
+                }
+            }
+        } label: {
             Text(label).font(.caption.weight(.bold).monospacedDigit()).foregroundColor(.white)
                 .padding(.horizontal, 8).padding(.vertical, 4)
                 .background(Capsule().fill(Color.black.opacity(0.5)))
+        } primaryAction: {
+            settings.cycleSpeed(); Haptics.tap()
         }
         .accessibilityLabel("Playback speed \(label)")
+        .accessibilityHint("Touch and hold for more speeds")
+    }
+}
+
+/// Sound on/off for every video this session; it starts from Settings › Start videos muted.
+struct MuteButton: View {
+    @ObservedObject private var sound = VideoSound.shared
+    var body: some View {
+        Button { sound.muted.toggle(); Haptics.tap() } label: {
+            Image(systemName: sound.muted ? "speaker.slash.fill" : "speaker.wave.2.fill").foregroundColor(.white)
+                .frame(width: 26)
+        }
+        .accessibilityLabel(sound.muted ? "Sound off" : "Sound on")
     }
 }
 
@@ -328,7 +356,7 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         let item = AVPlayerItem(asset: AVURLAsset.withSiteHeaders(url))
         player = AVPlayer(playerItem: item)
         super.init()
-        player.isMuted = AppSettings.shared.startMuted
+        player.isMuted = VideoSound.shared.muted
         if let t = VideoResumeStore.shared.position(for: self.resumeKey) {
             resumedFrom = t
             current = t
@@ -570,6 +598,7 @@ private struct NativeVideoContent: View {
                            onEditingChanged: { editing in controller.isScrubbing = editing })
                     .accessibilityIdentifier("videoScrubber")
                     Text(Self.fmt(controller.duration)).font(.caption.monospacedDigit()).foregroundColor(.white)
+                    MuteButton()
                     SpeedButton()
                     Button {
                         Task {
@@ -593,6 +622,7 @@ private struct NativeVideoContent: View {
                 .padding(.bottom, ScreenInsets.videoControlsBottom)
             }
         }
+        .onReceive(VideoSound.shared.$muted) { controller.player.isMuted = $0 }
         .onAppear { if isActive && AppSettings.shared.videosAutoplay { controller.play() } }
         .onChange(of: isActive) { active in
             controller.isActivePage = active

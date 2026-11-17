@@ -327,3 +327,10 @@ actor MediaSize {
         return nil
     }
 }
+
+/// Whether videos play with sound, shared by every player for this session. It starts from
+/// Settings › Start videos muted; the speaker button in the controls changes it.
+final class VideoSound: ObservableObject {
+    static let shared = VideoSound()
+    @Published var muted: Bool = AppSettings.shared.startMuted
+}
