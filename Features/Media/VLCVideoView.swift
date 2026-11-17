@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 #if canImport(MobileVLCKit)
 import MobileVLCKit
 #endif
@@ -232,7 +233,20 @@ final class VLCPlayerModel: NSObject, ObservableObject {
                     self?.resumeFromBackground()
                 }
             },
+            // Headphones unplugged or Bluetooth gone: pause, like the built-in player does,
+            // instead of carrying on out loud through the speaker.
+            nc.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] note in
+                guard let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                      AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable else { return }
+                self?.pauseForRouteLoss()
+            },
         ]
+    }
+
+    private func pauseForRouteLoss() {
+        guard loaded, !closed, player.isPlaying else { return }
+        player.pause()
+        DebugLog.log("VLC", "Paused: headphones disconnected")
     }
 
     private var observers: [NSObjectProtocol] = []

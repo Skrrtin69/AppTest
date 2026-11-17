@@ -489,11 +489,43 @@ final class BrowseModel: ObservableObject {
         return t
     }
 
-    func close(_ tab: SearchTabModel) {
+    func close(_ tab: SearchTabModel, undoable: Bool = true) {
         guard tabs.count > 1 else { return }
         let idx = tabs.firstIndex { $0.id == tab.id } ?? 0
         tabs.removeAll { $0.id == tab.id }
         if selectedID == tab.id { selectedID = tabs[max(0, idx - 1)].id }
+        guard undoable else { return }
+        // The closed tab keeps its results and scroll position until Undo is gone.
+        ToastCenter.shared.show("Closed \"\(tab.title)\"", actionTitle: "Undo") { [weak self] in
+            guard let self = self, !self.tabs.contains(where: { $0.id == tab.id }) else { return }
+            self.tabs.insert(tab, at: min(idx, self.tabs.count))
+            self.selectedID = tab.id
+        }
+    }
+
+    /// Hold a tab › Duplicate: the same search (site, sort, rating) in a new tab next to it.
+    func duplicate(_ tab: SearchTabModel) {
+        let t = SearchTabModel(siteID: tab.siteID, query: tab.query)
+        t.sort = tab.sort
+        t.rating = tab.rating
+        let idx = (tabs.firstIndex { $0.id == tab.id } ?? tabs.count - 1) + 1
+        tabs.insert(t, at: min(idx, tabs.count))
+        selectedID = t.id
+        Task { await t.search(recordHistory: false) }
+    }
+
+    /// Hold a tab › Close Other Tabs.
+    func closeOthers(_ keep: SearchTabModel) {
+        let closed = tabs.filter { $0.id != keep.id }
+        guard !closed.isEmpty else { return }
+        let before = tabs
+        tabs = [keep]
+        selectedID = keep.id
+        ToastCenter.shared.show("Closed \(closed.count) tab\(closed.count == 1 ? "" : "s")", actionTitle: "Undo") { [weak self] in
+            guard let self = self, self.tabs.count == 1, self.tabs.first?.id == keep.id else { return }
+            self.tabs = before
+            self.selectedID = keep.id
+        }
     }
 }
 

@@ -437,6 +437,15 @@ struct TabChip: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(Capsule().fill(isSelected ? Color.accentColor.opacity(0.22) : Color.gray.opacity(0.14)))
+        .contentShape(Capsule())
+        // Hold a tab: duplicate it or close several at once.
+        .contextMenu {
+            Button { BrowseModel.shared.duplicate(tab) } label: { Label("Duplicate Tab", systemImage: "plus.square.on.square") }
+            if BrowseModel.shared.tabs.count > 1 {
+                Button { BrowseModel.shared.closeOthers(tab) } label: { Label("Close Other Tabs", systemImage: "xmark.square") }
+                Button(role: .destructive) { onClose() } label: { Label("Close Tab", systemImage: "xmark") }
+            }
+        }
         .accessibilityElement(children: .contain)
     }
 }

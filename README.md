@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–24)
+## What's new (Phases 1–25)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -494,6 +494,12 @@ Settings › Tools › **Reverse Search Image**:
 - **Video previews on long-press:** holding a video thumbnail shows its thumbnail (before, a site's video "sample" was loaded as a picture and could fail), and an MP4 plays a muted loop on top while you're on Wi-Fi and Battery Saver is off.
 - **Copy All Tags** under the tags in the Info panel copies them separated by spaces.
 - **Faster:** tag suggestions from your own favorites, Read Later and history are counted once and reused until those change, instead of on every pause in typing. Shuffled favorites hash each post once instead of on every comparison.
+
+**Tabs and sound (Phase 25)**
+- **Undo closing a tab:** closing a search tab shows **Undo**, which brings it back with its results and scroll position.
+- **Hold a tab** for *Duplicate Tab* (same site, search, sort and rating), *Close Other Tabs* (also undoable) and *Close Tab*.
+- **Headphones out, video paused:** VLCKit now pauses when wired headphones are unplugged or Bluetooth headphones disconnect, like the built-in player, instead of carrying on through the speaker.
+- **Sharper, lighter thumbnails:** grid thumbnails are decoded at the size of their cell (they were always 420 px). With 2–3 columns they're sharper; with 4–5 columns they use less memory.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

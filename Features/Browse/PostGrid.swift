@@ -78,9 +78,16 @@ struct PostGrid<Footer: View>: View {
         }
     }
 
+    /// One column's width in pixels (the screen's width shared by the columns).
+    var cellPixels: CGFloat {
+        let screen = UIScreen.main
+        return screen.bounds.width / CGFloat(max(1, columnCount)) * screen.scale
+    }
+
     func cell(_ index: Int, _ post: Post, aspect: ThumbAspect) -> some View {
         GridCell(post: post, aspect: aspect, selecting: selecting,
-                 isSelected: selected.contains(post.key), showSource: showSource, showSyncState: showSyncState)
+                 isSelected: selected.contains(post.key), showSource: showSource, showSyncState: showSyncState,
+                 cellPixels: cellPixels)
             .contentShape(Rectangle())
             .onTapGesture {
                 // With blur on, the first tap only reveals the thumbnail.
@@ -107,6 +114,8 @@ struct GridCell: View {
     var isSelected: Bool = false
     var showSource: Bool = false
     var showSyncState: Bool = false
+    /// The cell's width in pixels, so the thumbnail is decoded at the size it's shown.
+    var cellPixels: CGFloat = 420
     @ObservedObject private var favoriteSync = FavoriteSync.shared
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var store = LibraryStore.shared
@@ -119,6 +128,18 @@ struct GridCell: View {
     var dimmed: Bool { settings.dimViewed && viewed.isViewed(post.key) && !selecting }
     /// Square cells of still pictures and videos (animated GIFs keep their animation).
     var useSmartCrop: Bool { settings.smartThumbnails && aspect == .square && post.mediaType != .gif }
+
+    /// Long side to decode: enough to fill the cell sharply (a cropped square needs the
+    /// picture's short side to cover it), rounded to steps of 64 so the cache isn't split
+    /// into many sizes. It was always 420, soft at 2–3 columns and more than needed at 4–5.
+    var decodePixels: CGFloat {
+        let s = post.pixelSize
+        let long = s.map { max($0.width, $0.height) / max(1, min($0.width, $0.height)) } ?? 1.3
+        let portrait = s.map { $0.height >= $0.width } ?? true
+        let factor = (aspect == .square || portrait) ? min(long, 2.5) : 1
+        let want = min(900, max(192, cellPixels * factor))
+        return (want / 64).rounded(.up) * 64
+    }
 
     var ratio: CGFloat {
         guard aspect == .original else { return 1 }
@@ -134,7 +155,7 @@ struct GridCell: View {
                     if useSmartCrop {
                         SmartThumbnail(url: post.thumbnailURL, client: AdapterRegistry.shared.adapter(for: post.siteID)?.client)
                     } else {
-                        CachedAsyncImage(url: post.thumbnailURL, maxPixel: 420,
+                        CachedAsyncImage(url: post.thumbnailURL, maxPixel: decodePixels,
                                          animate: settings.gridGIFsAnimate,
                                          client: AdapterRegistry.shared.adapter(for: post.siteID)?.client,
                                          onLoad: { img in
