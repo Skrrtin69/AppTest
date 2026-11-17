@@ -171,6 +171,15 @@ struct FavoritesView: View {
                 HStack(spacing: 18) {
                     Text("\(selected.count) selected")
                     Spacer()
+                    Button {
+                        let all = Set(favoritePosts.map(\.key))
+                        selected = selected == all ? [] : all
+                    } label: { Image(systemName: "checklist") }
+                    .accessibilityLabel(selected.count == favoritePosts.count ? "Select none" : "Select all")
+                    Button {
+                        selected = Set(favoritePosts.map(\.key)).subtracting(selected)
+                    } label: { Image(systemName: "arrow.left.arrow.right.circle") }
+                    .accessibilityLabel("Invert selection")
                     Button { collectionBatch = PostBatch(posts: favoritePosts.filter { selected.contains($0.key) }) }
                         label: { Image(systemName: "folder.badge.plus") }.accessibilityLabel("Add selected to collection")
                     Button { Task { await DownloadManager.shared.enqueue(favoritePosts.filter { selected.contains($0.key) }) } }

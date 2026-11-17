@@ -294,7 +294,20 @@ final class AppSettings: ObservableObject {
     static func hides(_ post: Post, _ bl: Set<String>) -> Bool {
         guard !bl.isEmpty else { return false }
         if let u = post.uploader, bl.contains("uploader:" + u.lowercased()) { return true }
+        if bl.contains("post:" + post.key.lowercased()) { return true }
         return post.tags.contains { bl.contains($0.lowercased()) }
+    }
+
+    /// Viewer ⋯ › Hide This Post: just this one post, everywhere, with Undo. Listed in the
+    /// Tag Blacklist as "post:<site>:<id>".
+    func hidePost(_ post: Post) {
+        let entry = "post:" + post.key.lowercased()
+        guard !blacklist.contains(entry) else { return }
+        blacklist.append(entry)
+        Haptics.tap()
+        ToastCenter.shared.show("Post hidden", actionTitle: "Undo") { [weak self] in
+            self?.blacklist.removeAll { $0 == entry }
+        }
     }
 
     func muteUploader(_ name: String) {

@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–26)
+## What's new (Phases 1–27)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -506,6 +506,11 @@ Settings › Tools › **Reverse Search Image**:
 - **Video length on thumbnails:** when the adapter maps a `duration` (in seconds) in `metadataPaths`, video thumbnails show **▶ 0:32** instead of a plain play icon. Auto-Configure now looks for a `duration` field (numbers on videos, null on pictures) and maps it for you.
 - **Video cache safety fixes:** big byte ranges are streamed from the site instead of being read whole into memory; an entry dropped while a stream is still writing to it can no longer be marked as cached with missing bytes; error pages (text, HTML, JSON) are never cached as video or copied into the Library; a cached original is only used for a download of the same kind of file; leftover files from a crash are cleaned up at launch; and only video downloads look in the cache.
 - **Viewed marks are saved when you leave the app** with the viewer open, not only when it closes.
+
+**Hiding and picking (Phase 27)**
+- **Hide This Post** (viewer ⋯): hides just that one post everywhere, with Undo. It's listed in the Tag Blacklist as `post:<site>:<id>`, where it can be removed later. (*Hide Posts Like This…* still hides by tag or uploader.)
+- **Select All / Invert in Favorites:** the selection bar in Favorites has the same two buttons as Browse.
+- **Smoother Edit Picture:** the preview is rendered off the main thread from a copy shrunk once to preview size, and only the newest slider position is shown. Saving (including 2× / 3× enlarging and JPEG encoding) also runs in the background instead of freezing the screen.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

@@ -22,6 +22,21 @@ struct MediaEditorView: View {
     /// Export size: 1× (original), 2× or 3× (Lanczos upscaling plus light sharpening).
     @State private var upscale = 1
     @State private var error: String?
+    /// The source shrunk once to preview size: sliders re-render this, not the full picture.
+    @State private var previewBase: UIImage?
+    /// The newest preview request; older ones finishing late are dropped.
+    @State private var renderGen = 0
+    @State private var exporting = false
+
+    /// Everything the edit needs, as a value, so it can be rendered off the main thread.
+    struct Edits {
+        var rotation: Int, flipped: Bool, crop: CGFloat?, brightness: Double, contrast: Double, saturation: Double, upscale: Int
+        static let identity = Edits(rotation: 0, flipped: false, crop: nil, brightness: 0, contrast: 1, saturation: 1, upscale: 1)
+    }
+    var edits: Edits {
+        Edits(rotation: rotation, flipped: flipped, crop: crop.ratio, brightness: brightness,
+              contrast: contrast, saturation: saturation, upscale: upscale)
+    }
 
     enum CropShape: String, CaseIterable, Identifiable {
         case original = "Original", square = "1:1", portrait = "4:5", wide = "16:9"
@@ -135,8 +150,10 @@ struct MediaEditorView: View {
         }
     }
 
-    /// Applies every edit to a CIImage.
-    func edited(_ img: UIImage, maxSide: CGFloat?) -> UIImage? {
+    /// Applies every edit to a CIImage. Safe to call off the main thread.
+    static func edited(_ img: UIImage, maxSide: CGFloat?, _ e: Edits) -> UIImage? {
+        let flipped = e.flipped, rotation = e.rotation, brightness = e.brightness
+        let contrast = e.contrast, saturation = e.saturation, upscale = e.upscale
         guard let cg = img.cgImage else { return nil }
         var ci = CIImage(cgImage: cg)
         if let m = maxSide {
@@ -146,11 +163,11 @@ struct MediaEditorView: View {
         if flipped { ci = ci.oriented(.upMirrored) }
         let orientations: [CGImagePropertyOrientation] = [.up, .right, .down, .left]
         ci = ci.oriented(orientations[rotation])
-        if let r = crop.ratio {
-            let e = ci.extent
-            var w = e.width, h = e.width / r
-            if h > e.height { h = e.height; w = h * r }
-            ci = ci.cropped(to: CGRect(x: e.midX - w / 2, y: e.midY - h / 2, width: w, height: h))
+        if let r = e.crop {
+            let x = ci.extent
+            var w = x.width, h = x.width / r
+            if h > x.height { h = x.height; w = h * r }
+            ci = ci.cropped(to: CGRect(x: x.midX - w / 2, y: x.midY - h / 2, width: w, height: h))
         }
         let f = CIFilter.colorControls()
         f.inputImage = ci
@@ -175,16 +192,44 @@ struct MediaEditorView: View {
 
     func renderPreview() {
         guard let s = source else { return }
-        preview = edited(s, maxSide: 900)
+        renderGen += 1
+        let gen = renderGen, base = previewBase
+        var e = edits
+        e.upscale = 1
+        Task {
+            let out = await Task.detached(priority: .userInitiated) { () -> (base: UIImage?, preview: UIImage?) in
+                // First time: shrink the source once; later edits start from that.
+                let b = base ?? Self.edited(s, maxSide: 900, .identity)
+                return (b, b.flatMap { Self.edited($0, maxSide: nil, e) })
+            }.value
+            if previewBase == nil { previewBase = out.base }
+            if gen == renderGen, let img = out.preview { preview = img }
+        }
     }
 
     enum Destination { case share, photos, files }
 
     func export(_ d: Destination) {
-        guard let s = source, let full = edited(s, maxSide: nil), let data = full.jpegData(compressionQuality: 0.92) else {
-            ToastCenter.shared.show("Couldn't create the edited picture.", style: .error)
-            return
+        guard let s = source, !exporting else { return }
+        exporting = true
+        let e = edits
+        if e.upscale > 1 { ToastCenter.shared.show("Preparing the enlarged picture…") }
+        Task {
+            // Full-size editing (and upscaling) and JPEG encoding take seconds on big pictures.
+            let result = await Task.detached(priority: .userInitiated) { () -> (UIImage, Data)? in
+                guard let full = Self.edited(s, maxSide: nil, e), let data = full.jpegData(compressionQuality: 0.92) else { return nil }
+                return (full, data)
+            }.value
+            exporting = false
+            guard let (full, data) = result else {
+                ToastCenter.shared.show("Couldn't create the edited picture.", style: .error)
+                return
+            }
+            deliver(d, full: full, data: data)
         }
+    }
+
+    func deliver(_ d: Destination, full: UIImage, data: Data) {
         let name = "\(post.siteID)_\(post.id)_edited.jpg"
         switch d {
         case .share:

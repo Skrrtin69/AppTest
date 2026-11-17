@@ -530,6 +530,9 @@ struct ViewerView: View {
                         Button { betterFor = PostBatch(posts: [p]) } label: { Label("Find Better Version", systemImage: "arrow.up.forward.app") }
                     }
                     Button { quickHide = PostBatch(posts: [p]) } label: { Label("Hide Posts Like This…", systemImage: "eye.slash") }
+                    if !isLocal {
+                        Button { settings.hidePost(p) } label: { Label("Hide This Post", systemImage: "eye.slash.circle") }
+                    }
                     if p.isGallery {
                         Divider()
                         Button { Task { await CBZExporter.export(p) } } label: { Label("Save as CBZ", systemImage: "archivebox") }
