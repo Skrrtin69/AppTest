@@ -8,18 +8,24 @@ final class NetworkStatus {
     private let monitor = NWPathMonitor()
     private(set) var isCellular = false
     private(set) var isExpensive = false
+    /// Any working connection (Wi-Fi, mobile data or wired).
+    private(set) var isOnline = true
 
-    /// Posted on the main queue when the connection switches between metered and not.
+    /// Posted on the main queue when the connection switches between metered and not, or
+    /// goes away or comes back.
     static let changed = Notification.Name("MediaDeckNetworkStatusChanged")
 
     private init() {
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self = self else { return }
             let wasMetered = self.onMeteredData
+            let wasOnline = self.isOnline
             self.isCellular = path.usesInterfaceType(.cellular) && !path.usesInterfaceType(.wifi)
             self.isExpensive = path.isExpensive
-            // Also on the first answer, so anything waiting for Wi-Fi can start at launch.
-            if wasMetered != self.onMeteredData || !self.reported {
+            self.isOnline = path.status == .satisfied
+            // Also on the first answer, so anything waiting for Wi-Fi can start at launch,
+            // and when the connection comes back (downloads cut off by it retry).
+            if wasMetered != self.onMeteredData || wasOnline != self.isOnline || !self.reported {
                 self.reported = true
                 DispatchQueue.main.async { NotificationCenter.default.post(name: Self.changed, object: nil) }
             }

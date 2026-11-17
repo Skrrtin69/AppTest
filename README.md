@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–29)
+## What's new (Phases 1–30)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -521,6 +521,11 @@ Settings › Tools › **Reverse Search Image**:
 - **Show only pictures, GIFs or videos** (Browse ⋯ › Show): narrows every search tab on any site, even ones whose search has no type filter. When nothing loaded so far matches, the grid offers **Load More**. Download All and Select All follow what's shown.
 - **Shuffled Library:** the Library's sort menu has *Shuffled* too; picking it again gives a new order.
 - **Fixes from a second review:** video lengths are now found even when the sampled results mix pictures (null) and videos; post page links keep the site's base path and are only offered when the ID is in the page address; Edit Picture renders one preview at a time (the newest slider position next) instead of queueing a render per slider tick; long cached byte ranges (the web player asking for the rest of a video) are streamed from the cache file 1 MB at a time instead of being downloaded again; and an absurd video length from a site can no longer crash the grid.
+
+**Picking up where things stopped (Phase 30)**
+- **Downloads survive a lost connection:** when Wi-Fi or mobile data drops, cut-off downloads show *Connection lost. It continues when you're back online.* (one message for the whole queue, not one error each) and carry on from where they stopped as soon as the connection returns. A download gets up to three automatic tries; after that it fails as before, with Retry.
+- **Unfinished videos:** Favorites › Recent has an *Unfinished Videos* filter when any recent video was stopped partway; they continue where you left off.
+- **Lighter Library:** the Library screen redraws only when its items or the queue's size change, not on every percent of every running download.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

@@ -2,7 +2,10 @@ import SwiftUI
 
 /// Grid of completed downloads, stored under Documents/Downloads (also visible in the Files app).
 struct LibraryView: View {
-    @ObservedObject private var downloads = DownloadManager.shared
+    /// Not observed directly: it changes on every download tick. `library` tells this
+    /// screen when finished items or the queue's size change.
+    private var downloads: DownloadManager { DownloadManager.shared }
+    @ObservedObject private var library = DownloadedPosts.shared
     @ObservedObject private var registry = AdapterRegistry.shared
     @ObservedObject private var settings = AppSettings.shared
     @State private var siteFilter: String?

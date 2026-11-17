@@ -69,18 +69,35 @@ struct RecentlyViewedGrid: View {
     let onOpen: ([Post], Int) -> Void
     let onAddToCollection: ([Post]) -> Void
     @State private var confirmClear = false
+    /// Only videos stopped partway (they continue where you left off).
+    @State private var unfinishedOnly = false
 
     var posts: [Post] { store.entries.map(\.post).filter { !settings.isBlacklisted($0) } }
 
+    static func isUnfinished(_ p: Post) -> Bool {
+        p.mediaType == .video && VideoResumeStore.shared.fraction(for: p.mediaURL) != nil
+    }
+
     var body: some View {
-        let list = posts
+        let all = posts
+        let unfinishedCount = all.filter(Self.isUnfinished).count
+        let list = unfinishedOnly && unfinishedCount > 0 ? all.filter(Self.isUnfinished) : all
         if list.isEmpty {
             EmptyStateView(icon: "clock.arrow.circlepath", title: "Nothing viewed yet",
                            message: "Posts you open in the viewer show up here, newest first.")
         } else {
             VStack(spacing: 4) {
                 HStack {
-                    Text("Last \(list.count) opened").font(.footnote).foregroundColor(.secondary)
+                    if unfinishedCount > 0 {
+                        Picker("Show", selection: $unfinishedOnly) {
+                            Text("All \(all.count)").tag(false)
+                            Text("Unfinished Videos \(unfinishedCount)").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .accessibilityIdentifier("recentUnfinished")
+                    } else {
+                        Text("Last \(list.count) opened").font(.footnote).foregroundColor(.secondary)
+                    }
                     Spacer()
                     Button("Clear") { confirmClear = true }
                         .font(.footnote)

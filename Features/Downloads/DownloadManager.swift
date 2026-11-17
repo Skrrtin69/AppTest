@@ -39,8 +39,17 @@ final class DownloadManager: NSObject, ObservableObject {
             guard let self = self else { return }
             self.downloadedRefreshPending = false
             var keys = Set<String>()
-            for i in self.items where i.state == .completed { keys.insert(i.post.key) }
-            DownloadedPosts.shared.update(keys)
+            var h = Hasher()
+            var queued = 0
+            for i in self.items {
+                if i.state == .completed {
+                    keys.insert(i.post.key)
+                    if !self.pendingRemoval.contains(i.id) { h.combine(i.id); h.combine(i.relativePath) }
+                } else {
+                    queued += 1
+                }
+            }
+            DownloadedPosts.shared.update(keys, librarySignature: h.finalize(), queueCount: queued)
         }
     }
 
@@ -62,7 +71,9 @@ final class DownloadManager: NSObject, ObservableObject {
     private let encoder = JSONEncoder()
 
     /// Items hidden while their Undo toast is showing; really deleted afterwards.
-    @Published private(set) var pendingRemoval: Set<String> = []
+    @Published private(set) var pendingRemoval: Set<String> = [] {
+        didSet { scheduleDownloadedRefresh() }
+    }
     /// Decoy mode shows no downloads.
     private var shown: [DownloadItem] { LockManager.shared.decoyActive ? [] : items }
     var completed: [DownloadItem] { shown.filter { $0.state == .completed && !pendingRemoval.contains($0.id) } }
@@ -111,6 +122,9 @@ final class DownloadManager: NSObject, ObservableObject {
     func bootstrap() {
         makeSession(background: AppSettings.shared.backgroundDownloads && !backgroundUnsupported)
         loadFromStore()
+        NotificationCenter.default.addObserver(forName: NetworkStatus.changed, object: nil, queue: .main) { [weak self] _ in
+            self?.resumeAfterReconnect()
+        }
         Task { @MainActor in
             let live = await session.allTasks.compactMap { $0 as? URLSessionDownloadTask }
             for t in live {
@@ -399,6 +413,32 @@ final class DownloadManager: NSObject, ObservableObject {
         }
     }
 
+    // MARK: Reconnecting
+
+    static let connectionErrors: Set<Int> = [NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost,
+                                             NSURLErrorTimedOut, NSURLErrorCannotFindHost, NSURLErrorCannotConnectToHost,
+                                             NSURLErrorDNSLookupFailed, NSURLErrorDataNotAllowed, NSURLErrorInternationalRoamingOff]
+    /// Downloads cut off by a lost connection (this session); they resume when it's back.
+    private var networkFailed = Set<String>()
+    private var reconnectTries: [String: Int] = [:]
+    private var announcedWaiting = false
+
+    private func resumeAfterReconnect() {
+        guard NetworkStatus.shared.isOnline, !networkFailed.isEmpty else { return }
+        let ids = networkFailed
+        networkFailed = []
+        announcedWaiting = false
+        var n = 0
+        for id in ids where items.first(where: { $0.id == id })?.state == .failed {
+            // Keeps the resume data, so it carries on instead of starting over.
+            update(id) { $0.state = .queued; $0.error = nil }
+            n += 1
+        }
+        guard n > 0 else { return }
+        DebugLog.log("Downloads", "Back online: resuming \(n) download\(n == 1 ? "" : "s")")
+        schedule()
+    }
+
     func retry(_ id: String) {
         update(id) { $0.state = .queued; $0.error = nil; $0.progress = 0 }
         if let m = mo(id) { m.resumeData = nil; CoreDataStack.shared.save() }
@@ -572,6 +612,22 @@ extension DownloadManager: URLSessionDownloadDelegate {
         if item.state == .paused || item.state == .completed { return }
         if error.code == NSURLErrorCancelled && item.state != .downloading { return }
         let rd = error.userInfo[NSURLSessionDownloadTaskResumeData] as? Data
+        // The connection dropped: wait for it to come back and carry on from where it was,
+        // with one message for the whole queue instead of one error per download.
+        // At most three automatic tries each, so a dead server doesn't loop forever.
+        if error.domain == NSURLErrorDomain, Self.connectionErrors.contains(error.code), (reconnectTries[id] ?? 0) < 3 {
+            reconnectTries[id, default: 0] += 1
+            networkFailed.insert(id)
+            update(id) { $0.state = .failed; $0.error = "Connection lost. It continues when you're back online." }
+            if let rd = rd, let i = items.firstIndex(where: { $0.id == id }) { persist(items[i], resumeData: .some(rd)) }
+            if !announcedWaiting {
+                announcedWaiting = true
+                ToastCenter.shared.show("Connection lost. Downloads continue when you're back online.")
+            }
+            // Online again already (a blip): try straight away.
+            if NetworkStatus.shared.isOnline { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.resumeAfterReconnect() } }
+            return
+        }
         update(id) { $0.state = .failed; $0.error = error.localizedDescription }
         if let rd = rd, let i = items.firstIndex(where: { $0.id == id }) { persist(items[i], resumeData: .some(rd)) }
         ToastCenter.shared.show("Download failed: \(error.localizedDescription)", style: .error)
@@ -660,6 +716,14 @@ extension DownloadManager {
 final class DownloadedPosts: ObservableObject {
     static let shared = DownloadedPosts()
     @Published private(set) var keys: Set<String> = []
-    func update(_ new: Set<String>) { if new != keys { keys = new } }
+    /// Changes only when the Library's items (or the queue's size) change, so the Library
+    /// screen doesn't redraw for every percent of every running download.
+    @Published private(set) var librarySignature = 0
+    @Published private(set) var queueCount = 0
+    func update(_ new: Set<String>, librarySignature sig: Int, queueCount q: Int) {
+        if new != keys { keys = new }
+        if sig != librarySignature { librarySignature = sig }
+        if q != queueCount { queueCount = q }
+    }
     func contains(_ key: String) -> Bool { !LockManager.shared.decoyActive && keys.contains(key) }
 }
