@@ -566,6 +566,7 @@ A full review of video playback while paging (the original paging fix is intact)
 - **The pager handing a page's view to another post** now gives that post its own player (VLCKit, web player and the built-in player), so the old video can't keep playing under the new post; Picture in Picture follows the right layer.
 - **The built-in player no longer pauses on the pager's false "disappear"** while you swipe, a repeated "appear" no longer undoes your pause, and when iOS pauses it (headphones out, a call) the play button shows it.
 - A neighbouring page no longer shows "didn't start within N seconds" when you swipe to it; holding for 2× is released if the stream closes mid-hold.
+- **Follow-up review of these fixes:** a VLCKit video arriving with autoplay on now plays even when its surface is rebuilt a moment later; a stream still opening when you swipe away is paused as soon as it starts (no sound from a page you left); a first-frame preview cut short by a swipe no longer leaves the page stuck on "Loading video..."; after headphones are unplugged a surface rebuild doesn't start the video again through the speaker; the loading watchdog restarts after each reopen, so a reopen that hangs ends in the Retry card; and closing the viewer pauses every player (except one in Picture in Picture) as a safety net.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

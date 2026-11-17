@@ -247,6 +247,10 @@ final class VLCPlayerModel: NSObject, ObservableObject {
             },
             // Headphones unplugged or Bluetooth gone: pause, like the built-in player does,
             // instead of carrying on out loud through the speaker.
+            // The viewer closed: stop (a safety net if SwiftUI keeps this player a moment longer).
+            nc.addObserver(forName: VideoActivity.viewerClosed, object: nil, queue: .main) { [weak self] _ in
+                self?.pauseForViewerClose()
+            },
             nc.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] note in
                 guard let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
                       AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable else { return }
@@ -255,8 +259,17 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         ]
     }
 
+    private func pauseForViewerClose() {
+        #if canImport(MobileVLCKit)
+        guard loaded, !closed else { return }
+        wantsPlay = false
+        if player.isPlaying { player.pause() }
+        #endif
+    }
+
     private func pauseForRouteLoss() {
         guard loaded, !closed, player.isPlaying else { return }
+        wantsPlay = false
         player.pause()
         DebugLog.log("VLC", "Paused: headphones disconnected")
     }
@@ -322,16 +335,21 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         let becameInactive = !on && active
         active = on
         if on { VideoActivity.shared.report(self, playing: isPlaying) } else { VideoActivity.shared.release(self) }
+        // Arriving on the page: it should play if autoplay is on, even if the surface it
+        // will reopen on hasn't been built yet (load() then reopens with this).
+        if becameActive { wantsPlay = AppSettings.shared.videosAutoplay }
         guard loaded else { return }
         if closed {
-            if becameActive, !inBackground { reopen(play: AppSettings.shared.videosAutoplay) }
+            if becameActive, !inBackground { reopen(play: wantsPlay) }
             return
         }
         if becameActive {
-            if AppSettings.shared.videosAutoplay { start() } else if !player.isPlaying { peek() }
+            if wantsPlay { start() } else if !player.isPlaying { peek() }
         } else if becameInactive {
             wantsPlay = false
-            if player.isPlaying { player.pause() }
+            // A peek cut short would otherwise stay "in progress" (muted, no frame) for good.
+            endPeek()
+            player.pause()
         }
     }
 
@@ -365,7 +383,8 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         lastStop = Date()
         if holding { holding = false; player.rate = Float(AppSettings.shared.playbackSpeed) }
         player.stop()
-        onClosed?()
+        // close() runs inside SwiftUI's view updates (load / surfaceGone): report it after.
+        if let cb = onClosed { DispatchQueue.main.async { cb() } }
         DebugLog.log("VLC", "Closed (\(why)) at \(resumeAtMs) ms")
     }
 
@@ -536,6 +555,8 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
             guard !closed else { return }
             switch state {
             case .playing:
+                // A stream still opening when you swiped away starts after the pause: stop it.
+                if !active, !pauseOnStart { player.pause(); return }
                 markReady()
             case .error:
                 if let s = lastStop, Date().timeIntervalSince(s) < 2 {
@@ -578,6 +599,7 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
         let now = Double(player.time.intValue) / 1000
         DispatchQueue.main.async { [self] in
             guard !closed else { return }
+            if !active, !pauseOnStart, player.isPlaying { player.pause() }
             markReady()
             // Reopened while not playing: the first time update means a frame is on screen.
             if pauseOnStart {

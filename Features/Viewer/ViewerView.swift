@@ -110,6 +110,7 @@ struct ViewerView: View {
         .onDisappear {
             ViewedStore.shared.holdChanges = false
             VideoActivity.shared.reset()
+            NotificationCenter.default.post(name: VideoActivity.viewerClosed, object: nil)
             if settings.rotationLock != "auto" { OrientationLock.apply("auto") }
             // Swiped to another post: the grid scrolls to it when the viewer closes.
             if let k = current?.key, k != startKey { ViewerReturn.shared.closed(on: k) }

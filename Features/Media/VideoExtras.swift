@@ -348,6 +348,9 @@ final class VideoSound: ObservableObject {
 /// themselves a few seconds after playback starts (not while you drag the scrubber).
 final class VideoActivity: ObservableObject {
     static let shared = VideoActivity()
+    /// Posted when the viewer closes: every player pauses (a safety net in case SwiftUI keeps
+    /// a page's player alive a little longer).
+    static let viewerClosed = Notification.Name("MediaDeckViewerClosed")
     @Published private(set) var playing = false
     @Published var scrubbing = false
     /// The player that reported last; only it can say it stopped, so a page leaving can't

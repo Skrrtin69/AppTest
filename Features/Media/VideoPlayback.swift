@@ -172,6 +172,8 @@ struct MediaVideoView: View {
     @State private var watchedKey: String?
     /// The video that already had its one silent retry.
     @State private var autoRetried: URL?
+    /// How many times the VLC stream was closed (for the loading watchdog).
+    @State private var closures = 0
     @ObservedObject private var network = NetworkSpeed.shared
 
     var body: some View {
@@ -191,12 +193,13 @@ struct MediaVideoView: View {
                              loop: !settings.autoAdvance, showControls: showControls, onFinished: onFinished, onTap: onTap,
                              onReady: { webReady = true; webError = nil },
                              onError: { reportError($0) }, onStatus: { engine = $0 },
-                             onClosed: { webReady = false })
+                             onClosed: { webReady = false; closures += 1 })
                     // Per address too: if the pager hands this view to another post, it gets
                     // its own player instead of the old video carrying on under it.
                     .id("\(url.absoluteString)#\(webAttempt)")
                     .overlay { loadingOverlay }
-                    .task(id: "\(url.absoluteString)#\(webAttempt)#\(isActive)") { await watchStart() }
+                    // Also re-armed after each close, so a reopen that hangs still ends in the card.
+                    .task(id: "\(url.absoluteString)#\(webAttempt)#\(isActive)#\(closures)") { await watchStart() }
             case .some(.web):
                 WebVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
                              loop: !settings.autoAdvance, onFinished: onFinished,
@@ -345,6 +348,7 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
     /// Autoplay already happened for this player (see NativeVideoContent.onAppear).
     var autoplayed = false
     private var rateObservation: NSKeyValueObservation?
+    private var viewerClosedObserver: NSObjectProtocol?
 
     /// Called when the video ends while auto-advance is on.
     var onFinished: (() -> Void)?
@@ -366,6 +370,11 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         player = AVPlayer(playerItem: item)
         super.init()
         player.isMuted = VideoSound.shared.muted
+        // The viewer closed: stop, unless this is the video floating in Picture in Picture.
+        viewerClosedObserver = NotificationCenter.default.addObserver(forName: VideoActivity.viewerClosed, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, !self.pipActive else { return }
+            self.pause()
+        }
         // Paused by iOS (headphones out, a call, PiP closed): show it. The end of the video
         // is left to the end observer (it loops or moves on).
         rateObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
@@ -474,6 +483,7 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         if duration > 0 { VideoResumeStore.shared.save(player.currentTime().seconds, duration: duration, for: resumeKey, force: true) }
         player.pause()
         rateObservation?.invalidate(); rateObservation = nil
+        if let o = viewerClosedObserver { NotificationCenter.default.removeObserver(o); viewerClosedObserver = nil }
         if let t = timeObserver { player.removeTimeObserver(t); timeObserver = nil }
         if let e = endObserver { NotificationCenter.default.removeObserver(e); endObserver = nil }
         statusObservation = nil
