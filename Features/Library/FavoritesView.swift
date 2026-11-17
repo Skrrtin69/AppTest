@@ -18,15 +18,35 @@ struct FavoritesView: View {
 
     @State private var siteFilter: String?
     @State private var query = ""
+    enum SortOrder: String, CaseIterable { case newest = "Newest First", oldest = "Oldest First", shuffled = "Shuffled" }
+    @AppStorage("favoritesSort") private var sortRaw = SortOrder.newest.rawValue
+    /// A new order each time Shuffle is picked, stable while you scroll and open posts.
+    @State private var shuffleSeed = UInt64.random(in: 1...UInt64.max)
+    var sortOrder: SortOrder { SortOrder(rawValue: sortRaw) ?? .newest }
 
     /// Every site's favorites together, narrowed by the site chip and the search text.
     var favoritePosts: [Post] {
         let q = query.lowercased().trimmingCharacters(in: .whitespaces)
-        return store.favorites.map { $0.post }.filter { p in
+        var list = store.favorites.map { $0.post }
+        switch sortOrder {
+        case .newest: break
+        case .oldest: list.reverse()
+        case .shuffled:
+            let seed = shuffleSeed
+            list.sort { Self.mix($0.key, seed) < Self.mix($1.key, seed) }
+        }
+        return list.filter { p in
             !settings.isBlacklisted(p) && (siteFilter == nil || p.siteID == siteFilter) &&
             (q.isEmpty || p.id.lowercased().contains(q) || p.tags.contains { $0.lowercased().contains(q) } ||
              AdapterRegistry.shared.displayName(for: p.siteID).lowercased().contains(q))
         }
+    }
+
+    /// Stable per-launch hash of a key and the shuffle seed (FNV-1a).
+    static func mix(_ key: String, _ seed: UInt64) -> UInt64 {
+        var h: UInt64 = 0xcbf29ce484222325 ^ seed
+        for b in key.utf8 { h = (h ^ UInt64(b)) &* 0x100000001b3 }
+        return h
     }
 
     var favoriteSites: [String] { Array(Set(store.favorites.map { $0.post.siteID })).sorted() }
@@ -38,9 +58,24 @@ struct FavoritesView: View {
                 TextField("Search favorites (tags, ID, site)", text: $query)
                     .textInputAutocapitalization(.never).disableAutocorrection(true)
                     .accessibilityIdentifier("favoritesSearch")
+                    .padding(.trailing, 26)
             }
             .padding(8)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.16)))
+            .overlay(alignment: .trailing) {
+                Menu {
+                    ForEach(SortOrder.allCases, id: \.self) { o in
+                        Button {
+                            if o == .shuffled { shuffleSeed = UInt64.random(in: 1...UInt64.max) }
+                            sortRaw = o.rawValue
+                        } label: {
+                            if o == sortOrder && o != .shuffled { Label(o.rawValue, systemImage: "checkmark") }
+                            else { Text(o == .shuffled && sortOrder == .shuffled ? "Shuffle Again" : o.rawValue) }
+                        }
+                    }
+                } label: { Image(systemName: "arrow.up.arrow.down").padding(8) }
+                .accessibilityLabel("Sort favorites: \(sortOrder.rawValue)")
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     chip("All", selected: siteFilter == nil) { siteFilter = nil }

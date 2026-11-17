@@ -349,6 +349,10 @@ struct BrowseView: View {
                 }
                 Button { builderFor = t } label: { Label("Build a Search…", systemImage: "slider.horizontal.3") }
                 Button { t.scrollToTopToken += 1 } label: { Label("Scroll to top", systemImage: "arrow.up.to.line") }
+                Button { settings.hideOpened.toggle() } label: {
+                    settings.hideOpened ? Label("Show Opened Posts", systemImage: "eye")
+                        : Label("Hide Opened Posts", systemImage: "eye.slash")
+                }
                 Button {
                     let all = t.visiblePosts(blacklist: settings.blacklistSet)
                     Task {
@@ -441,6 +445,8 @@ struct TabChip: View {
 struct SearchTabView: View {
     @ObservedObject var tab: SearchTabModel
     @ObservedObject var settings = AppSettings.shared
+    /// Only for "Hide Opened Posts": the list changes when the viewer closes.
+    @ObservedObject private var viewed = ViewedStore.shared
     @State private var accountFor: AccountRequest?
     @State private var massReverse: PostBatch?
     /// Scrolled far enough down to offer the floating "back to top" button.
@@ -463,6 +469,12 @@ struct SearchTabView: View {
                 if let err = tab.error {
                     EmptyStateView(icon: "wifi.exclamationmark", title: "Couldn't load", message: err,
                                    actionTitle: "Retry") { Task { await tab.retry() } }
+                } else if tab.hasSearched && settings.hideOpened && !tab.posts.isEmpty {
+                    EmptyStateView(icon: "eye.slash", title: "All opened",
+                                   message: "You've opened every post loaded so far, and Hide Opened Posts is on.",
+                                   actionTitle: tab.hasNext ? "Load More" : "Show Opened Posts") {
+                        if tab.hasNext { Task { await tab.loadMore() } } else { settings.hideOpened = false }
+                    }
                 } else if tab.hasSearched {
                     EmptyStateView(icon: "magnifyingglass", title: "No results",
                                    message: tab.posts.isEmpty ? "Nothing matched \"\(tab.title)\" on \(tab.siteName)." :

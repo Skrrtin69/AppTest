@@ -44,6 +44,14 @@ struct PostGrid<Footer: View>: View {
             }
         }
         .padding(.horizontal, settings.gridSpacing)
+        // Pinch out for bigger thumbnails (fewer columns), in for smaller (more columns).
+        .simultaneousGesture(MagnificationGesture().onEnded { scale in
+            let step = scale > 1.2 ? -1 : (scale < 0.83 ? 1 : 0)
+            let next = AppSettings.clamp(settings.gridColumns + step, 2, 5)
+            guard step != 0, next != settings.gridColumns else { return }
+            Haptics.tap()
+            withAnimation(.easeInOut(duration: 0.2)) { settings.gridColumns = next }
+        })
         footer()
     }
 

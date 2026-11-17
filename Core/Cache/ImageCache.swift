@@ -50,18 +50,27 @@ actor ImageCache {
         return d
     }
 
+    /// Rough bytes on disk, so the folder is only scanned when it may be over the limit
+    /// (it was listed twice, file by file, every 25 pictures). Nil until first measured.
+    private var approxBytes: Int?
+
     func store(_ data: Data, for url: URL, siteID: String? = nil) {
         let key = Self.key(for: url)
         memory.setObject(data as NSData, forKey: key as NSString, cost: data.count)
-        try? data.write(to: fileURL(key), options: .atomic)
+        // The file is written off the actor, so cache reads don't wait behind disk writes.
+        // Until it lands, the memory copy above answers.
+        let file = fileURL(key)
+        Task.detached(priority: .utility) { try? data.write(to: file, options: .atomic) }
         if let s = siteID, siteIndex[key] != s {
             siteIndex[key] = s
             indexDirty = true
         }
+        approxBytes = approxBytes.map { $0 + data.count }
         writesSinceTrim += 1
         if writesSinceTrim >= 25 {
             writesSinceTrim = 0
-            trim()
+            let limitMB = UserDefaults.standard.object(forKey: AppSettings.K.cacheLimitMB) as? Int ?? 300
+            if approxBytes == nil || approxBytes! > limitMB * 1024 * 1024 { trim() }
             saveIndex()
         }
     }
@@ -98,6 +107,7 @@ actor ImageCache {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         siteIndex = [:]
         indexDirty = true
+        approxBytes = 0
         saveIndex()
     }
 
@@ -114,6 +124,7 @@ actor ImageCache {
         }
         indexDirty = true
         saveIndex()
+        approxBytes = approxBytes.map { max(0, $0 - freed) }
         return freed
     }
 
@@ -124,6 +135,7 @@ actor ImageCache {
         expire()
         var files = entries()
         var total = files.reduce(0) { $0 + $1.size }
+        approxBytes = total
         guard total > limit else { return }
         files.sort { $0.date < $1.date }
         for f in files {
@@ -133,6 +145,7 @@ actor ImageCache {
             total -= f.size
             if total <= Int(Double(limit) * 0.9) { break }
         }
+        approxBytes = total
     }
 
     /// Deletes files not opened for the number of days chosen in Settings (reading a file

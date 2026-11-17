@@ -17,7 +17,20 @@ struct LibraryView: View {
     @State private var reversing: PostBatch?
     @ObservedObject private var autoTags = AutoTags.shared
 
+    enum SortOrder: String, CaseIterable { case newest = "Newest First", oldest = "Oldest First", largest = "Largest First" }
+    @AppStorage("librarySort") private var sortRaw = SortOrder.newest.rawValue
+    var sortOrder: SortOrder { SortOrder(rawValue: sortRaw) ?? .newest }
+
     var items: [DownloadItem] {
+        let list = filteredItems
+        switch sortOrder {
+        case .newest: return list
+        case .oldest: return list.reversed()
+        case .largest: return list.sorted { $0.bytesTotal > $1.bytesTotal }
+        }
+    }
+
+    private var filteredItems: [DownloadItem] {
         let q = search.lowercased().trimmingCharacters(in: .whitespaces)
         if advanced {
             // Filters like size:>5MB ratio:>2:1 source:demo-a type:video, plus words.
@@ -48,15 +61,16 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationView {
+            // Filtered and sorted once per redraw (it ran three times).
+            let list = items
             VStack(spacing: 0) {
                 if downloads.completed.isEmpty {
                     EmptyStateView(icon: "tray", title: "Library is empty",
                                    message: "Downloaded media shows up here. Tap the download button in the viewer, or select several thumbnails and download them together.")
-                } else if items.isEmpty {
+                } else if list.isEmpty {
                     EmptyStateView(icon: "magnifyingglass", title: "No matches", message: "Nothing in your library matches this filter.")
                 } else {
                     ScrollView {
-                        let list = items
                         let posts = localPosts(list)
                         LazyVGrid(columns: columns, spacing: settings.gridSpacing) {
                             ForEach(Array(list.enumerated()), id: \.element.id) { i, item in
@@ -84,6 +98,13 @@ struct LibraryView: View {
                         ForEach(sites, id: \.self) { s in
                             Button { siteFilter = s } label: {
                                 siteFilter == s ? Label(registry.displayName(for: s), systemImage: "checkmark") : Label(registry.displayName(for: s), systemImage: "")
+                            }
+                        }
+                        Section("Sort") {
+                            ForEach(SortOrder.allCases, id: \.self) { o in
+                                Button { sortRaw = o.rawValue } label: {
+                                    sortOrder == o ? Label(o.rawValue, systemImage: "checkmark") : Label(o.rawValue, systemImage: "")
+                                }
                             }
                         }
                     } label: { Label(siteFilter.map { registry.displayName(for: $0) } ?? "All Sites", systemImage: "line.3.horizontal.decrease.circle") }

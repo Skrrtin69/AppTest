@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–21)
+## What's new (Phases 1–22)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -475,6 +475,13 @@ Settings › Tools › **Reverse Search Image**:
 - **The grid follows the viewer:** close the viewer on a different post than you opened and the grid scrolls to that post.
 - **Download selected on Wi-Fi:** in Browse's selection bar, touch and hold the download button for *Download on Wi-Fi*. A tap still downloads now.
 - **Faster:** searching no longer reloads every favorite from the database or rebuilds the widget. The widget's thumbnails are refreshed only when favorites change (or every 6 hours), with the JPEG work off the main thread. Posts marked as viewed while you swipe are added when the viewer closes, so the grids behind it don't redraw on every swipe. The speed test and the followed-tags check wait a few seconds after launch so the first search goes first. Library videos are read in pieces instead of whole for every request.
+
+**Sorting and tidying (Phase 22)**
+- **Pinch the grid:** pinch out on any thumbnail grid for bigger thumbnails (fewer columns) or in for smaller ones (more columns), from 2 to 5. It's the same setting as Browse ⋯ › Columns.
+- **Sort favorites:** the ↑↓ button in the Favorites search field picks Newest First, Oldest First or Shuffled. Picking Shuffled again gives a new order.
+- **Sort the Library:** the site-filter menu (top left) now has Newest First, Oldest First and Largest First, which is handy for freeing space.
+- **Hide Opened Posts** (Browse ⋯): search results leave out posts you've already opened in the viewer. If everything loaded so far is hidden, the grid offers **Load More**. Download All and Select All follow what's shown.
+- **Faster:** the image cache writes files without holding up reads, and only scans its folder when it may be over the limit (it scanned it twice every 25 pictures). At launch, the download list no longer looks up and saves every past download one by one, only the ones that were cut off. The Library's filter runs once per redraw instead of three times.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

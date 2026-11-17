@@ -99,11 +99,16 @@ final class DownloadManager: NSObject, ObservableObject {
             for t in live {
                 if let id = t.taskDescription, items.contains(where: { $0.id == id }) { tasks[id] = t } else { t.cancel() }
             }
-            // Items that were mid-transfer when the app died go back in the queue.
+            // Items that were mid-transfer when the app died go back in the queue. Only those
+            // are written back, in one save (every item used to be fetched and saved one by one
+            // at each launch, which grew with the size of the library).
+            var changed = false
             for i in items.indices where items[i].state == .downloading && tasks[items[i].id] == nil {
                 items[i].state = .queued
+                persist(items[i], save: false)
+                changed = true
             }
-            persistAll()
+            if changed { CoreDataStack.shared.save() }
             schedule()
         }
     }
@@ -126,7 +131,7 @@ final class DownloadManager: NSObject, ObservableObject {
         return try? ctx.fetch(r).first
     }
 
-    private func persist(_ item: DownloadItem, resumeData: Data?? = nil) {
+    private func persist(_ item: DownloadItem, resumeData: Data?? = nil, save: Bool = true) {
         let m = mo(item.id) ?? {
             let n = DownloadMO(context: ctx)
             n.id = item.id
@@ -145,10 +150,8 @@ final class DownloadManager: NSObject, ObservableObject {
         m.relativePath = item.relativePath
         m.errorMessage = item.error
         if let rd = resumeData { m.resumeData = rd }
-        CoreDataStack.shared.save()
+        if save { CoreDataStack.shared.save() }
     }
-
-    private func persistAll() { items.forEach { persist($0) } }
 
     private func update(_ id: String, persist save: Bool = true, _ change: (inout DownloadItem) -> Void) {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
