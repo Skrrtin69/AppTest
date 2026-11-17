@@ -17,6 +17,8 @@ struct ViewerView: View {
     @State private var chrome = true
     @State private var zoomed = false
     @State private var slideshow = false
+    @ObservedObject private var activity = VideoActivity.shared
+    @State private var autoHidOnIndex: Int?
     /// Slideshow in random order (remembered), and the posts it has shown this round.
     @AppStorage("slideshowShuffle") private var slideshowShuffle = false
     @State private var shuffleSeen: Set<Int> = []
@@ -107,6 +109,8 @@ struct ViewerView: View {
         }
         .onDisappear {
             ViewedStore.shared.holdChanges = false
+            VideoActivity.shared.playing = false
+            VideoActivity.shared.scrubbing = false
             if settings.rotationLock != "auto" { OrientationLock.apply("auto") }
             // Swiped to another post: the grid scrolls to it when the viewer closes.
             if let k = current?.key, k != startKey { ViewerReturn.shared.closed(on: k) }
@@ -128,6 +132,17 @@ struct ViewerView: View {
             loadMoreIfNeeded()
             if let p = current { ViewedStore.shared.markViewed(p); RecentlyViewedStore.shared.record(p) }
             if !slideshow { Haptics.tap() }
+        }
+        // A playing video: the controls step aside after 3 s (a tap brings them back).
+        .task(id: "\(chrome)-\(activity.playing)-\(activity.scrubbing)-\(index)") {
+            // Once per post: controls you bring back with a tap stay until you hide them
+            // (so a menu opened from them isn't closed under your finger).
+            guard settings.autoHideVideoControls, chrome, activity.playing, !activity.scrubbing,
+                  current?.mediaType == .video, !showInfo, autoHidOnIndex != index else { return }
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled, chrome, activity.playing, !activity.scrubbing else { return }
+            autoHidOnIndex = index
+            withAnimation { chrome = false }
         }
         .task(id: slideshow) {
             guard slideshow else { return }

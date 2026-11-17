@@ -595,7 +595,7 @@ private struct NativeVideoContent: View {
                     Slider(value: Binding(get: { controller.current },
                                           set: { controller.current = $0; controller.seek(to: $0) }),
                            in: 0...max(controller.duration, 0.1),
-                           onEditingChanged: { editing in controller.isScrubbing = editing })
+                           onEditingChanged: { editing in controller.isScrubbing = editing; VideoActivity.shared.scrubbing = editing })
                     .accessibilityIdentifier("videoScrubber")
                     Text(Self.fmt(controller.duration)).font(.caption.monospacedDigit()).foregroundColor(.white)
                     MuteButton()
@@ -623,9 +623,11 @@ private struct NativeVideoContent: View {
             }
         }
         .onReceive(VideoSound.shared.$muted) { controller.player.isMuted = $0 }
+        .onChange(of: controller.isPlaying) { p in if isActive { VideoActivity.shared.playing = p } }
         .onAppear { if isActive && AppSettings.shared.videosAutoplay { controller.play() } }
         .onChange(of: isActive) { active in
             controller.isActivePage = active
+            if active { VideoActivity.shared.playing = controller.isPlaying }
             if active { if AppSettings.shared.videosAutoplay { controller.play() } } else if !controller.pipActive { controller.pause() }
         }
         .onDisappear { if !controller.pipActive { controller.pause() } }

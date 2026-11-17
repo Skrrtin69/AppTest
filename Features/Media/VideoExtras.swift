@@ -343,3 +343,11 @@ final class VideoSound: ObservableObject {
     static let shared = VideoSound()
     @Published var muted: Bool = AppSettings.shared.startMuted
 }
+
+/// What the video on the current page is doing, for the viewer: its controls hide by
+/// themselves a few seconds after playback starts (not while you drag the scrubber).
+final class VideoActivity: ObservableObject {
+    static let shared = VideoActivity()
+    @Published var playing = false
+    @Published var scrubbing = false
+}

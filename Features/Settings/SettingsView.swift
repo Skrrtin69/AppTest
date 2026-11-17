@@ -63,6 +63,8 @@ struct SettingsView: View {
 
                 Section {
                     Toggle("Autoplay videos in viewer", isOn: $settings.autoplayVideos)
+                    Toggle("Hide controls while a video plays", isOn: $settings.autoHideVideoControls)
+                        .accessibilityIdentifier("autoHideVideoControls")
                     Toggle("Start videos muted", isOn: $settings.startMuted)
                         .accessibilityIdentifier("startMutedToggle")
                     Toggle("Enable Volume/Brightness Swipes", isOn: $settings.edgeSwipes)

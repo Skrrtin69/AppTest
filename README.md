@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–32)
+## What's new (Phases 1–33)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -540,6 +540,9 @@ Settings › Tools › **Reverse Search Image**:
   - Downloads cut off by a lost connection now also resume after the app is reopened. Retry keeps their progress, and the three-try limit counts only failures in a row (it resets once bytes flow again).
   - Recent › Unfinished Videos updates when a video's saved spot appears or goes.
   - The connection type is now updated on the main thread, where it's read.
+
+**Out of the way (Phase 33)**
+- **Controls hide while a video plays:** in the viewer, the top bar, toolbar and video controls fade out 3 s after a video (built-in player or VLCKit) starts playing, never while you drag the scrubber. It happens once per post: after a tap brings them back they stay until you hide them, so a menu you open isn't closed under your finger. Turn it off in Settings › Reading & Viewer › *Hide controls while a video plays*.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

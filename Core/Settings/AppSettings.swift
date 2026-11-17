@@ -60,7 +60,7 @@ final class AppSettings: ObservableObject {
                          smartThumbnails = "smartThumbnails", twoPageLandscape = "twoPageLandscape", fallbackSite = "fallbackSite",
                          stripEXIF = "stripEXIF", autoTagDownloads = "autoTagDownloads", panicGesture = "panicGesture", panicAction = "panicAction",
                          doubleTapAction = "doubleTapAction", swipeUpAction = "swipeUpAction", swipeDownAction = "swipeDownAction",
-                         startMuted = "startMuted", edgeSwipes = "edgeSwipes", useVLC = "useVLC", restoreTabs = "restoreTabs", hideOpened = "hideOpened", typeFilter = "typeFilter"
+                         startMuted = "startMuted", edgeSwipes = "edgeSwipes", useVLC = "useVLC", restoreTabs = "restoreTabs", hideOpened = "hideOpened", typeFilter = "typeFilter", autoHideVideoControls = "autoHideVideoControls"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
@@ -68,7 +68,7 @@ final class AppSettings: ObservableObject {
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
                           readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
                           detectClipboardLinks, dataSaver, wifiOnlyMedia, mixWithOthers,
-                          smartThumbnails, twoPageLandscape, fallbackSite, stripEXIF, autoTagDownloads, panicGesture, panicAction, doubleTapAction, swipeUpAction, swipeDownAction, startMuted, edgeSwipes, useVLC, restoreTabs, hideOpened, typeFilter]
+                          smartThumbnails, twoPageLandscape, fallbackSite, stripEXIF, autoTagDownloads, panicGesture, panicAction, doubleTapAction, swipeUpAction, swipeDownAction, startMuted, edgeSwipes, useVLC, restoreTabs, hideOpened, typeFilter, autoHideVideoControls]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -176,6 +176,8 @@ final class AppSettings: ObservableObject {
     /// Browse ⋯ › Show: "all", or only "image", "gif" or "video" posts in search results.
     @Published var typeFilter: String = "all" { didSet { d.set(typeFilter, forKey: K.typeFilter) } }
     var typeFilterType: MediaType? { MediaType(rawValue: typeFilter) }
+    /// The viewer's controls hide by themselves 3 s after a video starts playing.
+    @Published var autoHideVideoControls: Bool = true { didSet { d.set(autoHideVideoControls, forKey: K.autoHideVideoControls) } }
 
     var mediaWaitsForWiFi: Bool { wifiOnlyMedia && NetworkStatus.shared.onMeteredData }
 
@@ -281,6 +283,7 @@ final class AppSettings: ObservableObject {
         restoreTabs = d.object(forKey: K.restoreTabs) as? Bool ?? true
         hideOpened = d.object(forKey: K.hideOpened) as? Bool ?? false
         typeFilter = d.string(forKey: K.typeFilter) ?? "all"
+        autoHideVideoControls = d.object(forKey: K.autoHideVideoControls) as? Bool ?? true
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }
