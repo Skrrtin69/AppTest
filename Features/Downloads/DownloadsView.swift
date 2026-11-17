@@ -89,7 +89,7 @@ struct DownloadRow: View {
         let size = item.bytesTotal > 0 ? " of \(ByteCountFormatter.string(fromByteCount: item.bytesTotal, countStyle: .file))" : ""
         switch item.state {
         case .queued: return "Waiting…"
-        case .downloading: return "Downloading \(pct)\(size)" + (manager.speedText(for: item).map { " · " + $0 } ?? "")"
+        case .downloading: return "Downloading \(pct)\(size)" + (manager.speedText(for: item).map { " · " + $0 } ?? "")
         case .paused: return "Paused at \(pct)"
         case .failed: return "Failed: \(item.error ?? "unknown error")"
         case .completed: return "Done"
