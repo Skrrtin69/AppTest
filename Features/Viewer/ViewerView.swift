@@ -17,6 +17,9 @@ struct ViewerView: View {
     @State private var chrome = true
     @State private var zoomed = false
     @State private var slideshow = false
+    /// Slideshow in random order (remembered), and the posts it has shown this round.
+    @AppStorage("slideshowShuffle") private var slideshowShuffle = false
+    @State private var shuffleSeen: Set<Int> = []
     @State private var showInfo = false
     @State private var collectionBatch: PostBatch?
     @State private var reverseFor: PostBatch?
@@ -131,7 +134,15 @@ struct ViewerView: View {
             while !Task.isCancelled && slideshow {
                 try? await Task.sleep(nanoseconds: UInt64(settings.slideshowInterval * 1_000_000_000))
                 guard !Task.isCancelled, slideshow, !posts.isEmpty else { break }
-                withAnimation { index = (index + 1) % posts.count }
+                if slideshowShuffle, posts.count > 2 {
+                    // Random order without repeats until every post has been shown once.
+                    if shuffleSeen.count >= posts.count - 1 { shuffleSeen = [] }
+                    shuffleSeen.insert(index)
+                    let left = posts.indices.filter { !shuffleSeen.contains($0) }
+                    if let next = left.randomElement() { index = next }
+                } else {
+                    withAnimation { index = (index + 1) % posts.count }
+                }
             }
         }
         .sheet(isPresented: $showInfo) {
@@ -320,13 +331,17 @@ struct ViewerView: View {
         .background(LinearGradient(colors: [.black.opacity(0.7), .clear], startPoint: .top, endPoint: .bottom))
     }
 
-    var intervalChoices: some View {
+    @ViewBuilder var intervalChoices: some View {
         ForEach([2, 3, 5, 8, 10, 15, 20, 30], id: \.self) { s in
             Button {
                 settings.slideshowInterval = Double(s)
             } label: {
                 if Int(settings.slideshowInterval) == s { Label("\(s) seconds", systemImage: "checkmark") } else { Text("\(s) seconds") }
             }
+        }
+        Divider()
+        Button { slideshowShuffle.toggle(); shuffleSeen = [] } label: {
+            if slideshowShuffle { Label("Shuffle", systemImage: "checkmark") } else { Label("Shuffle", systemImage: "shuffle") }
         }
     }
 

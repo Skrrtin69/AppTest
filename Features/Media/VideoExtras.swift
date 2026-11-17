@@ -151,6 +151,13 @@ private struct TouchCatcher: UIViewRepresentable {
 final class VideoResumeStore {
     static let shared = VideoResumeStore()
     static let minimumDuration: Double = 60
+    /// Posted on the main queue when a video gets a saved spot or loses it (not on every
+    /// update of an existing one), e.g. for Recent › Unfinished Videos.
+    static let changed = Notification.Name("MediaDeckVideoResumeChanged")
+
+    private func announce() {
+        DispatchQueue.main.async { NotificationCenter.default.post(name: Self.changed, object: nil) }
+    }
 
     /// `d` (the video's length) is missing in spots saved by older versions.
     private struct Entry: Codable { var t: Double; var at: Date; var d: Double? }
@@ -190,18 +197,20 @@ final class VideoResumeStore {
         if t < 5 || t > duration - 5 {
             let had = map.removeValue(forKey: k) != nil
             lock.unlock()
-            if had { persist() }
+            if had { persist(); announce() }
             return
         }
+        let isNew = map[k] == nil
         map[k] = Entry(t: t, at: Date(), d: duration)
         let due = force || Date().timeIntervalSince(lastWrite) > 5
         lock.unlock()
         if due { persist() }
+        if isNew { announce() }
     }
 
     func clear(_ url: URL) {
         lock.lock(); let had = map.removeValue(forKey: id(url)) != nil; lock.unlock()
-        if had { persist() }
+        if had { persist(); announce() }
     }
 
     private func persist() {

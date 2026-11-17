@@ -8,6 +8,9 @@ final class GridLook: ObservableObject {
     static let shared = GridLook()
     struct Values: Equatable {
         var blur = false, dim = true, smart = true, animate = true
+        // Layout, for the grid itself.
+        var columns = 3, spacing = 3.0, aspect = ThumbAspect.square
+        func columns(landscape: Bool) -> Int { landscape ? columns + 2 : columns }
     }
     @Published private(set) var v: Values
     private var sub: AnyCancellable?
@@ -22,7 +25,8 @@ final class GridLook: ObservableObject {
 
     private static func read() -> Values {
         let s = AppSettings.shared
-        return Values(blur: s.blurThumbnails, dim: s.dimViewed, smart: s.smartThumbnails, animate: s.gridGIFsAnimate)
+        return Values(blur: s.blurThumbnails, dim: s.dimViewed, smart: s.smartThumbnails, animate: s.gridGIFsAnimate,
+                      columns: s.gridColumns, spacing: s.gridSpacing, aspect: s.thumbAspect)
     }
 
     private func refresh() {

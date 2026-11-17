@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–31)
+## What's new (Phases 1–32)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -531,6 +531,15 @@ Settings › Tools › **Reverse Search Image**:
 - **Open in New Tab** from the Searches sheet (clock button): hold a saved search or a recent search. The tab you're in stays as it is.
 - **Save a recent search** by holding it › *Save Search* (shown when it isn't saved yet), or *Delete* it.
 - **Fewer thumbnail redraws:** thumbnails now watch only the four settings they use (blur, dim, smart crop, GIF animation) and the list of favorites. Changing playback speed or another unrelated setting, or every search being added to history, used to redraw every visible thumbnail in every open tab.
+
+**Shuffle (Phase 32)**
+- **Shuffled slideshow:** the slideshow interval menu has *Shuffle*. Posts then come in random order without repeats until every post has been shown once. The choice is remembered.
+- **Fewer grid redraws:** the grid itself now watches only its layout settings (columns, spacing, thumbnail shape), not every setting or every opened post.
+- **Fixes from a third review:**
+  - With *Show* or *Hide Opened Posts*, a new page that adds nothing visible no longer leaves the grid stuck: the footer keeps loading while it's on screen and has a **Load More** button.
+  - Downloads cut off by a lost connection now also resume after the app is reopened. Retry keeps their progress, and the three-try limit counts only failures in a row (it resets once bytes flow again).
+  - Recent › Unfinished Videos updates when a video's saved spot appears or goes.
+  - The connection type is now updated on the main thread, where it's read.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

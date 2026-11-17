@@ -17,17 +17,23 @@ final class NetworkStatus {
 
     private init() {
         monitor.pathUpdateHandler = { [weak self] path in
-            guard let self = self else { return }
-            let wasMetered = self.onMeteredData
-            let wasOnline = self.isOnline
-            self.isCellular = path.usesInterfaceType(.cellular) && !path.usesInterfaceType(.wifi)
-            self.isExpensive = path.isExpensive
-            self.isOnline = path.status == .satisfied
-            // Also on the first answer, so anything waiting for Wi-Fi can start at launch,
-            // and when the connection comes back (downloads cut off by it retry).
-            if wasMetered != self.onMeteredData || wasOnline != self.isOnline || !self.reported {
-                self.reported = true
-                DispatchQueue.main.async { NotificationCenter.default.post(name: Self.changed, object: nil) }
+            let cellular = path.usesInterfaceType(.cellular) && !path.usesInterfaceType(.wifi)
+            let expensive = path.isExpensive
+            let online = path.status == .satisfied
+            // The values are read on the main thread, so they're changed there too.
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                let wasMetered = self.onMeteredData
+                let wasOnline = self.isOnline
+                self.isCellular = cellular
+                self.isExpensive = expensive
+                self.isOnline = online
+                // Also on the first answer, so anything waiting for Wi-Fi can start at launch,
+                // and when the connection comes back (downloads cut off by it retry).
+                if wasMetered != self.onMeteredData || wasOnline != self.isOnline || !self.reported {
+                    self.reported = true
+                    NotificationCenter.default.post(name: Self.changed, object: nil)
+                }
             }
         }
         monitor.start(queue: DispatchQueue(label: "network.status"))

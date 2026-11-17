@@ -15,40 +15,42 @@ struct PostGrid<Footer: View>: View {
     var onAddToCollection: ([Post]) -> Void
     @ViewBuilder var footer: () -> Footer
 
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var viewed = ViewedStore.shared
+    /// Layout settings only (see GridObservers.swift); the cells watch what they draw.
+    @ObservedObject private var look = GridLook.shared
+    private var settings: AppSettings { AppSettings.shared }
+    private var viewed: ViewedStore { ViewedStore.shared }
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var columns: [GridItem] {
         // iPhones report a compact vertical size class in landscape, and a full-width iPad window
         // a regular horizontal one: both get more columns. A narrow Split View pane doesn't.
-        let n = settings.columns(landscape: verticalSizeClass == .compact || horizontalSizeClass == .regular)
-        return Array(repeating: GridItem(.flexible(), spacing: settings.gridSpacing), count: n)
+        let n = look.v.columns(landscape: verticalSizeClass == .compact || horizontalSizeClass == .regular)
+        return Array(repeating: GridItem(.flexible(), spacing: look.v.spacing), count: n)
     }
 
     var columnCount: Int {
-        settings.columns(landscape: verticalSizeClass == .compact || horizontalSizeClass == .regular)
+        look.v.columns(landscape: verticalSizeClass == .compact || horizontalSizeClass == .regular)
     }
 
     var body: some View {
         Group {
-            if settings.thumbAspect == .masonry {
+            if look.v.aspect == .masonry {
                 masonry
             } else {
-                LazyVGrid(columns: columns, spacing: settings.gridSpacing) {
+                LazyVGrid(columns: columns, spacing: look.v.spacing) {
                     ForEach(Array(posts.enumerated()), id: \.element.key) { index, post in
-                        cell(index, post, aspect: settings.thumbAspect)
+                        cell(index, post, aspect: look.v.aspect)
                     }
                 }
             }
         }
-        .padding(.horizontal, settings.gridSpacing)
+        .padding(.horizontal, look.v.spacing)
         // Pinch out for bigger thumbnails (fewer columns), in for smaller (more columns).
         .simultaneousGesture(MagnificationGesture().onEnded { scale in
             let step = scale > 1.2 ? -1 : (scale < 0.83 ? 1 : 0)
-            let next = AppSettings.clamp(settings.gridColumns + step, 2, 5)
-            guard step != 0, next != settings.gridColumns else { return }
+            let next = AppSettings.clamp(look.v.columns + step, 2, 5)
+            guard step != 0, next != look.v.columns else { return }
             Haptics.tap()
             withAnimation(.easeInOut(duration: 0.2)) { settings.gridColumns = next }
         })
@@ -67,9 +69,9 @@ struct PostGrid<Footer: View>: View {
             cols[c].append(MasonryItem(index: i, post: p))
             heights[c] += 1 / ratio
         }
-        return HStack(alignment: .top, spacing: settings.gridSpacing) {
+        return HStack(alignment: .top, spacing: look.v.spacing) {
             ForEach(0..<n, id: \.self) { c in
-                LazyVStack(spacing: settings.gridSpacing) {
+                LazyVStack(spacing: look.v.spacing) {
                     ForEach(cols[c]) { item in
                         cell(item.index, item.post, aspect: .original)
                     }

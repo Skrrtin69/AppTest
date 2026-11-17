@@ -71,6 +71,8 @@ struct RecentlyViewedGrid: View {
     @State private var confirmClear = false
     /// Only videos stopped partway (they continue where you left off).
     @State private var unfinishedOnly = false
+    /// Bumped when a video's saved spot appears or goes, so the filter's list is current.
+    @State private var resumeTick = 0
 
     var posts: [Post] { store.entries.map(\.post).filter { !settings.isBlacklisted($0) } }
 
@@ -79,6 +81,12 @@ struct RecentlyViewedGrid: View {
     }
 
     var body: some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: VideoResumeStore.changed)) { _ in resumeTick += 1 }
+    }
+
+    @ViewBuilder var content: some View {
+        let _ = resumeTick
         let all = posts
         let unfinishedCount = all.filter(Self.isUnfinished).count
         let list = unfinishedOnly && unfinishedCount > 0 ? all.filter(Self.isUnfinished) : all
@@ -95,6 +103,7 @@ struct RecentlyViewedGrid: View {
                         }
                         .pickerStyle(.segmented)
                         .accessibilityIdentifier("recentUnfinished")
+                        .onDisappear { unfinishedOnly = false }
                     } else {
                         Text("Last \(list.count) opened").font(.footnote).foregroundColor(.secondary)
                     }

@@ -570,6 +570,11 @@ struct SearchTabView: View {
         }
     }
 
+    private func autoLoadIfFiltered() {
+        guard settings.hideOpened || settings.typeFilter != "all", tab.hasNext, !tab.isLoading, tab.error == nil else { return }
+        Task { await tab.loadMore() }
+    }
+
     @ViewBuilder var footer: some View {
         Group {
             if tab.isLoading {
@@ -583,6 +588,14 @@ struct SearchTabView: View {
             } else if !tab.hasNext && !tab.posts.isEmpty {
                 Text("End of results · \(tab.posts.count) post\(tab.posts.count == 1 ? "" : "s")").font(.caption).foregroundColor(.secondary)
                     .accessibilityIdentifier("endOfResults")
+            } else if tab.hasNext && !tab.posts.isEmpty {
+                // With Show or Hide Opened Posts, a new page can add nothing visible, so no new
+                // cell appears to ask for the next one: the footer asks while it's on screen.
+                Button("Load More") { Task { await tab.loadMore() } }
+                    .font(.footnote)
+                    .onAppear { autoLoadIfFiltered() }
+                    .onChange(of: tab.posts.count) { _ in autoLoadIfFiltered() }
+                    .accessibilityIdentifier("loadMoreFooter")
             }
         }
         .frame(maxWidth: .infinity)

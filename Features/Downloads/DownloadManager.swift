@@ -122,6 +122,9 @@ final class DownloadManager: NSObject, ObservableObject {
     func bootstrap() {
         makeSession(background: AppSettings.shared.backgroundDownloads && !backgroundUnsupported)
         loadFromStore()
+        // Cut off by a lost connection before the app last closed: they resume once the
+        // connection is known to be up (NetworkStatus posts its first answer at launch).
+        for i in items where i.state == .failed && i.error == Self.connectionLostMessage { networkFailed.insert(i.id) }
         NotificationCenter.default.addObserver(forName: NetworkStatus.changed, object: nil, queue: .main) { [weak self] _ in
             self?.resumeAfterReconnect()
         }
@@ -419,6 +422,7 @@ final class DownloadManager: NSObject, ObservableObject {
                                              NSURLErrorTimedOut, NSURLErrorCannotFindHost, NSURLErrorCannotConnectToHost,
                                              NSURLErrorDNSLookupFailed, NSURLErrorDataNotAllowed, NSURLErrorInternationalRoamingOff]
     /// Downloads cut off by a lost connection (this session); they resume when it's back.
+    static let connectionLostMessage = "Connection lost. It continues when you're back online."
     private var networkFailed = Set<String>()
     private var reconnectTries: [String: Int] = [:]
     private var announcedWaiting = false
@@ -440,6 +444,14 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     func retry(_ id: String) {
+        reconnectTries[id] = nil
+        networkFailed.remove(id)
+        // Cut off by a lost connection: carry on from where it stopped.
+        if items.first(where: { $0.id == id })?.error == Self.connectionLostMessage {
+            update(id) { $0.state = .queued; $0.error = nil }
+            schedule()
+            return
+        }
         update(id) { $0.state = .queued; $0.error = nil; $0.progress = 0 }
         if let m = mo(id) { m.resumeData = nil; CoreDataStack.shared.save() }
         schedule()
@@ -530,6 +542,8 @@ extension DownloadManager: URLSessionDownloadDelegate {
             return
         }
         trackSpeed(id, written: totalBytesWritten)
+        // Bytes are flowing again: the limit counts only failures in a row.
+        if reconnectTries[id] != nil { reconnectTries[id] = nil }
         let p = totalBytesExpectedToWrite > 0 ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite) : 0
         // Throttle UI updates to whole percents.
         if abs(p - (lastProgressPublish[id] ?? -1)) < 0.01 && p < 1 { return }
@@ -618,8 +632,9 @@ extension DownloadManager: URLSessionDownloadDelegate {
         if error.domain == NSURLErrorDomain, Self.connectionErrors.contains(error.code), (reconnectTries[id] ?? 0) < 3 {
             reconnectTries[id, default: 0] += 1
             networkFailed.insert(id)
-            update(id) { $0.state = .failed; $0.error = "Connection lost. It continues when you're back online." }
-            if let rd = rd, let i = items.firstIndex(where: { $0.id == id }) { persist(items[i], resumeData: .some(rd)) }
+            update(id) { $0.state = .failed; $0.error = Self.connectionLostMessage }
+            // Fresh resume data, or none: never an older copy whose temporary file is gone.
+            if let i = items.firstIndex(where: { $0.id == id }) { persist(items[i], resumeData: .some(rd)) }
             if !announcedWaiting {
                 announcedWaiting = true
                 ToastCenter.shared.show("Connection lost. Downloads continue when you're back online.")
