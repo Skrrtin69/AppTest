@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–25)
+## What's new (Phases 1–26)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -500,6 +500,12 @@ Settings › Tools › **Reverse Search Image**:
 - **Hold a tab** for *Duplicate Tab* (same site, search, sort and rating), *Close Other Tabs* (also undoable) and *Close Tab*.
 - **Headphones out, video paused:** VLCKit now pauses when wired headphones are unplugged or Bluetooth headphones disconnect, like the built-in player, instead of carrying on through the speaker.
 - **Sharper, lighter thumbnails:** grid thumbnails are decoded at the size of their cell (they were always 420 px). With 2–3 columns they're sharper; with 4–5 columns they use less memory.
+
+**Little numbers (Phase 26)**
+- **Download speed and time left:** a running download reads e.g. *Downloading 42% of 47 MB · 2.1 MB/s · 20 s left*.
+- **Video length on thumbnails:** when the adapter maps a `duration` (in seconds) in `metadataPaths`, video thumbnails show **▶ 0:32** instead of a plain play icon. Auto-Configure now looks for a `duration` field (numbers on videos, null on pictures) and maps it for you.
+- **Video cache safety fixes:** big byte ranges are streamed from the site instead of being read whole into memory; an entry dropped while a stream is still writing to it can no longer be marked as cached with missing bytes; error pages (text, HTML, JSON) are never cached as video or copied into the Library; a cached original is only used for a download of the same kind of file; leftover files from a crash are cleaned up at launch; and only video downloads look in the cache.
+- **Viewed marks are saved when you leave the app** with the viewer open, not only when it closes.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

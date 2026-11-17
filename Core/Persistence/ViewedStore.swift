@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Posts the user has opened (dimmed in grids) and thumbnails revealed while blur is on.
 /// Viewed keys persist (capped); revealed ones last for this session only.
@@ -14,6 +15,11 @@ final class ViewedStore: ObservableObject {
     private init() {
         order = UserDefaults.standard.stringArray(forKey: key) ?? []
         viewed = Set(order)
+        // Leaving the app with the viewer open: save what was opened so far, in case iOS
+        // or the app switcher ends the app before the viewer closes.
+        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.flush()
+        }
     }
 
     /// Posts opened while the viewer is up. Every grid cell watches `viewed`, so changing it

@@ -524,6 +524,12 @@ extension AutoConfigurator {
                 default: break
                 }
             }
+            // Video length: only videos have one (pictures send null), so numbers-or-null.
+            for p in common where meta["duration"] == nil
+                && ["duration", "video_duration", "length_seconds", "duration_seconds"].contains(AutoConfigurator.lastKey(p).lowercased()) {
+                let vals = values(p)
+                if vals.allSatisfy({ $0 is NSNumber || $0 is NSNull }), vals.contains(where: { $0 is NSNumber }) { meta["duration"] = p }
+            }
             for p in common where values(p).allSatisfy({ ($0 as? String)?.isEmpty == false }) {
                 let k = AutoConfigurator.lastKey(p).lowercased()
                 if ["uploader", "uploader_name", "author", "owner", "username", "user_name", "poster", "creator"].contains(k), meta["uploader"] == nil {

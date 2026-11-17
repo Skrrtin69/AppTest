@@ -180,6 +180,15 @@ struct GridCell: View {
                         .background(Capsule().fill(Color.black.opacity(0.6)))
                         .foregroundColor(.white)
                         .padding(4)
+                } else if post.mediaType == .video, let d = post.metadata["duration"].flatMap(Double.init), d > 0 {
+                    // The site gave the video's length: show it instead of a plain play icon.
+                    Label(VideoResumeStore.format(d), systemImage: "play.fill")
+                        .font(.caption2.weight(.bold).monospacedDigit())
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(Capsule().fill(Color.black.opacity(0.6)))
+                        .foregroundColor(.white)
+                        .padding(4)
+                        .accessibilityLabel("Video, \(VideoResumeStore.format(d))")
                 } else if post.mediaType != .image {
                     Image(systemName: post.mediaType == .video ? "play.fill" : "sparkles")
                         .font(.caption2.weight(.bold))

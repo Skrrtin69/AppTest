@@ -21,6 +21,9 @@ final class VideoByteCache: @unchecked Sendable {
         /// Sorted, non-overlapping [start, end) ranges on disk.
         var ranges: [[Int]]
         var used: Date
+        /// New for every copy of the file, so a writer still holding a dropped copy can't mark
+        /// bytes as cached in its replacement. (Missing in entries from before this existed.)
+        var gen: String? = UUID().uuidString
 
         var covered: Int { ranges.reduce(0) { $0 + ($1[1] - $1[0]) } }
         var isComplete: Bool { ranges.count == 1 && ranges[0][0] == 0 && ranges[0][1] >= total }
@@ -52,7 +55,8 @@ final class VideoByteCache: @unchecked Sendable {
     let capBytes = 600 * 1024 * 1024
     private let queue = DispatchQueue(label: "mediadeck.videobytecache")
     private let directory: URL
-    private var metas: [String: Meta] = [:]
+    /// Only touched on `queue`.
+    fileprivate var metas: [String: Meta] = [:]
     private var dirty = Set<String>()
     private var saveScheduled = false
 
@@ -61,6 +65,12 @@ final class VideoByteCache: @unchecked Sendable {
         directory = caches.appendingPathComponent("VideoBytes", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         queue.async { self.loadIndex() }
+    }
+
+    /// Error pages and JSON answers are never cached as video.
+    static func isMediaType(_ type: String) -> Bool {
+        let t = type.lowercased()
+        return !(t.hasPrefix("text/") || t.contains("html") || t.contains("json") || t.contains("xml"))
     }
 
     static func key(_ url: URL) -> String {
@@ -81,6 +91,11 @@ final class VideoByteCache: @unchecked Sendable {
                 try? FileManager.default.removeItem(at: f)
                 try? FileManager.default.removeItem(at: dataFile(key))
             }
+        }
+        // Data files whose list of ranges was never saved (the app was closed within two
+        // seconds of starting them) can't be used or counted: remove them.
+        for f in files where f.pathExtension == "bin" && metas[f.deletingPathExtension().lastPathComponent] == nil {
+            try? FileManager.default.removeItem(at: f)
         }
     }
 
@@ -104,7 +119,9 @@ final class VideoByteCache: @unchecked Sendable {
                     start = s
                     if let e = Int(parts[1]) {
                         end = min(e, m.total - 1)
-                        guard m.run(from: start) >= end - start + 1 else { return nil }
+                        // A big closed range would be read whole into memory (and copied again
+                        // when sent); those still stream from the site.
+                        guard end - start + 1 <= Self.maxPiece, m.run(from: start) >= end - start + 1 else { return nil }
                     } else {
                         let have = m.run(from: start)
                         guard have > 0 else { return nil }
@@ -112,8 +129,8 @@ final class VideoByteCache: @unchecked Sendable {
                     }
                 } else { return nil }
             } else {
-                // A plain GET wants the whole file: only when all of it is here, and not huge.
-                guard m.isComplete, m.total <= 150 * 1024 * 1024 else { return nil }
+                // A plain GET wants the whole file: only small complete ones are answered here.
+                guard m.isComplete, m.total <= Self.maxPiece else { return nil }
             }
             guard start <= end, start < m.total, m.run(from: start) >= end - start + 1,
                   let body = read(key, from: start, count: end - start + 1) else { return nil }
@@ -140,7 +157,7 @@ final class VideoByteCache: @unchecked Sendable {
     func completeFile(for url: URL) -> URL? {
         queue.sync {
             let key = Self.key(url)
-            guard let m = metas[key], m.isComplete else { return nil }
+            guard let m = metas[key], m.isComplete, Self.isMediaType(m.type) else { return nil }
             return dataFile(key)
         }
     }
@@ -149,7 +166,7 @@ final class VideoByteCache: @unchecked Sendable {
 
     /// Starts recording an answer that begins at byte `start` of a `total`-byte file.
     func writer(for url: URL, start: Int, total: Int, type: String) -> Writer? {
-        guard total > 0, total <= 2 * 1024 * 1024 * 1024 else { return nil }
+        guard total > 0, total <= 2 * 1024 * 1024 * 1024, Self.isMediaType(type) else { return nil }
         return Writer(cache: self, url: url, key: Self.key(url), start: start, total: total, type: type)
     }
 
@@ -169,6 +186,7 @@ final class VideoByteCache: @unchecked Sendable {
         private var offset: Int
         private var handle: FileHandle?
         private var opened = false
+        private var gen: String?
 
         init(cache: VideoByteCache, url: URL, key: String, start: Int, total: Int, type: String) {
             self.cache = cache; self.url = url; self.key = key
@@ -178,8 +196,12 @@ final class VideoByteCache: @unchecked Sendable {
         func append(_ data: Data) {
             cache.queue.async { [self] in
                 guard !data.isEmpty else { return }
-                if !opened { opened = true; handle = cache.open(self) }
-                guard let h = handle, offset + data.count <= total else { return }
+                if !opened { opened = true; (handle, gen) = cache.open(self) }
+                // The entry was dropped (trimmed, cleared or replaced) since this writer opened it.
+                guard let h = handle, offset + data.count <= total, cache.metas[key]?.gen == gen else {
+                    try? handle?.close(); handle = nil
+                    return
+                }
                 do {
                     try h.seek(toOffset: UInt64(offset))
                     try h.write(contentsOf: data)
@@ -195,6 +217,7 @@ final class VideoByteCache: @unchecked Sendable {
             cache.queue.async { [self] in
                 try? handle?.close()
                 handle = nil
+                if opened { cache.writerFinished(key) }
                 cache.trimIfNeeded(keeping: key)
                 cache.scheduleSave()
             }
@@ -203,14 +226,25 @@ final class VideoByteCache: @unchecked Sendable {
 
     /// On the queue. Opens (or creates) the file for a writer; a different size means the
     /// site's file changed, so the old copy goes.
-    private func open(_ w: Writer) -> FileHandle? {
+    private func open(_ w: Writer) -> (FileHandle?, String?) {
         if let m = metas[w.key], m.total != w.total { drop(w.key) }
         if metas[w.key] == nil {
             FileManager.default.createFile(atPath: dataFile(w.key).path, contents: nil)
             metas[w.key] = Meta(url: w.url.absoluteString, total: w.total, type: w.type, ranges: [], used: Date())
             markDirty(w.key)
+        } else if metas[w.key]?.gen == nil {
+            metas[w.key]?.gen = UUID().uuidString
         }
-        return try? FileHandle(forWritingTo: dataFile(w.key))
+        activeWriters[w.key, default: 0] += 1
+        return (try? FileHandle(forWritingTo: dataFile(w.key)), metas[w.key]?.gen)
+    }
+
+    /// Entries with a stream still writing into them aren't trimmed.
+    private var activeWriters: [String: Int] = [:]
+
+    private func writerFinished(_ key: String) {
+        let n = (activeWriters[key] ?? 1) - 1
+        activeWriters[key] = n > 0 ? n : nil
     }
 
     private func recorded(_ key: String, _ start: Int, _ end: Int) {
@@ -252,7 +286,7 @@ final class VideoByteCache: @unchecked Sendable {
     private func trimIfNeeded(keeping current: String) {
         var total = metas.values.reduce(0) { $0 + $1.covered }
         guard total > capBytes else { return }
-        for (key, m) in metas.sorted(by: { $0.value.used < $1.value.used }) where key != current {
+        for (key, m) in metas.sorted(by: { $0.value.used < $1.value.used }) where key != current && activeWriters[key] == nil {
             drop(key)
             total -= m.covered
             if total <= Int(Double(capBytes) * 0.85) { break }

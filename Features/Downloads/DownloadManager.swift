@@ -299,9 +299,14 @@ final class DownloadManager: NSObject, ObservableObject {
     /// A video already watched all the way through is in the video cache: copy it (APFS
     /// clones it, so it's instant and uses no extra space) instead of downloading it again.
     private func copyFromVideoCache(_ item: DownloadItem) -> Bool {
+        // Only videos go through the video cache (and this lookup waits on its queue).
+        guard item.post.mediaType == .video, let dest = item.fileURL else { return false }
+        // The original's cached copy only stands in when it's the same kind of file as the
+        // quality being downloaded.
+        let sameKind = item.remoteURL == item.post.mediaURL
+            || item.remoteURL.pathExtension.lowercased() == item.post.mediaURL.pathExtension.lowercased()
         guard let cached = VideoByteCache.shared.completeFile(for: item.remoteURL)
-                ?? VideoByteCache.shared.completeFile(for: item.post.mediaURL),
-              let dest = item.fileURL else { return false }
+                ?? (sameKind ? VideoByteCache.shared.completeFile(for: item.post.mediaURL) : nil) else { return false }
         do {
             try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
             if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
@@ -316,6 +321,36 @@ final class DownloadManager: NSObject, ObservableObject {
         if let m = mo(item.id) { m.resumeData = nil; CoreDataStack.shared.save() }
         DispatchQueue.main.async { [weak self] in self?.schedule() }
         return true
+    }
+
+    // MARK: Speed
+
+    /// Smoothed bytes per second for each running download (not saved).
+    private var speeds: [String: (bytes: Int64, at: Date, bps: Double)] = [:]
+
+    private func trackSpeed(_ id: String, written: Int64) {
+        let now = Date()
+        guard let last = speeds[id] else { speeds[id] = (written, now, 0); return }
+        let dt = now.timeIntervalSince(last.at)
+        guard dt >= 0.5, written >= last.bytes else { return }
+        let instant = Double(written - last.bytes) / dt
+        // Moving average, so the number doesn't jump around with every packet.
+        let bps = last.bps == 0 ? instant : last.bps * 0.7 + instant * 0.3
+        speeds[id] = (written, now, bps)
+    }
+
+    /// "2.1 MB/s · 20 s left" for a running download, once there's enough to measure.
+    func speedText(for item: DownloadItem) -> String? {
+        guard item.state == .downloading, let s = speeds[item.id], s.bps > 1024 else { return nil }
+        var text = ByteCountFormatter.string(fromByteCount: Int64(s.bps), countStyle: .file) + "/s"
+        if item.bytesTotal > 0 {
+            let left = Double(item.bytesTotal - s.bytes) / s.bps
+            if left.isFinite, left >= 0 {
+                let secs = Int(left.rounded())
+                text += secs < 60 ? " · \(max(1, secs)) s left" : " · \(secs / 60) min \(secs % 60) s left"
+            }
+        }
+        return text
     }
 
     // MARK: Controls
@@ -454,6 +489,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
             schedule()
             return
         }
+        trackSpeed(id, written: totalBytesWritten)
         let p = totalBytesExpectedToWrite > 0 ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite) : 0
         // Throttle UI updates to whole percents.
         if abs(p - (lastProgressPublish[id] ?? -1)) < 0.01 && p < 1 { return }
@@ -529,6 +565,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
         guard session === self.session, let id = task.taskDescription else { return }
         tasks[id] = nil
         lastProgressPublish[id] = nil
+        speeds[id] = nil
         defer { schedule() }
         guard let error = error as NSError? else { return }
         guard let item = items.first(where: { $0.id == id }) else { return }
