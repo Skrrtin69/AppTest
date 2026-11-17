@@ -349,6 +349,17 @@ struct BrowseView: View {
                 }
                 Button { builderFor = t } label: { Label("Build a Search…", systemImage: "slider.horizontal.3") }
                 Button { t.scrollToTopToken += 1 } label: { Label("Scroll to top", systemImage: "arrow.up.to.line") }
+                Menu {
+                    ForEach(["all", "image", "gif", "video"], id: \.self) { v in
+                        let name = v == "all" ? "Everything" : (v == "image" ? "Pictures" : (v == "gif" ? "GIFs" : "Videos"))
+                        Button { settings.typeFilter = v } label: {
+                            if settings.typeFilter == v { Label(name, systemImage: "checkmark") } else { Text(name) }
+                        }
+                    }
+                } label: {
+                    Label(settings.typeFilter == "all" ? "Show: Everything" : "Show: \(MediaType(rawValue: settings.typeFilter)?.label ?? "")s Only",
+                          systemImage: "line.3.horizontal.decrease")
+                }
                 Button { settings.hideOpened.toggle() } label: {
                     settings.hideOpened ? Label("Show Opened Posts", systemImage: "eye")
                         : Label("Hide Opened Posts", systemImage: "eye.slash")
@@ -478,11 +489,13 @@ struct SearchTabView: View {
                 if let err = tab.error {
                     EmptyStateView(icon: "wifi.exclamationmark", title: "Couldn't load", message: err,
                                    actionTitle: "Retry") { Task { await tab.retry() } }
-                } else if tab.hasSearched && settings.hideOpened && !tab.posts.isEmpty {
-                    EmptyStateView(icon: "eye.slash", title: "All opened",
-                                   message: "You've opened every post loaded so far, and Hide Opened Posts is on.",
-                                   actionTitle: tab.hasNext ? "Load More" : "Show Opened Posts") {
-                        if tab.hasNext { Task { await tab.loadMore() } } else { settings.hideOpened = false }
+                } else if tab.hasSearched && (settings.hideOpened || settings.typeFilter != "all") && !tab.posts.isEmpty {
+                    EmptyStateView(icon: "line.3.horizontal.decrease.circle", title: "Nothing to show yet",
+                                   message: settings.typeFilter != "all"
+                                    ? "None of the posts loaded so far are \(MediaType(rawValue: settings.typeFilter)?.label.lowercased() ?? "")s\(settings.hideOpened ? " you haven't opened" : "")."
+                                    : "You've opened every post loaded so far, and Hide Opened Posts is on.",
+                                   actionTitle: tab.hasNext ? "Load More" : "Show Everything") {
+                        if tab.hasNext { Task { await tab.loadMore() } } else { settings.hideOpened = false; settings.typeFilter = "all" }
                     }
                 } else if tab.hasSearched {
                     EmptyStateView(icon: "magnifyingglass", title: "No results",

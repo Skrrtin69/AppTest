@@ -177,9 +177,13 @@ final class SearchTabModel: ObservableObject, Identifiable {
     /// Blacklisted posts are hidden (applied live, so editing the blacklist updates every grid).
     func visiblePosts(blacklist: Set<String>) -> [Post] {
         let hideOpened = AppSettings.shared.hideOpened
-        guard !blacklist.isEmpty || hideOpened else { return posts }
+        let onlyType = AppSettings.shared.typeFilterType
+        guard !blacklist.isEmpty || hideOpened || onlyType != nil else { return posts }
         let viewed = ViewedStore.shared
-        return posts.filter { !(hideOpened && viewed.isViewed($0.key)) && (blacklist.isEmpty || !AppSettings.hides($0, blacklist)) }
+        return posts.filter {
+            (onlyType == nil || $0.mediaType == onlyType) && !(hideOpened && viewed.isViewed($0.key))
+                && (blacklist.isEmpty || !AppSettings.hides($0, blacklist))
+        }
     }
 
     /// Starts over from page 1.

@@ -188,6 +188,11 @@ final class MockServer {
             send(hit, for: request, on: conn)
             return
         }
+        if let slice = VideoByteCache.shared.diskSlice(for: url, rangeHeader: request.headers["range"]),
+           streamFromDisk(slice, type: request.query["type"] ?? slice.type, request: request, on: conn) {
+            DebugLog.log("Proxy", "From video cache (streamed) · bytes \(slice.start)-\(slice.end)/\(slice.total)")
+            return
+        }
         let streamer = ProxyStreamer(request: request, conn: conn, url: url) { [weak self] in
             guard let self = self else { conn.cancel(); return }
             Task { self.send(await PlayerRoutes.proxy(request), for: request, on: conn) }
@@ -196,6 +201,40 @@ final class MockServer {
         task.delegate = streamer
         streamer.task = task
         task.resume()
+    }
+
+    /// Sends a cached byte range straight from the file, 1 MB at a time, so a long range
+    /// (a web player asking for the rest of the video) never sits in memory whole.
+    private func streamFromDisk(_ s: (file: URL, start: Int, end: Int, total: Int, type: String), type: String,
+                                request: HTTPRequest, on conn: NWConnection) -> Bool {
+        guard let h = try? FileHandle(forReadingFrom: s.file) else { return false }
+        do { try h.seek(toOffset: UInt64(s.start)) } catch { try? h.close(); return false }
+        let length = s.end - s.start + 1
+        var head = "HTTP/1.1 206 Partial Content\r\n"
+        for (k, v) in ["Content-Type": type, "Content-Length": String(length), "Content-Range": "bytes \(s.start)-\(s.end)/\(s.total)",
+                       "Accept-Ranges": "bytes", "Connection": "close", "Access-Control-Allow-Origin": "*"] {
+            head += "\(k): \(v)\r\n"
+        }
+        head += "\r\n"
+        conn.send(content: Data(head.utf8), completion: .contentProcessed { _ in })
+        var left = length
+        let queue = workQueue
+        func finish() {
+            try? h.close()
+            conn.send(content: nil, isComplete: true, completion: .contentProcessed { _ in conn.cancel() })
+        }
+        func next() {
+            let n = min(1024 * 1024, left)
+            guard request.method != "HEAD", n > 0, let d = try? h.read(upToCount: n), !d.isEmpty else { finish(); return }
+            left -= d.count
+            conn.send(content: d, completion: .contentProcessed { error in
+                // The player hung up (seek, next video): stop reading.
+                if error != nil { try? h.close(); conn.cancel(); return }
+                queue.async { next() }
+            })
+        }
+        queue.async { next() }
+        return true
     }
 
     /// Demo only: video *downloads* made by the app's own downloader are served at ~20 KB/s,

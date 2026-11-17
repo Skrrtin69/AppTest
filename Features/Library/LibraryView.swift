@@ -17,7 +17,9 @@ struct LibraryView: View {
     @State private var reversing: PostBatch?
     @ObservedObject private var autoTags = AutoTags.shared
 
-    enum SortOrder: String, CaseIterable { case newest = "Newest First", oldest = "Oldest First", largest = "Largest First" }
+    enum SortOrder: String, CaseIterable { case newest = "Newest First", oldest = "Oldest First", largest = "Largest First", shuffled = "Shuffled" }
+    /// A new order each time Shuffled is picked, stable while browsing.
+    @State private var shuffleSeed = UInt64.random(in: 1...UInt64.max)
     @AppStorage("librarySort") private var sortRaw = SortOrder.newest.rawValue
     var sortOrder: SortOrder { SortOrder(rawValue: sortRaw) ?? .newest }
 
@@ -27,6 +29,9 @@ struct LibraryView: View {
         case .newest: return list
         case .oldest: return list.reversed()
         case .largest: return list.sorted { $0.bytesTotal > $1.bytesTotal }
+        case .shuffled:
+            let seed = shuffleSeed
+            return list.map { (FavoritesView.mix($0.id, seed), $0) }.sorted { $0.0 < $1.0 }.map { $0.1 }
         }
     }
 
@@ -102,7 +107,7 @@ struct LibraryView: View {
                         }
                         Section("Sort") {
                             ForEach(SortOrder.allCases, id: \.self) { o in
-                                Button { sortRaw = o.rawValue } label: {
+                                Button { if o == .shuffled { shuffleSeed = UInt64.random(in: 1...UInt64.max) }; sortRaw = o.rawValue } label: {
                                     sortOrder == o ? Label(o.rawValue, systemImage: "checkmark") : Label(o.rawValue, systemImage: "")
                                 }
                             }

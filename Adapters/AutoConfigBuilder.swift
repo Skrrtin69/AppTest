@@ -104,7 +104,7 @@ extension AutoConfigurator {
                 : "Key \(AutoConfigurator.lastKey(framePaths[0])) lists frames with delays, so .zip animations play with the right timing.")
             config.zipExtensions = ["zip"]
             set(.zipExtensions, .medium, "Addresses ending in .zip are frame-by-frame animations.")
-            assignMetadata(common, values: values)
+            assignMetadata(common, all: Set(maps.flatMap { $0.keys }).sorted(), values: values)
             assignPostPath(maps.first ?? [:])
             pagination()
             return true
@@ -514,7 +514,7 @@ extension AutoConfigurator {
             return result
         }
 
-        mutating func assignMetadata(_ common: [String], values: (String) -> [Any]) {
+        mutating func assignMetadata(_ common: [String], all: [String], values: (String) -> [Any]) {
             var meta: [String: String] = [:]
             for p in common where values(p).allSatisfy({ $0 is NSNumber }) {
                 switch AutoConfigurator.lastKey(p) {
@@ -524,11 +524,12 @@ extension AutoConfigurator {
                 default: break
                 }
             }
-            // Video length: only videos have one (pictures send null), so numbers-or-null.
-            for p in common where meta["duration"] == nil
+            // Video length: only videos have one (pictures send null, which the sample leaves
+            // out), so look at every path seen in any result, not only ones all results share.
+            for p in all where meta["duration"] == nil
                 && ["duration", "video_duration", "length_seconds", "duration_seconds"].contains(AutoConfigurator.lastKey(p).lowercased()) {
                 let vals = values(p)
-                if vals.allSatisfy({ $0 is NSNumber || $0 is NSNull }), vals.contains(where: { $0 is NSNumber }) { meta["duration"] = p }
+                if !vals.isEmpty, vals.allSatisfy({ $0 is NSNumber }) { meta["duration"] = p }
             }
             for p in common where values(p).allSatisfy({ ($0 as? String)?.isEmpty == false }) {
                 let k = AutoConfigurator.lastKey(p).lowercased()

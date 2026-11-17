@@ -143,6 +143,25 @@ final class VideoByteCache: @unchecked Sendable {
         }
     }
 
+    /// A closed range ("bytes=a-b") that's fully on disk but too big to answer from memory:
+    /// where to read it, so the server can stream it from the file piece by piece.
+    func diskSlice(for url: URL, rangeHeader: String?) -> (file: URL, start: Int, end: Int, total: Int, type: String)? {
+        guard let h = rangeHeader?.lowercased(), h.hasPrefix("bytes=") else { return nil }
+        let spec = h.dropFirst(6).split(separator: ",").first.map(String.init) ?? ""
+        let parts = spec.split(separator: "-", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 2, let start = Int(parts[0]), let e = Int(parts[1]) else { return nil }
+        return queue.sync {
+            let key = Self.key(url)
+            guard var m = metas[key], m.total > 0, start < m.total else { return nil }
+            let end = min(e, m.total - 1)
+            guard end >= start, m.run(from: start) >= end - start + 1 else { return nil }
+            m.used = Date()
+            metas[key] = m
+            markDirty(key)
+            return (dataFile(key), start, end, m.total, m.type)
+        }
+    }
+
     private func read(_ key: String, from offset: Int, count: Int) -> Data? {
         guard let h = try? FileHandle(forReadingFrom: dataFile(key)) else { return nil }
         defer { try? h.close() }

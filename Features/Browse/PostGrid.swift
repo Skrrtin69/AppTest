@@ -180,7 +180,7 @@ struct GridCell: View {
                         .background(Capsule().fill(Color.black.opacity(0.6)))
                         .foregroundColor(.white)
                         .padding(4)
-                } else if post.mediaType == .video, let d = post.metadata["duration"].flatMap(Double.init), d > 0 {
+                } else if post.mediaType == .video, let d = post.metadata["duration"].flatMap(Double.init), d.isFinite, d > 0, d < 10_000_000 {
                     // The site gave the video's length: show it instead of a plain play icon.
                     Label(VideoResumeStore.format(d), systemImage: "play.fill")
                         .font(.caption2.weight(.bold).monospacedDigit())

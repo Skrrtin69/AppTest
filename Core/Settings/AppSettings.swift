@@ -60,7 +60,7 @@ final class AppSettings: ObservableObject {
                          smartThumbnails = "smartThumbnails", twoPageLandscape = "twoPageLandscape", fallbackSite = "fallbackSite",
                          stripEXIF = "stripEXIF", autoTagDownloads = "autoTagDownloads", panicGesture = "panicGesture", panicAction = "panicAction",
                          doubleTapAction = "doubleTapAction", swipeUpAction = "swipeUpAction", swipeDownAction = "swipeDownAction",
-                         startMuted = "startMuted", edgeSwipes = "edgeSwipes", useVLC = "useVLC", restoreTabs = "restoreTabs", hideOpened = "hideOpened"
+                         startMuted = "startMuted", edgeSwipes = "edgeSwipes", useVLC = "useVLC", restoreTabs = "restoreTabs", hideOpened = "hideOpened", typeFilter = "typeFilter"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
@@ -68,7 +68,7 @@ final class AppSettings: ObservableObject {
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
                           readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
                           detectClipboardLinks, dataSaver, wifiOnlyMedia, mixWithOthers,
-                          smartThumbnails, twoPageLandscape, fallbackSite, stripEXIF, autoTagDownloads, panicGesture, panicAction, doubleTapAction, swipeUpAction, swipeDownAction, startMuted, edgeSwipes, useVLC, restoreTabs, hideOpened]
+                          smartThumbnails, twoPageLandscape, fallbackSite, stripEXIF, autoTagDownloads, panicGesture, panicAction, doubleTapAction, swipeUpAction, swipeDownAction, startMuted, edgeSwipes, useVLC, restoreTabs, hideOpened, typeFilter]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -173,6 +173,9 @@ final class AppSettings: ObservableObject {
     @Published var restoreTabs: Bool = true { didSet { d.set(restoreTabs, forKey: K.restoreTabs) } }
     /// Search results leave out posts already opened in the viewer (Browse ⋯ menu).
     @Published var hideOpened: Bool = false { didSet { d.set(hideOpened, forKey: K.hideOpened) } }
+    /// Browse ⋯ › Show: "all", or only "image", "gif" or "video" posts in search results.
+    @Published var typeFilter: String = "all" { didSet { d.set(typeFilter, forKey: K.typeFilter) } }
+    var typeFilterType: MediaType? { MediaType(rawValue: typeFilter) }
 
     var mediaWaitsForWiFi: Bool { wifiOnlyMedia && NetworkStatus.shared.onMeteredData }
 
@@ -277,6 +280,7 @@ final class AppSettings: ObservableObject {
         swipeDownAction = d.string(forKey: K.swipeDownAction) ?? "close"
         restoreTabs = d.object(forKey: K.restoreTabs) as? Bool ?? true
         hideOpened = d.object(forKey: K.hideOpened) as? Bool ?? false
+        typeFilter = d.string(forKey: K.typeFilter) ?? "all"
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }

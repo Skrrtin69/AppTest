@@ -756,10 +756,14 @@ enum PostLinks {
     static func pageURL(_ post: Post) -> URL? {
         guard let c = AdapterRegistry.shared.config(for: post.siteID) else { return nil }
         let path = c.postPath.trimmingCharacters(in: .whitespaces)
-        guard path.contains("{id}"), let r = path.range(of: ".json"), path[r.upperBound...].first.map({ $0 == "?" }) ?? true else { return nil }
-        let page = String(path[..<r.lowerBound]).replacingOccurrences(of: "{id}", with: post.id)
-        guard let url = URL(string: page, relativeTo: c.baseURL)?.absoluteURL,
-              ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+        guard let r = path.range(of: ".json"), path[r.upperBound...].first.map({ $0 == "?" }) ?? true else { return nil }
+        // The ID has to be in the part kept (post.json?tags=id:{id} would give the list page).
+        let kept = String(path[..<r.lowerBound])
+        guard kept.contains("{id}") else { return nil }
+        let page = kept.replacingOccurrences(of: "{id}", with: post.id)
+        // Built the same way the adapter builds its own addresses.
+        let full = page.lowercased().hasPrefix("http") ? page : GenericAdapter.join(c.baseURL.absoluteString, page)
+        guard let url = URL(string: full), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return nil }
         return url
     }
 

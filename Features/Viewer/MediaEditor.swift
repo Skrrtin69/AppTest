@@ -26,6 +26,7 @@ struct MediaEditorView: View {
     @State private var previewBase: UIImage?
     /// The newest preview request; older ones finishing late are dropped.
     @State private var renderGen = 0
+    @State private var rendering = false
     @State private var exporting = false
 
     /// Everything the edit needs, as a value, so it can be rendered off the main thread.
@@ -190,20 +191,30 @@ struct MediaEditorView: View {
         return UIImage(cgImage: rendered)
     }
 
+    /// One render at a time: slider ticks arriving meanwhile only mark the preview as out
+    /// of date, and the newest settings are rendered when the current one finishes.
     func renderPreview() {
-        guard let s = source else { return }
+        guard source != nil else { return }
         renderGen += 1
+        guard !rendering else { return }
+        rendering = true
+        runRender()
+    }
+
+    private func runRender() {
+        guard let s = source else { rendering = false; return }
         let gen = renderGen, base = previewBase
         var e = edits
         e.upscale = 1
         Task {
             let out = await Task.detached(priority: .userInitiated) { () -> (base: UIImage?, preview: UIImage?) in
-                // First time: shrink the source once; later edits start from that.
                 let b = base ?? Self.edited(s, maxSide: 900, .identity)
                 return (b, b.flatMap { Self.edited($0, maxSide: nil, e) })
             }.value
             if previewBase == nil { previewBase = out.base }
-            if gen == renderGen, let img = out.preview { preview = img }
+            if let img = out.preview { preview = img }
+            // Settings moved on while this ran: render the newest ones next.
+            if gen != renderGen { runRender() } else { rendering = false }
         }
     }
 
