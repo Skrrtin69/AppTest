@@ -124,12 +124,12 @@ struct ViewerView: View {
             }
             prefetchNeighbors()
             ViewedStore.shared.holdChanges = true
-            if let p = current { ViewedStore.shared.markViewed(p); RecentlyViewedStore.shared.record(p) }
+            if let p = current, source?.isPrivate != true { ViewedStore.shared.markViewed(p); RecentlyViewedStore.shared.record(p) }
         }
         .onChange(of: index) { _ in
             prefetchNeighbors()
             loadMoreIfNeeded()
-            if let p = current { ViewedStore.shared.markViewed(p); RecentlyViewedStore.shared.record(p) }
+            if let p = current, source?.isPrivate != true { ViewedStore.shared.markViewed(p); RecentlyViewedStore.shared.record(p) }
             if !slideshow { Haptics.tap() }
         }
         // A playing video: the controls step aside after 3 s (a tap brings them back).

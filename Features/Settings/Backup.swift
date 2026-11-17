@@ -117,8 +117,12 @@ enum Backup {
             : "Restored " + parts.joined(separator: ", ") + "."
     }
 
-    static let lastBackupKey = "lastBackupDate"
-    static var lastBackup: Date? { UserDefaults.standard.object(forKey: lastBackupKey) as? Date }
+    /// Seconds since 1970, so Settings can watch it with @AppStorage.
+    static let lastBackupKey = "lastBackupTime"
+    static var lastBackup: Date? {
+        let t = UserDefaults.standard.double(forKey: lastBackupKey)
+        return t > 0 ? Date(timeIntervalSince1970: t) : nil
+    }
 
     /// "Last backup: 3 days ago" / "Never backed up", and whether it's worth a nudge
     /// (30+ days, or never, once there's something worth keeping).
@@ -133,7 +137,7 @@ enum Backup {
         do {
             let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
             Presenter.exportData(try make(), filename: "MediaDeck-backup-\(f.string(from: Date())).json") {
-                UserDefaults.standard.set(Date(), forKey: lastBackupKey)
+                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastBackupKey)
                 ToastCenter.shared.show("Backup saved", style: .success)
             }
         } catch { ToastCenter.shared.error(error, prefix: "Backup failed") }

@@ -17,6 +17,9 @@ final class SearchTabModel: ObservableObject, Identifiable {
     @Published var selected: Set<String> = []
     /// A tab restored from last time: it runs its search the first time it's selected.
     var searchWhenShown = false
+    /// Private tab: its searches aren't added to history, posts opened from it aren't
+    /// marked as opened or added to Recent, and it isn't reopened at the next launch.
+    var isPrivate = false
 
     private var page = 1
     private var cursor: String?
@@ -201,7 +204,7 @@ final class SearchTabModel: ObservableObject, Identifiable {
         siteStates = [:]
         siteErrors = [:]
         seenMedia = [:]
-        if recordHistory, query.nonEmpty != nil, !isMerged {
+        if recordHistory, !isPrivate, query.nonEmpty != nil, !isMerged {
             LibraryStore.shared.recordSearch(query, siteID: siteID)
         }
         await loadMore()
@@ -430,8 +433,10 @@ final class BrowseModel: ObservableObject {
     /// Remembers the open tabs (site, search, sort, rating), not their results.
     func saveTabs() {
         guard !LockManager.shared.decoyActive, !tabs.isEmpty else { return }
-        let list = tabs.map { SavedTab(siteID: $0.siteID, query: $0.query, sort: $0.sort, rating: $0.rating) }
-        let sel = tabs.firstIndex { $0.id == selectedID } ?? 0
+        let kept = tabs.filter { !$0.isPrivate }
+        guard !kept.isEmpty else { UserDefaults.standard.removeObject(forKey: Self.savedKey); return }
+        let list = kept.map { SavedTab(siteID: $0.siteID, query: $0.query, sort: $0.sort, rating: $0.rating) }
+        let sel = kept.firstIndex { $0.id == selectedID } ?? 0
         if let data = try? JSONEncoder().encode(SavedTabs(tabs: list, selected: sel)) {
             UserDefaults.standard.set(data, forKey: Self.savedKey)
         }
@@ -507,9 +512,19 @@ final class BrowseModel: ObservableObject {
         }
     }
 
+    /// Browse ⋯ › New Private Tab.
+    func openPrivateTab(siteID: String) {
+        let t = SearchTabModel(siteID: siteID, query: "")
+        t.isPrivate = true
+        tabs.append(t)
+        selectedID = t.id
+        Task { await t.search(recordHistory: false) }
+    }
+
     /// Hold a tab › Duplicate: the same search (site, sort, rating) in a new tab next to it.
     func duplicate(_ tab: SearchTabModel) {
         let t = SearchTabModel(siteID: tab.siteID, query: tab.query)
+        t.isPrivate = tab.isPrivate
         t.sort = tab.sort
         t.rating = tab.rating
         let idx = (tabs.firstIndex { $0.id == tab.id } ?? tabs.count - 1) + 1

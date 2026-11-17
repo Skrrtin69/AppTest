@@ -348,6 +348,7 @@ struct BrowseView: View {
                     Button { jumpText = ""; showJump = true } label: { Label("Go to page…", systemImage: "arrow.right.to.line") }
                 }
                 Button { builderFor = t } label: { Label("Build a Search…", systemImage: "slider.horizontal.3") }
+                Button { model.openPrivateTab(siteID: t.siteID) } label: { Label("New Private Tab", systemImage: "eye.slash") }
                 Button { t.scrollToTopToken += 1 } label: { Label("Scroll to top", systemImage: "arrow.up.to.line") }
                 Menu {
                     ForEach(["all", "image", "gif", "video"], id: \.self) { v in
@@ -426,12 +427,13 @@ struct TabChip: View {
         HStack(spacing: 4) {
             Button(action: onSelect) {
                 HStack(spacing: 4) {
+                    if tab.isPrivate { Image(systemName: "eye.slash").font(.caption2) }
                     Text("\(tab.title)").lineLimit(1).font(.subheadline.weight(isSelected ? .semibold : .regular))
                     Text("· \(tab.siteName)").lineLimit(1).font(.caption).foregroundColor(.secondary)
                 }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Tab \(tab.title) on \(tab.siteName)")
+            .accessibilityLabel("\(tab.isPrivate ? "Private tab" : "Tab") \(tab.title) on \(tab.siteName)")
             if reviewCount > 0 {
                 Button(action: onReview) {
                     Text("\(reviewCount)").font(.caption2.weight(.bold)).foregroundColor(.white)
@@ -468,7 +470,7 @@ struct SearchTabView: View {
     /// Only for "Hide Opened Posts": the list changes when the viewer closes.
     @ObservedObject private var viewed = ViewedStore.shared
     /// Filtered paging (see autoLoadIfFiltered).
-    @State private var lastShownCount = -1
+    @State private var lastShownCount = 0
     @State private var emptyAutoLoads = 0
     @State private var accountFor: AccountRequest?
     @State private var massReverse: PostBatch?
@@ -498,7 +500,7 @@ struct SearchTabView: View {
                                     ? "None of the posts loaded so far are \(MediaType(rawValue: settings.typeFilter)?.label.lowercased() ?? "")s\(settings.hideOpened ? " you haven't opened" : "")."
                                     : "You've opened every post loaded so far, and Hide Opened Posts is on.",
                                    actionTitle: tab.hasNext ? "Load More" : "Show Everything") {
-                        if tab.hasNext { Task { await tab.loadMore() } } else { settings.hideOpened = false; settings.typeFilter = "all" }
+                        if tab.hasNext { emptyAutoLoads = 0; Task { await tab.loadMore() } } else { settings.hideOpened = false; settings.typeFilter = "all" }
                     }
                 } else if tab.hasSearched {
                     EmptyStateView(icon: "magnifyingglass", title: "No results",
@@ -563,6 +565,9 @@ struct SearchTabView: View {
             }
             if tab.selecting { selectionBar }
         }
+        // Here, not on the footer: the footer comes and goes (and is gone entirely when a page
+        // adds nothing visible), so a change watcher on it would miss the very case it's for.
+        .onChange(of: tab.posts.count) { _ in autoLoadIfFiltered() }
         .sheet(item: $massReverse) { MassReverseSheet(posts: $0.posts) }
         .sheet(item: $accountFor) { req in
             NavigationView {
@@ -582,7 +587,8 @@ struct SearchTabView: View {
         defer { lastShownCount = shown }
         guard settings.hideOpened || settings.typeFilter != "all", !tab.posts.isEmpty,
               tab.hasNext, !tab.isLoading, tab.error == nil else { emptyAutoLoads = 0; return }
-        guard shown == lastShownCount else { emptyAutoLoads = 0; return }
+        // Nothing new to see (opening posts can even lower the count between pages).
+        guard shown <= lastShownCount else { emptyAutoLoads = 0; return }
         guard emptyAutoLoads < 5 else { return }
         emptyAutoLoads += 1
         Task { await tab.loadMore() }
@@ -604,12 +610,11 @@ struct SearchTabView: View {
             } else if tab.hasNext && !tab.posts.isEmpty {
                 // With Show or Hide Opened Posts, a new page can add nothing visible, so no new
                 // cell appears to ask for the next one: the footer asks while it's on screen.
-                Button("Load More") { Task { await tab.loadMore() } }
+                Button("Load More") { emptyAutoLoads = 0; Task { await tab.loadMore() } }
                     .font(.footnote)
                     .accessibilityIdentifier("loadMoreFooter")
             }
         }
-        .onChange(of: tab.posts.count) { _ in autoLoadIfFiltered() }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 18)
     }

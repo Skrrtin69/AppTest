@@ -475,6 +475,7 @@ final class DownloadManager: NSObject, ObservableObject {
     /// Deletes records and their files.
     func remove(_ ids: [String]) {
         for id in ids {
+            reconnectTries[id] = nil; failedAtBytes[id] = nil; networkFailed.remove(id)
             tasks[id]?.cancel(); tasks[id] = nil
             if let item = items.first(where: { $0.id == id }), item.state == .completed, let f = item.fileURL {
                 try? FileManager.default.removeItem(at: f)
@@ -587,6 +588,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
             }
             // Optional clean-up and tagging (Settings › Downloads).
             DownloadPostProcess.run(dest, itemID: id)
+            reconnectTries[id] = nil; failedAtBytes[id] = nil
             update(id) { $0.state = .completed; $0.progress = 1; $0.error = nil }
             if let m = mo(id) { m.resumeData = nil; CoreDataStack.shared.save() }
         } catch {

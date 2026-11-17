@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
+    /// Watched so the "Last backup" line updates right after a backup is saved.
+    @AppStorage(Backup.lastBackupKey) private var lastBackupTime: Double = 0
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var registry = AdapterRegistry.shared
     @ObservedObject private var lock = LockManager.shared
@@ -349,6 +351,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Label("Back Up Everything…", systemImage: "externaldrive.badge.plus")
                             if !lock.decoyActive {
+                                let _ = lastBackupTime   // redraws when a backup is saved
                                 let st = Backup.status()
                                 // Nothing syncs to iCloud, so a quiet reminder when it's been a while.
                                 Text(st.text).font(.caption).foregroundColor(st.stale ? .orange : .secondary)
