@@ -538,8 +538,20 @@ final class AppRouter: ObservableObject {
 /// Tags MediaDeck already knows on this phone, for suggestions that work on every site.
 @MainActor
 enum LocalTagIndex {
-    static func matches(_ token: String, limit: Int = 6) -> [String] {
-        let t = token.lowercased()
+    /// Weighted tag counts with their lowercased form, rebuilt only when the sources change
+    /// (it counted every tag of every favorite on the main thread after each pause in typing).
+    private static var cache: [(tag: String, lower: String, weight: Int)] = []
+    private static var cacheSignature = ""
+
+    private static func signature() -> String {
+        let tabs = BrowseModel.shared.tabs.map { "\($0.id)-\(min($0.posts.count, 60))-\($0.posts.first?.key ?? "")" }.joined(separator: ",")
+        let favs = LibraryStore.shared.favorites
+        return "\(favs.count)|\(favs.first?.key ?? "")|\(ReadLaterStore.shared.entries.count)|\(LibraryStore.shared.history.first?.query ?? "")|\(LibraryStore.shared.history.count)|\(tabs)"
+    }
+
+    private static func index() -> [(tag: String, lower: String, weight: Int)] {
+        let sig = signature()
+        if sig == cacheSignature { return cache }
         var counts: [String: Int] = [:]
         func add(_ tags: [String], weight: Int) { for tag in tags { counts[tag, default: 0] += weight } }
         for f in LibraryStore.shared.favorites { add(f.post.tags, weight: 3) }
@@ -548,9 +560,18 @@ enum LocalTagIndex {
         for h in LibraryStore.shared.history.prefix(50) {
             add(TagQuery.parse(h.query).map { $0.hasPrefix("-") ? String($0.dropFirst()) : $0 }, weight: 2)
         }
+        cache = counts.map { ($0.key, $0.key.lowercased(), $0.value) }
+        cacheSignature = sig
+        return cache
+    }
+
+    static func matches(_ token: String, limit: Int = 6) -> [String] {
+        let t = token.lowercased()
+        let underscored = "_" + t
+        var counts: [String: Int] = [:]
+        for e in index() where e.lower.hasPrefix(t) || e.lower.contains(underscored) { counts[e.tag] = e.weight }
         // Your translated names match too, suggesting the site's tag.
         for (orig, shown) in TagTranslations.shared.map where shown.lowercased().hasPrefix(t) { counts[orig, default: 0] += 5 }
-        let hits = counts.filter { $0.key.lowercased().hasPrefix(t) || $0.key.lowercased().contains("_" + t) }
-        return hits.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(limit).map(\.key)
+        return counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(limit).map(\.key)
     }
 }

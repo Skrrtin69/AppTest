@@ -160,6 +160,14 @@ struct InfoPanel: View {
                     } message: {
                         Text(tagInfo?.text ?? "")
                     }
+                    if post.tags.count > 1 {
+                        Button {
+                            UIPasteboard.general.string = post.tags.joined(separator: " ")
+                            ToastCenter.shared.show("Copied \(post.tags.count) tags")
+                        } label: { Label("Copy All Tags", systemImage: "doc.on.doc") }
+                        .font(.footnote)
+                        .accessibilityIdentifier("copyAllTags")
+                    }
                 }
                 // Shown only when the adapter has these addresses.
                 if let a = adapter, a.supportsRelated, let first = post.tags.first {

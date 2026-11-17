@@ -284,9 +284,25 @@ struct ViewerView: View {
         return HStack(spacing: 12) {
             Button { dismiss() } label: { Image(systemName: "xmark").font(.title3.weight(.semibold)) }
                 .accessibilityLabel("Close viewer")
-            Text("\(index + 1) / \(posts.count)").font(.subheadline.monospacedDigit())
-                .lineLimit(1).fixedSize()
-                .accessibilityIdentifier("viewerIndex")
+            // Tap the counter to jump: back to where you started, the first or the last post.
+            Menu {
+                if let k = startKey, let i = posts.firstIndex(where: { $0.key == k }), i != index {
+                    Button { index = i } label: { Label("Back to Where I Started (\(i + 1))", systemImage: "arrow.uturn.backward") }
+                }
+                if index != 0 {
+                    Button { index = 0 } label: { Label("First Post", systemImage: "backward.end") }
+                }
+                if index != posts.count - 1 {
+                    Button { index = posts.count - 1 } label: { Label("Last Loaded Post (\(posts.count))", systemImage: "forward.end") }
+                }
+            } label: {
+                Text("\(index + 1) / \(posts.count)").font(.subheadline.monospacedDigit())
+                    .lineLimit(1).fixedSize()
+                    .foregroundColor(.white)
+            }
+            .disabled(posts.count < 2)
+            .accessibilityIdentifier("viewerIndex")
+            .accessibilityHint("Shows ways to jump to another post")
             Spacer(minLength: 4)
             ForEach(inBar) { barButton($0) }
             if !inMenu.isEmpty {

@@ -33,7 +33,8 @@ struct FavoritesView: View {
         case .oldest: list.reverse()
         case .shuffled:
             let seed = shuffleSeed
-            list.sort { Self.mix($0.key, seed) < Self.mix($1.key, seed) }
+            // Hash each key once, not on every comparison.
+            list = list.map { (Self.mix($0.key, seed), $0) }.sorted { $0.0 < $1.0 }.map { $0.1 }
         }
         return list.filter { p in
             !settings.isBlacklisted(p) && (siteFilter == nil || p.siteID == siteFilter) &&

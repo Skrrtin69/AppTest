@@ -355,12 +355,75 @@ struct PeekContextMenu<Menu: View>: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 16.0, *) {
             content.contextMenu(menuItems: menu) {
-                CachedAsyncImage(url: post.sampleURL ?? post.thumbnailURL, maxPixel: 900, contentMode: .scaleAspectFit)
+                PeekPreview(post: post)
                     .frame(width: 320, height: 320 / max(0.4, min(2.5, post.pixelSize.map { $0.width / $0.height } ?? 1)))
                     .background(Color.black)
             }
         } else {
             content.contextMenu(menuItems: menu)
         }
+    }
+}
+
+/// The big picture shown when a thumbnail is held. Videos show their thumbnail (a site's
+/// "sample" of a video is often the video itself, which can't be shown as a picture) and, for
+/// MP4s on Wi-Fi without Battery Saver, play a muted loop on top of it.
+struct PeekPreview: View {
+    let post: Post
+    static let videoExts: Set<String> = ["mp4", "m4v", "mov", "webm", "mkv", "m3u8"]
+    static let previewableVideo: Set<String> = ["mp4", "m4v", "mov"]
+
+    var stillURL: URL {
+        if let s = post.sampleURL, !Self.videoExts.contains(s.pathExtension.lowercased()) { return s }
+        return post.mediaType == .video ? post.thumbnailURL : (post.sampleURL ?? post.thumbnailURL)
+    }
+
+    var videoURL: URL? {
+        let s = AppSettings.shared
+        guard post.mediaType == .video, !s.savingPower, !s.mediaWaitsForWiFi, !NetworkStatus.shared.onMeteredData else { return nil }
+        // The lighter file first, when it's a video AVPlayer can play.
+        return [post.sampleURL, post.mediaURL].compactMap { $0 }
+            .first { Self.previewableVideo.contains($0.pathExtension.lowercased()) }
+    }
+
+    var body: some View {
+        ZStack {
+            CachedAsyncImage(url: stillURL, maxPixel: 900, contentMode: .scaleAspectFit)
+            if let v = videoURL { LoopingVideoPreview(url: v) }
+        }
+    }
+}
+
+/// A muted, looping AVPlayer for previews; stops when the preview closes.
+struct LoopingVideoPreview: UIViewRepresentable {
+    let url: URL
+
+    final class Coordinator {
+        let player = AVQueuePlayer()
+        var looper: AVPlayerLooper?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> PlayerLayerView.LayerView {
+        let c = context.coordinator
+        c.player.isMuted = true
+        let item = AVPlayerItem(asset: AVURLAsset.withSiteHeaders(url))
+        c.looper = AVPlayerLooper(player: c.player, templateItem: item)
+        let v = PlayerLayerView.LayerView()
+        v.backgroundColor = .clear
+        v.playerLayer.player = c.player
+        v.playerLayer.videoGravity = .resizeAspect
+        c.player.play()
+        return v
+    }
+
+    func updateUIView(_ v: PlayerLayerView.LayerView, context: Context) {}
+
+    static func dismantleUIView(_ v: PlayerLayerView.LayerView, coordinator: Coordinator) {
+        coordinator.player.pause()
+        coordinator.looper?.disableLooping()
+        coordinator.player.removeAllItems()
+        v.playerLayer.player = nil
     }
 }

@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–23)
+## What's new (Phases 1–24)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -488,6 +488,12 @@ Settings › Tools › **Reverse Search Image**:
 - **More speeds:** tap the speed button for 1× → 1.5× → 2×, or touch and hold it for 0.5×, 0.75×, 1×, 1.25×, 1.5× and 2×. VLCKit's controls now have the speed button too.
 - **Downloaded badge:** thumbnails of posts already in your Library show a small ↓ next to the favorite heart, in every grid.
 - **Faster:** cached thumbnails are read from disk without holding up the ones already in memory. Queuing many downloads checks for duplicates with a lookup instead of scanning every past download per post, and deleting many Library items no longer compares each one against the whole list.
+
+**Getting around (Phase 24)**
+- **Jump from the counter:** tap **5 / 67** at the top of the viewer for *Back to Where I Started*, *First Post* or *Last Loaded Post*.
+- **Video previews on long-press:** holding a video thumbnail shows its thumbnail (before, a site's video "sample" was loaded as a picture and could fail), and an MP4 plays a muted loop on top while you're on Wi-Fi and Battery Saver is off.
+- **Copy All Tags** under the tags in the Info panel copies them separated by spaces.
+- **Faster:** tag suggestions from your own favorites, Read Later and history are counted once and reused until those change, instead of on every pause in typing. Shuffled favorites hash each post once instead of on every comparison.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 
