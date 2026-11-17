@@ -509,6 +509,16 @@ struct ViewerView: View {
                         UIPasteboard.general.string = p.mediaURL.absoluteString
                         ToastCenter.shared.show("URL copied")
                     } label: { Label("Copy Media URL", systemImage: "doc.on.doc") }
+                    if !isLocal, let page = PostLinks.pageURL(p) {
+                        // In MediaDeck's own browser (comments, notes, related posts), not Safari.
+                        Button { archivePage = AccountView.WebPageRequest(url: page) } label: { Label("Open Post Page", systemImage: "globe") }
+                        Button { UIPasteboard.general.string = page.absoluteString; ToastCenter.shared.show("Post link copied") }
+                            label: { Label("Copy Post Link", systemImage: "link.badge.plus") }
+                    }
+                    if !isLocal {
+                        Button { UIPasteboard.general.string = PostLinks.appLink(p).absoluteString; ToastCenter.shared.show("MediaDeck link copied") }
+                            label: { Label("Copy MediaDeck Link", systemImage: "arrow.up.forward.app") }
+                    }
                     if let s = p.sourceURL {
                         Button { UIPasteboard.general.string = s.absoluteString; ToastCenter.shared.show("Source URL copied") }
                             label: { Label("Copy Source URL", systemImage: "link") }
@@ -737,4 +747,27 @@ final class ViewerReturn: ObservableObject {
     struct Landing: Equatable { let key: String; let id = UUID() }
     @Published private(set) var landing: Landing?
     func closed(on key: String) { landing = Landing(key: key) }
+}
+
+/// Addresses for a post outside the app.
+enum PostLinks {
+    /// The post's web page, when the site's post address is its JSON twin
+    /// (posts/{id}.json → posts/{id}, as on Danbooru-style sites). Nil otherwise.
+    static func pageURL(_ post: Post) -> URL? {
+        guard let c = AdapterRegistry.shared.config(for: post.siteID) else { return nil }
+        let path = c.postPath.trimmingCharacters(in: .whitespaces)
+        guard path.contains("{id}"), let r = path.range(of: ".json"), path[r.upperBound...].first.map({ $0 == "?" }) ?? true else { return nil }
+        let page = String(path[..<r.lowerBound]).replacingOccurrences(of: "{id}", with: post.id)
+        guard let url = URL(string: page, relativeTo: c.baseURL)?.absoluteURL,
+              ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+        return url
+    }
+
+    /// mediadeck://post?id=…&site=… (opens this post in MediaDeck; see "Links that open MediaDeck").
+    static func appLink(_ post: Post) -> URL {
+        var c = URLComponents()
+        c.scheme = "mediadeck"; c.host = "post"
+        c.queryItems = [URLQueryItem(name: "id", value: post.id), URLQueryItem(name: "site", value: post.siteID)]
+        return c.url ?? URL(string: "mediadeck://post")!
+    }
 }

@@ -54,8 +54,10 @@ final class ImageLoadModel: ObservableObject {
         if loadedURL != url { image = nil }
         error = nil
         // Fast-scroll throttle: a cell that scrolls past within 150 ms is cancelled (this task
-        // ends when the cell disappears) before it costs a network request.
-        if !ImagePipeline.shared.isInMemory(url, maxPixel: maxPixel, animate: animate) {
+        // ends when the cell disappears) before it costs a network request. Pictures already
+        // on disk skip the wait, so scrolling back through them is instant.
+        if !ImagePipeline.shared.isInMemory(url, maxPixel: maxPixel, animate: animate),
+           url.isFileURL == false, !ImageCache.shared.hasFile(for: url) {
             try? await Task.sleep(nanoseconds: 150_000_000)
             if Task.isCancelled { return }
         }

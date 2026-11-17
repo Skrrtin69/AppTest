@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–27)
+## What's new (Phases 1–28)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -511,6 +511,11 @@ Settings › Tools › **Reverse Search Image**:
 - **Hide This Post** (viewer ⋯): hides just that one post everywhere, with Undo. It's listed in the Tag Blacklist as `post:<site>:<id>`, where it can be removed later. (*Hide Posts Like This…* still hides by tag or uploader.)
 - **Select All / Invert in Favorites:** the selection bar in Favorites has the same two buttons as Browse.
 - **Smoother Edit Picture:** the preview is rendered off the main thread from a copy shrunk once to preview size, and only the newest slider position is shown. Saving (including 2× / 3× enlarging and JPEG encoding) also runs in the background instead of freezing the screen.
+
+**Links out (Phase 28)**
+- **Open Post Page / Copy Post Link** (viewer ⋯): for sites whose post address is the JSON twin of the page (`posts/{id}.json` → `posts/{id}`, as on Danbooru-style sites), the post's web page opens in MediaDeck's own themed browser (comments, notes), so it never lands in Safari's history. The link can also be copied.
+- **Copy MediaDeck Link** (viewer ⋯): copies `mediadeck://post?id=…&site=…`, which opens that post in MediaDeck from Notes, Shortcuts or anywhere else.
+- **Faster scrolling back:** thumbnails already in the disk cache no longer wait out the 150 ms fast-scroll delay meant for network loads.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

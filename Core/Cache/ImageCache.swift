@@ -34,6 +34,11 @@ actor ImageCache {
 
     private nonisolated func fileURL(_ key: String) -> URL { directory.appendingPathComponent(key) }
 
+    /// Whether the file is on disk, without waiting for the actor (for the scroll throttle).
+    nonisolated func hasFile(for url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: fileURL(Self.key(for: url)).path)
+    }
+
     /// `siteID` also tags older entries (cached before sites were tracked) as they're used.
     /// The memory check runs on the actor; the disk read doesn't, so one slow read no longer
     /// holds up every other thumbnail that's already in memory.
