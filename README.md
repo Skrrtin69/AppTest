@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–35)
+## What's new (Phases 1–36)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -556,6 +556,16 @@ Settings › Tools › **Reverse Search Image**:
 **Private tabs (Phase 35)**
 - **New Private Tab** (Browse ⋯): a search tab marked with 👁‍🗨 whose searches aren't added to search history; posts opened from it aren't dimmed as opened or added to Favorites › Recent; and it isn't reopened at the next launch. Duplicating a private tab gives another private tab. (Pictures and videos still go through the caches, which Settings › Clear Cache empties, and a video's resume spot is still remembered.)
 - **Fixes from a fifth review:** the filtered grid's "load another page when the last one added nothing visible" now really fires (it watched a view that disappears in exactly that case), and each Load More tap allows 5 more automatic pages. The *Last backup* line updates as soon as a backup is saved. Download retry counts are cleared when a download finishes or is removed.
+
+**Playback audit (Phase 36)**
+A full review of video playback while paging (the original paging fix is intact) found and fixed:
+- **Looping VLCKit videos restarted at the resume or reopen point** instead of 0:00; they now loop from the start.
+- **A paused VLCKit video started playing again by itself** when you changed speed, switched loop/auto-advance, or half-swiped and let go. Now only becoming the current post starts it, and a stream moved to a new surface comes back playing only if it was playing.
+- **VLCKit ignored "Autoplay videos in viewer" and Battery Saver**; with autoplay off it now shows the first frame, paused.
+- **A reopened stream that failed fast stayed black** with no message: the error is checked again shortly after, and "Loading video..." shows again while a stream is being reopened.
+- **The pager handing a page's view to another post** now gives that post its own player (VLCKit, web player and the built-in player), so the old video can't keep playing under the new post; Picture in Picture follows the right layer.
+- **The built-in player no longer pauses on the pager's false "disappear"** while you swipe, a repeated "appear" no longer undoes your pause, and when iOS pauses it (headphones out, a call) the play button shows it.
+- A neighbouring page no longer shows "didn't start within N seconds" when you swipe to it; holding for 2× is released if the stream closes mid-hold.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

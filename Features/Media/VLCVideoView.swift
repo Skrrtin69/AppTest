@@ -21,6 +21,9 @@ struct VLCVideoView: View {
     var onReady: (() -> Void)? = nil
     var onError: ((String) -> Void)? = nil
     var onStatus: ((String) -> Void)? = nil
+    /// The stream was closed (it's reopened when needed): the loading overlay comes back
+    /// until it plays again, so a reopen that fails isn't a silent black screen.
+    var onClosed: (() -> Void)? = nil
 
     @StateObject private var model = VLCPlayerModel()
 
@@ -42,8 +45,9 @@ struct VLCVideoView: View {
         // anything; the stream closes when its surface is removed or the page is unloaded.
         .onAppear { sync() }
         .onChange(of: isActive) { _ in sync() }
-        .onChange(of: speed) { _ in sync() }
-        .onChange(of: loop) { _ in sync() }
+        // Speed and loop only change those (they used to restart a paused video).
+        .onChange(of: speed) { model.setRate($0) }
+        .onChange(of: loop) { model.loop = $0 }
     }
 
     private func sync() {
@@ -55,6 +59,7 @@ struct VLCVideoView: View {
         model.onReady = onReady
         model.onError = onError
         model.onStatus = onStatus
+        model.onClosed = onClosed
         model.setRate(speed)
         model.setActive(isActive)
     }
@@ -183,6 +188,10 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     var onReady: (() -> Void)?
     var onError: ((String) -> Void)?
     var onStatus: ((String) -> Void)?
+    var onClosed: (() -> Void)?
+    /// Whether this video should be playing (autoplay, Play, or a reopen of a playing one),
+    /// as opposed to paused by the user.
+    private var wantsPlay = false
     /// "Ready" was reported for the stream that is open now. Reset on every reopen and after
     /// an error, so the "Loading video..." overlay always hears when the video really plays.
     private var readySent = false
@@ -284,13 +293,15 @@ final class VLCPlayerModel: NSObject, ObservableObject {
             }
             player.media = Self.media(url, startMs: resumeAtMs)
             player.audio?.isMuted = VideoSound.shared.muted
-            if active { start() }
+            if active { if AppSettings.shared.videosAutoplay { start() } else { peek() } }
             return
         }
-        // A new surface for a player that already exists: move the stream onto it.
+        // A new surface for a player that already exists: move the stream onto it, playing
+        // only if it was meant to be playing.
         DebugLog.log("VLC", "New video surface: reopening the stream on it")
+        let resume = wantsPlay
         close("new surface")
-        if active, !inBackground { reopen(play: true) }
+        if active, !inBackground { reopen(play: resume) }
     }
 
     /// SwiftUI removed a surface. If VLC is still drawing into it, close the stream.
@@ -305,21 +316,41 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     /// The current post plays; the others pause (their streams stay open, so going back is
     /// instant). A closed stream reopens only for the current post.
     func setActive(_ on: Bool) {
+        // Only a real change does anything: sync() also runs for the pager's repeated
+        // onAppear, which used to start a video you had paused.
+        let becameActive = on && !active
+        let becameInactive = !on && active
         active = on
         if on { VideoActivity.shared.report(self, playing: isPlaying) } else { VideoActivity.shared.release(self) }
         guard loaded else { return }
         if closed {
-            if on, !inBackground { reopen(play: true) }
+            if becameActive, !inBackground { reopen(play: AppSettings.shared.videosAutoplay) }
             return
         }
-        if on { start() } else if player.isPlaying { player.pause() }
+        if becameActive {
+            if AppSettings.shared.videosAutoplay { start() } else if !player.isPlaying { peek() }
+        } else if becameInactive {
+            wantsPlay = false
+            if player.isPlaying { player.pause() }
+        }
     }
 
     private func start() {
         endPeek()
+        wantsPlay = true
         if opened == nil { opened = Date() }
         player.play()
         player.audio?.isMuted = VideoSound.shared.muted
+    }
+
+    /// Plays silently to the first frame, then pauses on it (autoplay off: a picture, not black).
+    private func peek() {
+        guard !pauseOnStart else { return }
+        pauseOnStart = true
+        mutedBeforePeek = player.audio?.isMuted ?? false
+        player.audio?.isMuted = true
+        if opened == nil { opened = Date() }
+        player.play()
     }
 
     /// Stops the stream and notes where to pick up. The delegate stays attached.
@@ -332,7 +363,9 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         closed = true
         readySent = false
         lastStop = Date()
+        if holding { holding = false; player.rate = Float(AppSettings.shared.playbackSpeed) }
         player.stop()
+        onClosed?()
         DebugLog.log("VLC", "Closed (\(why)) at \(resumeAtMs) ms")
     }
 
@@ -345,6 +378,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         player.delegate = self
         player.drawable = view
         player.media = Self.media(url, startMs: resumeAtMs)
+        wantsPlay = play
         if !play {
             // Show the paused frame instead of a black screen.
             pauseOnStart = true
@@ -371,7 +405,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         // Play pressed while the stream is closed: reopen now and play.
         if closed { reopen(play: true); return }
         endPeek()
-        if player.isPlaying { player.pause() } else { player.play() }
+        if player.isPlaying { wantsPlay = false; player.pause() } else { wantsPlay = true; player.play() }
     }
 
     func seek(to p: Float) {
@@ -505,7 +539,14 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
                 markReady()
             case .error:
                 if let s = lastStop, Date().timeIntervalSince(s) < 2 {
-                    DebugLog.log("VLC", "Ignored an error right after closing the previous stream")
+                    DebugLog.log("VLC", "Ignored an error right after closing the previous stream; checking again")
+                    // It may be the new stream failing fast (expired link, proxy error): if
+                    // it's still in error a little later, report it after all.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
+                        guard let self = self, !self.closed, self.player.state == .error else { return }
+                        self.readySent = false
+                        self.onError?("VLC couldn't play this video.")
+                    }
                     return
                 }
                 DebugLog.log("VLC", "Playback error")
@@ -517,6 +558,10 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
                 if loop {
                     lastStop = Date()
                     player.stop()
+                    // From the start: the media carries the time it was opened at, and
+                    // replaying it as-is restarted there.
+                    resumeAtMs = 0
+                    if let u = reopenURL?() ?? firstURL { player.media = Self.media(u, startMs: 0) }
                     player.play()
                 } else {
                     onFinished?()

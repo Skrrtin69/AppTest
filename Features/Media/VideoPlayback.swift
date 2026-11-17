@@ -190,21 +190,24 @@ struct MediaVideoView: View {
                 VLCVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
                              loop: !settings.autoAdvance, showControls: showControls, onFinished: onFinished, onTap: onTap,
                              onReady: { webReady = true; webError = nil },
-                             onError: { reportError($0) }, onStatus: { engine = $0 })
-                    .id(webAttempt)
+                             onError: { reportError($0) }, onStatus: { engine = $0 },
+                             onClosed: { webReady = false })
+                    // Per address too: if the pager hands this view to another post, it gets
+                    // its own player instead of the old video carrying on under it.
+                    .id("\(url.absoluteString)#\(webAttempt)")
                     .overlay { loadingOverlay }
-                    .task(id: "\(url.absoluteString)#\(webAttempt)") { await watchStart() }
+                    .task(id: "\(url.absoluteString)#\(webAttempt)#\(isActive)") { await watchStart() }
             case .some(.web):
                 WebVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
                              loop: !settings.autoAdvance, onFinished: onFinished,
                              onReady: { webReady = true; webError = nil },
                              onError: { reportError($0) }) { engine = $0 }
-                    .id(webAttempt)
+                    .id("\(url.absoluteString)#\(webAttempt)")
                     .overlay(alignment: .bottomTrailing) {
                         if showControls { SpeedButton().padding(.trailing, 70).padding(.bottom, 145) }
                     }
                     .overlay { loadingOverlay }
-                    .task(id: "\(url.absoluteString)#\(webAttempt)") { await watchStart() }
+                    .task(id: "\(url.absoluteString)#\(webAttempt)#\(isActive)") { await watchStart() }
             }
             if let p = path, showControls {
                 Text(p != .native ? "\(p.label) · \(engine ?? "loading…")" : p.label)
@@ -275,6 +278,9 @@ struct MediaVideoView: View {
             webError = nil
         }
         webTimedOut = false
+        // A neighbouring page doesn't start until it's the current one: no timeout for it
+        // (it used to show "didn't start within N seconds" when you swiped to it).
+        guard isActive else { return }
         let limit = network.videoTimeout
         try? await Task.sleep(nanoseconds: UInt64(limit * 1_000_000_000))
         if !Task.isCancelled, !webReady {
@@ -336,6 +342,9 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
     private var endObserver: NSObjectProtocol?
     private var statusObservation: NSKeyValueObservation?
     var isScrubbing = false
+    /// Autoplay already happened for this player (see NativeVideoContent.onAppear).
+    var autoplayed = false
+    private var rateObservation: NSKeyValueObservation?
 
     /// Called when the video ends while auto-advance is on.
     var onFinished: (() -> Void)?
@@ -357,6 +366,17 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         player = AVPlayer(playerItem: item)
         super.init()
         player.isMuted = VideoSound.shared.muted
+        // Paused by iOS (headphones out, a call, PiP closed): show it. The end of the video
+        // is left to the end observer (it loops or moves on).
+        rateObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
+            DispatchQueue.main.async {
+                guard let self = self, !self.holding else { return }
+                let playing = p.timeControlStatus != .paused
+                if !playing, let item = p.currentItem, item.duration.isNumeric,
+                   item.currentTime().seconds >= item.duration.seconds - 0.3 { return }
+                if self.isPlaying != playing { self.isPlaying = playing }
+            }
+        }
         if let t = VideoResumeStore.shared.position(for: self.resumeKey) {
             resumedFrom = t
             current = t
@@ -453,6 +473,7 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
     func teardown() {
         if duration > 0 { VideoResumeStore.shared.save(player.currentTime().seconds, duration: duration, for: resumeKey, force: true) }
         player.pause()
+        rateObservation?.invalidate(); rateObservation = nil
         if let t = timeObserver { player.removeTimeObserver(t); timeObserver = nil }
         if let e = endObserver { NotificationCenter.default.removeObserver(e); endObserver = nil }
         statusObservation = nil
@@ -541,6 +562,8 @@ struct NativeVideoView: View {
         ZStack {
             if let c = holder.controller {
                 NativeVideoContent(controller: c, isActive: isActive, showControls: showControls, onTap: onTap, onFailure: onFailure)
+                    // A replaced controller gets fresh content (its onAppear reports and autoplays).
+                    .id(ObjectIdentifier(c))
             } else {
                 Color.black
             }
@@ -627,14 +650,20 @@ private struct NativeVideoContent: View {
         .onAppear {
             // Built while already the current page: report now (onChange(of: isActive) won't fire).
             if isActive { VideoActivity.shared.report(controller, playing: controller.isPlaying) }
-            if isActive && AppSettings.shared.videosAutoplay { controller.play() }
+            // Once: the pager fires onAppear again for pages that never left, which used to
+            // undo a pause.
+            if isActive && AppSettings.shared.videosAutoplay && !controller.autoplayed {
+                controller.autoplayed = true
+                controller.play()
+            }
         }
         .onChange(of: isActive) { active in
             controller.isActivePage = active
             if active { VideoActivity.shared.report(controller, playing: controller.isPlaying) } else { VideoActivity.shared.release(controller) }
-            if active { if AppSettings.shared.videosAutoplay { controller.play() } } else if !controller.pipActive { controller.pause() }
+            if active { if AppSettings.shared.videosAutoplay { controller.autoplayed = true; controller.play() } } else if !controller.pipActive { controller.pause() }
         }
-        .onDisappear { if !controller.pipActive { controller.pause() } }
+        // No pause on onDisappear: the pager fires it for the page on screen while you swipe.
+        // Leaving the page (isActive) pauses; leaving the viewer releases the player.
         .onChange(of: controller.failed) { f in if f { onFailure() } }
         .onChange(of: settings.playbackSpeed) { _ in controller.applySpeed() }
     }
@@ -668,7 +697,11 @@ struct PlayerLayerView: UIViewRepresentable {
     }
 
     func updateUIView(_ v: LayerView, context: Context) {
-        if v.playerLayer.player !== player { v.playerLayer.player = player }
+        if v.playerLayer.player !== player {
+            v.playerLayer.player = player
+            // Handed to another player: tie that one's Picture in Picture to this layer.
+            if let cb = onLayer { DispatchQueue.main.async { cb(v.playerLayer) } }
+        }
         v.playerLayer.videoGravity = gravity
     }
 }
