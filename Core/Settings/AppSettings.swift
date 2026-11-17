@@ -60,7 +60,7 @@ final class AppSettings: ObservableObject {
                          smartThumbnails = "smartThumbnails", twoPageLandscape = "twoPageLandscape", fallbackSite = "fallbackSite",
                          stripEXIF = "stripEXIF", autoTagDownloads = "autoTagDownloads", panicGesture = "panicGesture", panicAction = "panicAction",
                          doubleTapAction = "doubleTapAction", swipeUpAction = "swipeUpAction", swipeDownAction = "swipeDownAction",
-                         startMuted = "startMuted", edgeSwipes = "edgeSwipes", useVLC = "useVLC"
+                         startMuted = "startMuted", edgeSwipes = "edgeSwipes", useVLC = "useVLC", restoreTabs = "restoreTabs"
         static let all = [theme, gridColumns, thumbAspect, downloadQuality, filenameTemplate, folderTemplate,
                           maxThumbLoads, maxDownloads, cacheLimitMB, slideshowInterval, blacklist, hapticsTap,
                           hapticsResult, backgroundDownloads, biometrics, lockGrace, updateURL, animateGridGIFs, autoplayVideos,
@@ -68,7 +68,7 @@ final class AppSettings: ObservableObject {
                           warnOnCellular, maxDownloadMB, gridSpacing, preferLighter, viewerBackground, autoAdvance,
                           readingRTL, tapZones, rotationLock, batterySaver, cacheExpiryDays, hiddenViewerButtons, swipeSites,
                           detectClipboardLinks, dataSaver, wifiOnlyMedia, mixWithOthers,
-                          smartThumbnails, twoPageLandscape, fallbackSite, stripEXIF, autoTagDownloads, panicGesture, panicAction, doubleTapAction, swipeUpAction, swipeDownAction, startMuted, edgeSwipes, useVLC]
+                          smartThumbnails, twoPageLandscape, fallbackSite, stripEXIF, autoTagDownloads, panicGesture, panicAction, doubleTapAction, swipeUpAction, swipeDownAction, startMuted, edgeSwipes, useVLC, restoreTabs]
     }
 
     static let defaultFilenameTemplate = "{site}_{id}_{index}"
@@ -169,6 +169,8 @@ final class AppSettings: ObservableObject {
     @Published var doubleTapAction: String = "zoom" { didSet { d.set(doubleTapAction, forKey: K.doubleTapAction) } }
     @Published var swipeUpAction: String = "info" { didSet { d.set(swipeUpAction, forKey: K.swipeUpAction) } }
     @Published var swipeDownAction: String = "close" { didSet { d.set(swipeDownAction, forKey: K.swipeDownAction) } }
+    /// Reopen the search tabs that were open when the app last closed.
+    @Published var restoreTabs: Bool = true { didSet { d.set(restoreTabs, forKey: K.restoreTabs) } }
 
     var mediaWaitsForWiFi: Bool { wifiOnlyMedia && NetworkStatus.shared.onMeteredData }
 
@@ -271,6 +273,7 @@ final class AppSettings: ObservableObject {
         doubleTapAction = d.string(forKey: K.doubleTapAction) ?? "zoom"
         swipeUpAction = d.string(forKey: K.swipeUpAction) ?? "info"
         swipeDownAction = d.string(forKey: K.swipeDownAction) ?? "close"
+        restoreTabs = d.object(forKey: K.restoreTabs) as? Bool ?? true
     }
 
     static func clamp(_ v: Int, _ lo: Int, _ hi: Int) -> Int { min(hi, max(lo, v)) }

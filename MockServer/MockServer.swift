@@ -182,6 +182,12 @@ final class MockServer {
             send(HTTPResponse(contentType: cached.type, body: cached.data), for: request, on: conn)
             return
         }
+        // Bytes already on disk from an earlier viewing: no network at all.
+        if let hit = VideoByteCache.shared.response(for: url, rangeHeader: request.headers["range"], typeOverride: request.query["type"]) {
+            DebugLog.log("Proxy", "From video cache · \(hit.headers["Content-Range"] ?? "whole file") ")
+            send(hit, for: request, on: conn)
+            return
+        }
         let streamer = ProxyStreamer(request: request, conn: conn, url: url) { [weak self] in
             guard let self = self else { conn.cancel(); return }
             Task { self.send(await PlayerRoutes.proxy(request), for: request, on: conn) }
@@ -290,6 +296,8 @@ private final class ProxyStreamer: NSObject, URLSessionDataDelegate {
     private let started = Date()
     private var streaming = false
     private var sent = 0
+    /// Copies what streams through into the video cache.
+    private var recorder: VideoByteCache.Writer?
     /// Keeps itself alive until the site's answer is finished (the task holds its delegate weakly in some iOS versions).
     private var keepAlive: ProxyStreamer?
 
@@ -330,12 +338,17 @@ private final class ProxyStreamer: NSObject, URLSessionDataDelegate {
         }
         DebugLog.log("Proxy", "206 headers after \(Int(Date().timeIntervalSince(started) * 1000)) ms · \(headers["Content-Range"] ?? "")")
         ProxyProgress.shared.began(url, contentRange: headers["Content-Range"])
+        if let cr = headers["Content-Range"], let (start, total) = Self.parseContentRange(cr) {
+            recorder = VideoByteCache.shared.writer(for: url, start: start, total: total,
+                                                    type: http.value(forHTTPHeaderField: "Content-Type") ?? MockMedia.contentType(url.path))
+        }
         completionHandler(.allow)
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         sent += data.count
         ProxyProgress.shared.received(url, bytes: data.count)
+        recorder?.append(data)
         conn.send(content: data, completion: .contentProcessed { [weak dataTask] error in
             // The player closed the connection (seek, next video): stop downloading.
             if error != nil { dataTask?.cancel() }
@@ -350,7 +363,17 @@ private final class ProxyStreamer: NSObject, URLSessionDataDelegate {
         finish()
     }
 
+    /// "bytes 100-199/5000" → (100, 5000). Nil when the total is unknown ("*").
+    static func parseContentRange(_ s: String) -> (Int, Int)? {
+        let parts = s.lowercased().replacingOccurrences(of: "bytes", with: "").trimmingCharacters(in: .whitespaces).split(separator: "/")
+        guard parts.count == 2, let total = Int(parts[1]),
+              let start = parts[0].split(separator: "-").first.flatMap({ Int($0) }) else { return nil }
+        return (start, total)
+    }
+
     private func finish() {
+        recorder?.finish()
+        recorder = nil
         // Close once everything queued so far has gone out.
         conn.send(content: nil, isComplete: true, completion: .contentProcessed { [conn] _ in conn.cancel() })
         keepAlive = nil

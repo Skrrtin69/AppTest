@@ -152,7 +152,8 @@ final class VideoResumeStore {
     static let shared = VideoResumeStore()
     static let minimumDuration: Double = 60
 
-    private struct Entry: Codable { var t: Double; var at: Date }
+    /// `d` (the video's length) is missing in spots saved by older versions.
+    private struct Entry: Codable { var t: Double; var at: Date; var d: Double? }
     private let key = "videoResumePositions"
     private let limit = 300
     private let lock = NSLock()
@@ -173,6 +174,13 @@ final class VideoResumeStore {
         return e.t
     }
 
+    /// How far through the video the saved spot is (0…1), for the bar on grid thumbnails.
+    func fraction(for url: URL) -> Double? {
+        lock.lock(); defer { lock.unlock() }
+        guard let e = map[id(url)], e.t >= 5, let d = e.d, d > 0 else { return nil }
+        return min(1, max(0, e.t / d))
+    }
+
     /// Called often while playing; writes to disk at most every few seconds (or now with force).
     func save(_ t: Double, duration: Double, for url: URL, force: Bool = false) {
         guard t.isFinite, duration.isFinite else { return }
@@ -185,7 +193,7 @@ final class VideoResumeStore {
             if had { persist() }
             return
         }
-        map[k] = Entry(t: t, at: Date())
+        map[k] = Entry(t: t, at: Date(), d: duration)
         let due = force || Date().timeIntervalSince(lastWrite) > 5
         lock.unlock()
         if due { persist() }

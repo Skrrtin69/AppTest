@@ -21,7 +21,9 @@ enum PlayerRoutes {
             let rel = String(path.dropFirst("/local/".count))
             guard !rel.contains("..") else { return .json(["error": "bad path"], status: 400) }
             let file = DownloadManager.root.appendingPathComponent(rel)
-            guard let data = try? Data(contentsOf: file) else { return .json(["error": "no such file"], status: 404) }
+            // Memory-mapped: a range request copies only its own bytes instead of the player
+            // reading the whole video into memory for every piece it asks for.
+            guard let data = try? Data(contentsOf: file, options: .alwaysMapped) else { return .json(["error": "no such file"], status: 404) }
             return HTTPResponse(contentType: MockMedia.contentType(rel), body: data)
         }
         return nil
@@ -102,6 +104,7 @@ enum PlayerRoutes {
 
     /// One file at a time (the video on screen), up to 150 MB.
     private static func keep(_ url: URL, data: Data, type: String) {
+        VideoByteCache.shared.storeWhole(data, url: url, type: type)
         guard data.count <= 150 * 1024 * 1024 else { return }
         cacheLock.lock(); cache = (url, data, type); cacheLock.unlock()
     }

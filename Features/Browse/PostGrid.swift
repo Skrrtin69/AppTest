@@ -180,6 +180,17 @@ struct GridCell: View {
                     .frame(height: 4)
                     .frame(maxHeight: .infinity, alignment: .bottom)
                     .accessibilityLabel("Read to page \(m.page + 1) of \(m.total)")
+                } else if post.mediaType == .video, let f = VideoResumeStore.shared.fraction(for: post.mediaURL) {
+                    // Partly watched: how far you got (it continues there).
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            Rectangle().fill(Color.black.opacity(0.5))
+                            Rectangle().fill(Color.red).frame(width: g.size.width * CGFloat(f))
+                        }
+                    }
+                    .frame(height: 3)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .accessibilityLabel("Watched \(Int(f * 100))%")
                 }
             }
             .overlay(alignment: .bottomLeading) {

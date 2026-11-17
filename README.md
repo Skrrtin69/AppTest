@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–20)
+## What's new (Phases 1–21)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -464,6 +464,14 @@ Settings › Tools › **Reverse Search Image**:
 - **The download queue now opens from the Library** (the arrow button, with a count badge on the Library tab), because iOS shows only five tabs before hiding the rest under "More".
 - **Reverse Search Selected:** select posts in Browse › magnifying-glass button. They're searched one by one with your reverse search engine, and the report lists sources, posts with no source, groups that share a source (likely duplicates), and matches already on one of your sites. Copy the report with the button at the top. To use the SauceNAO JSON API, add it as an engine in Settings › Tools › Reverse Search with your own key; MediaDeck doesn't ship any service.
 - **Fallback site** (Settings › Reading): when a search fails because the site is down or busy (timeout, 429, 5xx), MediaDeck asks "<site> is offline. Switch to <fallback> for this search?" and only switches if you tap Switch.
+
+**Watching and picking up again (Phase 21)**
+- **Video cache:** WebM/MKV bytes that stream through the local proxy (VLCKit and the web player) are kept on disk, up to 600 MB, with the oldest-used videos dropped first. Watching a video again, swiping back to it, looping it or seeking backwards uses no data. Settings › Clear Cache empties it, and Storage shows it as *Watched videos*.
+- **Instant downloads of watched videos:** downloading a video that has been watched all the way through copies it from the video cache instead of fetching it again.
+- **Recently viewed:** Favorites › **Recent** lists the last 400 posts you opened in the viewer, newest first, so a post you swiped past or closed by accident is easy to find. **Clear** empties it; "Forget which posts I've opened" (Settings › Appearance) clears it too. Decoy mode neither records nor shows it.
+- **Reopen last session's tabs** (Settings › Browsing, on by default): the search tabs open when you left (site, search, sort, rating) come back at the next launch. Only the selected tab searches right away; the others search when you first switch to them.
+- **Watched bar:** partly watched videos (a minute or longer) show a thin red bar along the bottom of their thumbnail, showing how far you got.
+- **Faster:** searching no longer reloads every favorite from the database or rebuilds the widget. The widget's thumbnails are refreshed only when favorites change (or every 6 hours), with the JPEG work off the main thread. The speed test and the followed-tags check wait a few seconds after launch so the first search goes first. Library videos are read in pieces instead of whole for every request.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

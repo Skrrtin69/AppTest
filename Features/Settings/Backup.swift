@@ -205,6 +205,8 @@ struct StorageView: View {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let web = Self.folderSize(caches.appendingPathComponent("WebKit")) + Self.folderSize(caches.appendingPathComponent("com.apple.WebKit.GPU"))
         if web > 0 { out.append(Slice(label: "Web pages", kind: "Cache", bytes: web)) }
+        let videos = VideoByteCache.shared.sizeBytes
+        if videos > 0 { out.append(Slice(label: "Watched videos", kind: "Cache", bytes: videos)) }
         slices = out.sorted { $0.bytes > $1.bytes }
         loading = false
     }

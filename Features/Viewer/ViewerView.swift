@@ -91,11 +91,11 @@ struct ViewerView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { OrientationLock.apply(settings.rotationLock) }
             }
             prefetchNeighbors()
-            if let p = current { ViewedStore.shared.markViewed(p) }
+            if let p = current { ViewedStore.shared.markViewed(p); RecentlyViewedStore.shared.record(p) }
         }
         .onChange(of: index) { _ in
             prefetchNeighbors()
-            if let p = current { ViewedStore.shared.markViewed(p) }
+            if let p = current { ViewedStore.shared.markViewed(p); RecentlyViewedStore.shared.record(p) }
             if !slideshow { Haptics.tap() }
         }
         .task(id: slideshow) {

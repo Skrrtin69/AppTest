@@ -56,6 +56,7 @@ struct SettingsView: View {
                     Toggle("Dim posts I've already opened", isOn: $settings.dimViewed)
                     Button("Forget which posts I've opened") {
                         ViewedStore.shared.clearViewed()
+                        RecentlyViewedStore.shared.clear()
                         ToastCenter.shared.show("Viewed history cleared", style: .success)
                     }
                 }
@@ -154,6 +155,8 @@ struct SettingsView: View {
                 }
 
                 Section("Browsing") {
+                    Toggle("Reopen last session's tabs", isOn: $settings.restoreTabs)
+                        .accessibilityIdentifier("restoreTabs")
                     NavigationLink(destination: TagTranslationsView()) {
                         HStack { Label("Tag Translations", systemImage: "character.bubble"); Spacer()
                             Text("\(TagTranslations.shared.map.count)").foregroundColor(.secondary) }

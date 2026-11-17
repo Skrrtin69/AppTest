@@ -86,9 +86,16 @@ final class BootModel: ObservableObject {
         PanicManager.shared.installSwipe()
         // The web video player's process and files, ready before the first WebM.
         WebVideoView.prewarm()
-        // Download speed sets how long a web video may take to start.
-        Task { await NetworkSpeed.shared.measure() }
-        Task { await FollowStore.shared.checkIfDue() }
+        // Download speed sets how long a web video may take to start. Measured a few seconds
+        // after launch, so it doesn't compete with (or get skewed by) the first search.
+        Task {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            await FollowStore.shared.checkIfDue()
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            await NetworkSpeed.shared.measure()
+        }
         // Cached files not opened within the chosen number of days.
         Task.detached(priority: .background) { await ImageCache.shared.expire() }
         if let e = CoreDataStack.shared.loadError {

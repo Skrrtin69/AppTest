@@ -107,16 +107,29 @@ enum WidgetFeedWriter {
         guard let dir = AppGroup.widgetDir, let feedURL = WidgetFeed.fileURL else { return }
         // Decoy mode never touches the widget.
         guard !LockManager.shared.decoyActive else { return }
-        let picks = Array(LibraryStore.shared.favorites.shuffled().prefix(24))
+        // Same favorites as last time and the feed is recent: keep it. (This ran at every
+        // launch and after every library change, and each time picked 24 new random
+        // favorites whose thumbnails then had to be downloaded.)
+        let favs = LibraryStore.shared.favorites
+        let signature = SHA256.hash(data: Data(favs.map(\.key).sorted().joined(separator: "|").utf8)).map { String(format: "%02x", $0) }.joined()
+        let d = UserDefaults.standard
+        if d.string(forKey: "widgetFeedSignature") == signature,
+           let last = d.object(forKey: "widgetFeedWritten") as? Date, Date().timeIntervalSince(last) < 6 * 3600,
+           FileManager.default.fileExists(atPath: feedURL.path) { return }
+        let picks = Array(favs.shuffled().prefix(24))
         var items: [WidgetFeed.Item] = []
         for f in picks {
             let name = SHA256.hash(data: Data(f.key.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined() + ".jpg"
             let file = dir.appendingPathComponent(name)
             if !FileManager.default.fileExists(atPath: file.path) {
                 let client = AdapterRegistry.shared.adapter(for: f.post.siteID)?.client
-                guard let img = try? await ImagePipeline.shared.image(for: f.post.thumbnailURL, maxPixel: 600, animate: false, client: client),
-                      let data = img.jpegData(compressionQuality: 0.8) else { continue }
-                try? data.write(to: file, options: .atomic)
+                guard let img = try? await ImagePipeline.shared.image(for: f.post.thumbnailURL, maxPixel: 600, animate: false, client: client) else { continue }
+                // JPEG encoding and the write happen off the main thread.
+                let ok = await Task.detached(priority: .utility) { () -> Bool in
+                    guard let data = img.jpegData(compressionQuality: 0.8) else { return false }
+                    return (try? data.write(to: file, options: .atomic)) != nil
+                }.value
+                guard ok else { continue }
             }
             items.append(WidgetFeed.Item(file: name, site: AdapterRegistry.shared.displayName(for: f.post.siteID), key: f.key))
         }
@@ -126,6 +139,8 @@ enum WidgetFeedWriter {
             try? FileManager.default.removeItem(at: u)
         }
         if let data = try? JSONEncoder().encode(WidgetFeed(items: items)) { try? data.write(to: feedURL, options: .atomic) }
+        d.set(signature, forKey: "widgetFeedSignature")
+        d.set(Date(), forKey: "widgetFeedWritten")
         WidgetCenter.shared.reloadAllTimelines()
     }
 }

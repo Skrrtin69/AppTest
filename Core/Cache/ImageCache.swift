@@ -92,6 +92,7 @@ actor ImageCache {
     }
 
     func clear() {
+        VideoByteCache.shared.clear()
         memory.removeAllObjects()
         try? FileManager.default.removeItem(at: directory)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

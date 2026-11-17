@@ -70,11 +70,20 @@ final class LibraryStore: ObservableObject {
             CollectionItem(id: c.id, name: c.name, keys: c.favorites.sorted { $0.createdAt > $1.createdAt }.map { $0.key })
         }
 
+        reloadHistory()
+        reloadSavedSearches()
+    }
+
+    private func reloadHistory() {
+        guard !hidden else { history = []; return }
         let hReq = NSFetchRequest<HistoryMO>(entityName: "History")
         hReq.sortDescriptors = [NSSortDescriptor(key: "date", ascending: false)]
         hReq.fetchLimit = 100
         history = ((try? ctx.fetch(hReq)) ?? []).map { HistoryItem(id: $0.objectID, query: $0.query, siteID: $0.siteID, date: $0.date) }
+    }
 
+    private func reloadSavedSearches() {
+        guard !hidden else { savedSearches = []; return }
         let sReq = NSFetchRequest<SavedSearchMO>(entityName: "SavedSearch")
         sReq.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
         savedSearches = ((try? ctx.fetch(sReq)) ?? []).map { SavedSearchItem(id: $0.id, name: $0.name, query: $0.query, siteID: $0.siteID) }
@@ -84,6 +93,18 @@ final class LibraryStore: ObservableObject {
         stack.save()
         reload()
         Task { @MainActor in WidgetFeedWriter.scheduleUpdate() }
+    }
+
+    /// History and saved searches only: re-reading (and re-decoding) every favorite and
+    /// rebuilding the widget after each search made every grid cell redraw.
+    private func commitHistory() {
+        stack.save()
+        reloadHistory()
+    }
+
+    private func commitSavedSearches() {
+        stack.save()
+        reloadSavedSearches()
     }
 
     // MARK: Favorites
@@ -211,19 +232,19 @@ final class LibraryStore: ObservableObject {
         h.query = q
         h.siteID = siteID
         h.date = Date()
-        commit()
+        commitHistory()
     }
 
     func deleteHistory(_ item: HistoryItem) {
         if let mo = try? ctx.existingObject(with: item.id) { ctx.delete(mo) }
-        commit()
+        commitHistory()
     }
 
     func clearHistory() {
         guard !hidden else { return }
         let r = NSFetchRequest<HistoryMO>(entityName: "History")
         ((try? ctx.fetch(r)) ?? []).forEach { ctx.delete($0) }
-        commit()
+        commitHistory()
     }
 
     func saveSearch(name: String, query: String, siteID: String) {
@@ -234,7 +255,7 @@ final class LibraryStore: ObservableObject {
         s.query = query
         s.siteID = siteID
         s.createdAt = Date()
-        commit()
+        commitSavedSearches()
         ToastCenter.shared.show("Search saved", style: .success)
     }
 
@@ -242,7 +263,7 @@ final class LibraryStore: ObservableObject {
         let r = NSFetchRequest<SavedSearchMO>(entityName: "SavedSearch")
         r.predicate = NSPredicate(format: "id == %@", id)
         ((try? ctx.fetch(r)) ?? []).forEach { ctx.delete($0) }
-        commit()
+        commitSavedSearches()
     }
 }
 

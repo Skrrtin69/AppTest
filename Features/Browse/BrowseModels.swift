@@ -15,6 +15,8 @@ final class SearchTabModel: ObservableObject, Identifiable {
     @Published private(set) var hasSearched = false
     @Published var selecting = false
     @Published var selected: Set<String> = []
+    /// A tab restored from last time: it runs its search the first time it's selected.
+    var searchWhenShown = false
 
     private var page = 1
     private var cursor: String?
@@ -384,14 +386,76 @@ final class SuggestionModel: ObservableObject {
 final class BrowseModel: ObservableObject {
     static let shared = BrowseModel()
     @Published var tabs: [SearchTabModel] = []
-    @Published var selectedID: UUID?
+    @Published var selectedID: UUID? {
+        // Restored tabs search only once they're shown, so a launch with many tabs makes
+        // one request, not one per tab.
+        didSet {
+            if let t = current, t.searchWhenShown {
+                t.searchWhenShown = false
+                Task { await t.search(recordHistory: false) }
+            }
+        }
+    }
 
     var current: SearchTabModel? { tabs.first { $0.id == selectedID } ?? tabs.first }
+
+    private init() {
+        for name in [UIApplication.didEnterBackgroundNotification, UIApplication.willTerminateNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                Task { @MainActor in BrowseModel.shared.saveTabs() }
+            }
+        }
+    }
+
+    // MARK: Restoring tabs
+
+    private struct SavedTab: Codable {
+        let siteID: String
+        let query: String
+        let sort: String?
+        let rating: String?
+    }
+    private struct SavedTabs: Codable {
+        let tabs: [SavedTab]
+        let selected: Int
+    }
+    private static let savedKey = "openSearchTabs"
+
+    /// Remembers the open tabs (site, search, sort, rating), not their results.
+    func saveTabs() {
+        guard !LockManager.shared.decoyActive, !tabs.isEmpty else { return }
+        let list = tabs.map { SavedTab(siteID: $0.siteID, query: $0.query, sort: $0.sort, rating: $0.rating) }
+        let sel = tabs.firstIndex { $0.id == selectedID } ?? 0
+        if let data = try? JSONEncoder().encode(SavedTabs(tabs: list, selected: sel)) {
+            UserDefaults.standard.set(data, forKey: Self.savedKey)
+        }
+    }
+
+    /// The tabs from last time whose site is still on, or nil.
+    private func restoredTabs(enabled: Set<String>) -> ([SearchTabModel], Int)? {
+        guard AppSettings.shared.restoreTabs, !LockManager.shared.decoyActive,
+              let data = UserDefaults.standard.data(forKey: Self.savedKey),
+              let saved = try? JSONDecoder().decode(SavedTabs.self, from: data) else { return nil }
+        var out: [SearchTabModel] = []
+        var selected = 0
+        for (i, s) in saved.tabs.enumerated() where s.siteID == SearchTabModel.mergedID || enabled.contains(s.siteID) {
+            let t = SearchTabModel(siteID: s.siteID, query: s.query)
+            t.searchWhenShown = true
+            if s.siteID != SearchTabModel.mergedID { t.sort = s.sort; t.rating = s.rating }
+            if i == saved.selected { selected = out.count }
+            out.append(t)
+        }
+        return out.isEmpty ? nil : (out, selected)
+    }
 
     /// Makes sure there's at least one tab pointing at an enabled site.
     func ensureTab() {
         let enabled = AdapterRegistry.shared.enabledConfigs
         guard let first = enabled.first else { return }
+        if tabs.isEmpty, let (restored, sel) = restoredTabs(enabled: Set(enabled.map { $0.id })) {
+            tabs = restored
+            selectedID = restored[sel].id   // its didSet starts that tab's search
+        }
         if tabs.isEmpty {
             let t = SearchTabModel(siteID: first.id)
             tabs = [t]

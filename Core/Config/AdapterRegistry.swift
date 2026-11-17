@@ -47,7 +47,12 @@ final class AdapterRegistry: ObservableObject {
         return Set(list.compactMap { $0["id"] as? String })
     }()
 
+    /// Called from the main thread and from the local server's threads (video proxy), so
+    /// the adapter cache is behind a lock.
+    private let adaptersLock = NSLock()
+
     func adapter(for id: String) -> GenericAdapter? {
+        adaptersLock.lock(); defer { adaptersLock.unlock() }
         if let a = adapters[id] { return a }
         guard let c = configs.first(where: { $0.id == id }) else { return nil }
         let a = GenericAdapter(config: c)
@@ -100,7 +105,9 @@ final class AdapterRegistry: ObservableObject {
             return ia < ib
         }.map { $0.element }
         // Drop cached adapter objects whose config changed.
+        adaptersLock.lock()
         for c in sorted where adapters[c.id]?.config != c { adapters[c.id] = nil }
+        adaptersLock.unlock()
         configs = sorted
         disabledIDs = Set(defaults.stringArray(forKey: disabledKey) ?? [])
     }
@@ -236,7 +243,7 @@ final class AdapterRegistry: ObservableObject {
         try FileManager.default.copyItem(at: b, to: Self.documentsFile)
         defaults.removeObject(forKey: orderKey)
         defaults.removeObject(forKey: disabledKey)
-        adapters.removeAll()
+        adaptersLock.lock(); adapters.removeAll(); adaptersLock.unlock()
         reload()
     }
 

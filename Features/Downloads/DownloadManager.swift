@@ -255,6 +255,7 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     private func start(_ item: DownloadItem) {
+        if copyFromVideoCache(item) { return }
         let task: URLSessionDownloadTask
         if let rd = mo(item.id)?.resumeData, !rd.isEmpty {
             task = session.downloadTask(withResumeData: rd)
@@ -268,6 +269,28 @@ final class DownloadManager: NSObject, ObservableObject {
         tasks[item.id] = task
         update(item.id) { $0.state = .downloading; $0.error = nil }
         task.resume()
+    }
+
+    /// A video already watched all the way through is in the video cache: copy it (APFS
+    /// clones it, so it's instant and uses no extra space) instead of downloading it again.
+    private func copyFromVideoCache(_ item: DownloadItem) -> Bool {
+        guard let cached = VideoByteCache.shared.completeFile(for: item.remoteURL)
+                ?? VideoByteCache.shared.completeFile(for: item.post.mediaURL),
+              let dest = item.fileURL else { return false }
+        do {
+            try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
+            try FileManager.default.copyItem(at: cached, to: dest)
+        } catch {
+            return false
+        }
+        DebugLog.log("Downloads", "\(item.filename) copied from the video cache")
+        DownloadPostProcess.run(dest, itemID: item.id)
+        let size = Int64((try? dest.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        update(item.id) { $0.state = .completed; $0.progress = 1; $0.error = nil; if size > 0 { $0.bytesTotal = size } }
+        if let m = mo(item.id) { m.resumeData = nil; CoreDataStack.shared.save() }
+        DispatchQueue.main.async { [weak self] in self?.schedule() }
+        return true
     }
 
     // MARK: Controls

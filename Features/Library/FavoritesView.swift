@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Local favorites (independent of any server) and named collections.
 struct FavoritesView: View {
-    enum Mode: String, CaseIterable { case favorites = "Favorites", collections = "Collections", later = "Later" }
+    enum Mode: String, CaseIterable { case favorites = "Favorites", collections = "Collections", later = "Later", recent = "Recent" }
     @ObservedObject private var store = LibraryStore.shared
     @ObservedObject private var settings = AppSettings.shared
     @State private var mode: Mode = .favorites
@@ -78,6 +78,9 @@ struct FavoritesView: View {
                 case .later:
                     ReadLaterGrid(onOpen: { viewer = ViewerRequest(posts: $0, index: $1) },
                                   onAddToCollection: { collectionBatch = PostBatch(posts: $0) })
+                case .recent:
+                    RecentlyViewedGrid(onOpen: { viewer = ViewerRequest(posts: $0, index: $1) },
+                                       onAddToCollection: { collectionBatch = PostBatch(posts: $0) })
                 }
             }
             .themedBackground()
