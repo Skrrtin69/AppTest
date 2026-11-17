@@ -471,7 +471,10 @@ Settings › Tools › **Reverse Search Image**:
 - **Recently viewed:** Favorites › **Recent** lists the last 400 posts you opened in the viewer, newest first, so a post you swiped past or closed by accident is easy to find. **Clear** empties it; "Forget which posts I've opened" (Settings › Appearance) clears it too. Decoy mode neither records nor shows it.
 - **Reopen last session's tabs** (Settings › Browsing, on by default): the search tabs open when you left (site, search, sort, rating) come back at the next launch. Only the selected tab searches right away; the others search when you first switch to them.
 - **Watched bar:** partly watched videos (a minute or longer) show a thin red bar along the bottom of their thumbnail, showing how far you got.
-- **Faster:** searching no longer reloads every favorite from the database or rebuilds the widget. The widget's thumbnails are refreshed only when favorites change (or every 6 hours), with the JPEG work off the main thread. The speed test and the followed-tags check wait a few seconds after launch so the first search goes first. Library videos are read in pieces instead of whole for every request.
+- **The viewer keeps going:** swiping toward the end of the loaded results (from Browse) loads the search's next page, so the viewer no longer stops at the last post the grid had loaded. (Not in right-to-left or two-page mode.)
+- **The grid follows the viewer:** close the viewer on a different post than you opened and the grid scrolls to that post.
+- **Download selected on Wi-Fi:** in Browse's selection bar, touch and hold the download button for *Download on Wi-Fi*. A tap still downloads now.
+- **Faster:** searching no longer reloads every favorite from the database or rebuilds the widget. The widget's thumbnails are refreshed only when favorites change (or every 6 hours), with the JPEG work off the main thread. Posts marked as viewed while you swipe are added when the viewer closes, so the grids behind it don't redraw on every swipe. The speed test and the followed-tags check wait a few seconds after launch so the first search goes first. Library videos are read in pieces instead of whole for every request.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

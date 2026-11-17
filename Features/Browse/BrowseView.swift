@@ -4,6 +4,8 @@ struct ViewerRequest: Identifiable {
     let id = UUID()
     let posts: [Post]
     let index: Int
+    /// The search tab the posts came from; the viewer loads its next pages.
+    var source: SearchTabModel? = nil
 }
 
 struct BrowseView: View {
@@ -38,7 +40,7 @@ struct BrowseView: View {
                                        message: "Turn on a site in Settings › Sites & Adapters.")
                     }
                     ForEach(model.tabs) { tab in
-                        SearchTabView(tab: tab, onOpen: { posts, i in viewer = ViewerRequest(posts: posts, index: i) },
+                        SearchTabView(tab: tab, onOpen: { posts, i in viewer = ViewerRequest(posts: posts, index: i, source: tab) },
                                       onAddToCollection: { collectionBatch = PostBatch(posts: $0) })
                             .opacity(tab.id == model.current?.id ? 1 : 0)
                             .allowsHitTesting(tab.id == model.current?.id)
@@ -88,7 +90,7 @@ struct BrowseView: View {
                     .interactiveDismissDisabled(true)
             }
             .fullScreenCover(item: $viewer) { req in
-                ViewerView(posts: req.posts, startIndex: req.index)
+                ViewerView(posts: req.posts, startIndex: req.index, source: req.source)
             }
         }
         .navigationViewStyle(.stack)
@@ -500,6 +502,12 @@ struct SearchTabView: View {
                 }
                 .refreshable { await tab.refresh() }
                 .onChange(of: tab.scrollToTopToken) { _ in withAnimation { proxy.scrollTo("gridTop", anchor: .top) } }
+                .onReceive(ViewerReturn.shared.$landing.dropFirst()) { landing in
+                    // The viewer closed on a different post: show it in the grid.
+                    guard BrowseModel.shared.current?.id == tab.id,
+                          let k = landing?.key, visible.contains(where: { $0.key == k }) else { return }
+                    proxy.scrollTo(k, anchor: .center)
+                }
                 .overlay(alignment: .bottomTrailing) {
                     if showTopButton && !tab.selecting {
                         Button { Haptics.tap(); tab.scrollToTopToken += 1 } label: {
@@ -571,12 +579,20 @@ struct SearchTabView: View {
                 .disabled(picked.isEmpty).accessibilityLabel("Add selected to collection")
             Button { massReverse = PostBatch(posts: picked) } label: { Image(systemName: "magnifyingglass.circle") }
                 .disabled(picked.isEmpty).accessibilityLabel("Reverse search selected")
-            Button {
+            // Tap downloads now; hold for "Download on Wi-Fi".
+            Menu {
+                Button {
+                    WifiDownloadQueue.shared.add(picked)
+                    tab.selecting = false
+                    tab.selected = []
+                } label: { Label("Download on Wi-Fi", systemImage: "wifi") }
+            } label: { Image(systemName: "arrow.down.circle.fill") } primaryAction: {
                 Task { await DownloadManager.shared.enqueue(picked) }
                 tab.selecting = false
                 tab.selected = []
-            } label: { Image(systemName: "arrow.down.circle.fill") }
-                .disabled(picked.isEmpty).accessibilityLabel("Download selected")
+            }
+            .disabled(picked.isEmpty).accessibilityLabel("Download selected")
+            .accessibilityHint("Touch and hold to download on Wi-Fi instead")
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(.thinMaterial)

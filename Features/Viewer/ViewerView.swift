@@ -3,8 +3,12 @@ import SwiftUI
 /// Full-screen viewer. Swipe left/right between posts; pinch or double-tap to zoom;
 /// single tap toggles the controls. Neighbors within 2 positions are preloaded.
 struct ViewerView: View {
-    let posts: [Post]
+    /// Grows when `source` loads more results while you swipe toward the end.
+    @State private var posts: [Post]
     var isLocal: Bool = false
+    /// The search the posts came from (Browse): swiping near the end loads its next page.
+    private let source: SearchTabModel?
+    private let startKey: String?
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = AppSettings.shared
@@ -28,10 +32,27 @@ struct ViewerView: View {
     @State private var startLevel: Double = 0
     @State private var hud: (icon: String, level: Double)?
 
-    init(posts: [Post], startIndex: Int, isLocal: Bool = false) {
-        self.posts = posts
+    init(posts: [Post], startIndex: Int, isLocal: Bool = false, source: SearchTabModel? = nil) {
+        _posts = State(initialValue: posts)
         self.isLocal = isLocal
-        _index = State(initialValue: min(max(0, startIndex), max(0, posts.count - 1)))
+        self.source = source
+        let start = min(max(0, startIndex), max(0, posts.count - 1))
+        _index = State(initialValue: start)
+        startKey = posts.indices.contains(start) ? posts[start].key : nil
+    }
+
+    /// Near the last loaded post: fetch the search's next page and add the new posts at the
+    /// end, so swiping keeps going past what the grid had loaded. Not in right-to-left or
+    /// two-page mode, where adding posts would move every page under your finger.
+    private func loadMoreIfNeeded() {
+        guard let s = source, !settings.readingRTL, !spreads, index >= posts.count - 4,
+              s.hasNext, !s.isLoading else { return }
+        Task {
+            await s.loadMore()
+            let have = Set(posts.map(\.key))
+            let new = s.visiblePosts(blacklist: settings.blacklistSet).filter { !have.contains($0.key) }
+            if !new.isEmpty { posts.append(contentsOf: new) }
+        }
     }
 
     var current: Post? { posts.indices.contains(index) ? posts[index] : nil }
@@ -81,7 +102,12 @@ struct ViewerView: View {
                 .transition(.opacity)
             }
         }
-        .onDisappear { if settings.rotationLock != "auto" { OrientationLock.apply("auto") } }
+        .onDisappear {
+            ViewedStore.shared.holdChanges = false
+            if settings.rotationLock != "auto" { OrientationLock.apply("auto") }
+            // Swiped to another post: the grid scrolls to it when the viewer closes.
+            if let k = current?.key, k != startKey { ViewerReturn.shared.closed(on: k) }
+        }
         .statusBar(hidden: !chrome)
         .modifier(HideHomeIndicator(hidden: !chrome))
         .onAppear {
@@ -91,10 +117,12 @@ struct ViewerView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { OrientationLock.apply(settings.rotationLock) }
             }
             prefetchNeighbors()
+            ViewedStore.shared.holdChanges = true
             if let p = current { ViewedStore.shared.markViewed(p); RecentlyViewedStore.shared.record(p) }
         }
         .onChange(of: index) { _ in
             prefetchNeighbors()
+            loadMoreIfNeeded()
             if let p = current { ViewedStore.shared.markViewed(p); RecentlyViewedStore.shared.record(p) }
             if !slideshow { Haptics.tap() }
         }
@@ -681,4 +709,13 @@ struct FullImagePage: View {
             DominantColors.shared.compute(for: key, image: img)
         }, force: force)
     }
+}
+
+/// Tells the grid which post the viewer closed on, so it can bring that post into view.
+@MainActor
+final class ViewerReturn: ObservableObject {
+    static let shared = ViewerReturn()
+    struct Landing: Equatable { let key: String; let id = UUID() }
+    @Published private(set) var landing: Landing?
+    func closed(on key: String) { landing = Landing(key: key) }
 }

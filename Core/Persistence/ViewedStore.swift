@@ -16,23 +16,51 @@ final class ViewedStore: ObservableObject {
         viewed = Set(order)
     }
 
+    /// Posts opened while the viewer is up. Every grid cell watches `viewed`, so changing it
+    /// on each swipe redrew every grid behind the viewer (and rewrote the whole list to disk).
+    /// They're added in one go when the viewer closes.
+    private var pending: [String] = []
+    var holdChanges = false {
+        didSet { if !holdChanges { flush() } }
+    }
+
     func markViewed(_ post: Post) {
-        guard !viewed.contains(post.key) else { return }
-        viewed.insert(post.key)
-        order.append(post.key)
+        guard !isViewed(post.key) else { return }
+        if holdChanges {
+            pending.append(post.key)
+            return
+        }
+        add([post.key])
+    }
+
+    private func flush() {
+        guard !pending.isEmpty else { return }
+        let keys = pending
+        pending = []
+        add(keys)
+    }
+
+    private func add(_ keys: [String]) {
+        var set = viewed
+        for k in keys where !set.contains(k) {
+            set.insert(k)
+            order.append(k)
+        }
         if order.count > cap {
             let drop = order.prefix(order.count - cap)
-            drop.forEach { viewed.remove($0) }
+            drop.forEach { set.remove($0) }
             order.removeFirst(drop.count)
         }
+        viewed = set
         UserDefaults.standard.set(order, forKey: key)
     }
 
-    func isViewed(_ key: String) -> Bool { viewed.contains(key) }
+    func isViewed(_ key: String) -> Bool { viewed.contains(key) || pending.contains(key) }
     func isRevealed(_ key: String) -> Bool { revealed.contains(key) }
     func reveal(_ key: String) { revealed.insert(key) }
 
     func clearViewed() {
+        pending = []
         viewed = []
         order = []
         UserDefaults.standard.removeObject(forKey: key)
