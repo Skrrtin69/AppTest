@@ -79,7 +79,10 @@ final class WifiDownloadQueue: ObservableObject {
     }
 
     private func flushIfOnWiFi() {
-        guard !all.isEmpty, !flushing, !LockManager.shared.decoyActive, !NetworkStatus.shared.onMeteredData else { return }
+        // Not before the connection type is known (at launch it isn't yet, and on mobile data
+        // this would start everything); the first answer calls this again.
+        guard !all.isEmpty, !flushing, !LockManager.shared.decoyActive,
+              NetworkStatus.shared.known, !NetworkStatus.shared.onMeteredData else { return }
         flushing = true
         let posts = all.map(\.post)
         DebugLog.log("Downloads", "On Wi-Fi: starting \(posts.count) saved download\(posts.count == 1 ? "" : "s")")

@@ -623,11 +623,15 @@ private struct NativeVideoContent: View {
             }
         }
         .onReceive(VideoSound.shared.$muted) { controller.player.isMuted = $0 }
-        .onChange(of: controller.isPlaying) { p in if isActive { VideoActivity.shared.playing = p } }
-        .onAppear { if isActive && AppSettings.shared.videosAutoplay { controller.play() } }
+        .onChange(of: controller.isPlaying) { p in if isActive { VideoActivity.shared.report(controller, playing: p) } }
+        .onAppear {
+            // Built while already the current page: report now (onChange(of: isActive) won't fire).
+            if isActive { VideoActivity.shared.report(controller, playing: controller.isPlaying) }
+            if isActive && AppSettings.shared.videosAutoplay { controller.play() }
+        }
         .onChange(of: isActive) { active in
             controller.isActivePage = active
-            if active { VideoActivity.shared.playing = controller.isPlaying }
+            if active { VideoActivity.shared.report(controller, playing: controller.isPlaying) } else { VideoActivity.shared.release(controller) }
             if active { if AppSettings.shared.videosAutoplay { controller.play() } } else if !controller.pipActive { controller.pause() }
         }
         .onDisappear { if !controller.pipActive { controller.pause() } }

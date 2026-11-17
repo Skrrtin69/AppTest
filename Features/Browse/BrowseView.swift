@@ -467,6 +467,9 @@ struct SearchTabView: View {
     @ObservedObject var settings = AppSettings.shared
     /// Only for "Hide Opened Posts": the list changes when the viewer closes.
     @ObservedObject private var viewed = ViewedStore.shared
+    /// Filtered paging (see autoLoadIfFiltered).
+    @State private var lastShownCount = -1
+    @State private var emptyAutoLoads = 0
     @State private var accountFor: AccountRequest?
     @State private var massReverse: PostBatch?
     /// Scrolled far enough down to offer the floating "back to top" button.
@@ -570,8 +573,18 @@ struct SearchTabView: View {
         }
     }
 
+    /// A page came in. With Show or Hide Opened Posts on, a page can add nothing visible, so
+    /// no new cell appears to ask for the next one: load another then, up to 5 empty pages in
+    /// a row (after that, the Load More button). A page that adds something visible leaves
+    /// paging to the cells, as usual.
     private func autoLoadIfFiltered() {
-        guard settings.hideOpened || settings.typeFilter != "all", tab.hasNext, !tab.isLoading, tab.error == nil else { return }
+        let shown = tab.visiblePosts(blacklist: settings.blacklistSet).count
+        defer { lastShownCount = shown }
+        guard settings.hideOpened || settings.typeFilter != "all", !tab.posts.isEmpty,
+              tab.hasNext, !tab.isLoading, tab.error == nil else { emptyAutoLoads = 0; return }
+        guard shown == lastShownCount else { emptyAutoLoads = 0; return }
+        guard emptyAutoLoads < 5 else { return }
+        emptyAutoLoads += 1
         Task { await tab.loadMore() }
     }
 
@@ -593,11 +606,10 @@ struct SearchTabView: View {
                 // cell appears to ask for the next one: the footer asks while it's on screen.
                 Button("Load More") { Task { await tab.loadMore() } }
                     .font(.footnote)
-                    .onAppear { autoLoadIfFiltered() }
-                    .onChange(of: tab.posts.count) { _ in autoLoadIfFiltered() }
                     .accessibilityIdentifier("loadMoreFooter")
             }
         }
+        .onChange(of: tab.posts.count) { _ in autoLoadIfFiltered() }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 18)
     }

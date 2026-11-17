@@ -29,7 +29,8 @@ final class GridLook: ObservableObject {
                       columns: s.gridColumns, spacing: s.gridSpacing, aspect: s.thumbAspect)
     }
 
-    private func refresh() {
+    /// Also called right after a change made inside withAnimation, so it animates.
+    func refresh() {
         let n = Self.read()
         if n != v { v = n }
     }

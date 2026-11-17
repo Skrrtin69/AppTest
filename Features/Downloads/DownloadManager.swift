@@ -425,6 +425,8 @@ final class DownloadManager: NSObject, ObservableObject {
     static let connectionLostMessage = "Connection lost. It continues when you're back online."
     private var networkFailed = Set<String>()
     private var reconnectTries: [String: Int] = [:]
+    /// The furthest a download had got when the connection last cut it off.
+    private var failedAtBytes: [String: Int64] = [:]
     private var announcedWaiting = false
 
     private func resumeAfterReconnect() {
@@ -445,6 +447,7 @@ final class DownloadManager: NSObject, ObservableObject {
 
     func retry(_ id: String) {
         reconnectTries[id] = nil
+        failedAtBytes[id] = nil
         networkFailed.remove(id)
         // Cut off by a lost connection: carry on from where it stopped.
         if items.first(where: { $0.id == id })?.error == Self.connectionLostMessage {
@@ -542,8 +545,12 @@ extension DownloadManager: URLSessionDownloadDelegate {
             return
         }
         trackSpeed(id, written: totalBytesWritten)
-        // Bytes are flowing again: the limit counts only failures in a row.
-        if reconnectTries[id] != nil { reconnectTries[id] = nil }
+        // Past the point where it was last cut off (by 1 MB): real progress, so the limit
+        // counts only failures in a row. A connection that always drops at the same spot,
+        // or a download that restarts from zero each time, still runs out of tries.
+        if reconnectTries[id] != nil, totalBytesWritten > (failedAtBytes[id] ?? 0) + 1_048_576 {
+            reconnectTries[id] = nil
+        }
         let p = totalBytesExpectedToWrite > 0 ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite) : 0
         // Throttle UI updates to whole percents.
         if abs(p - (lastProgressPublish[id] ?? -1)) < 0.01 && p < 1 { return }
@@ -619,6 +626,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
         guard session === self.session, let id = task.taskDescription else { return }
         tasks[id] = nil
         lastProgressPublish[id] = nil
+        let writtenSoFar = speeds[id]?.bytes ?? 0
         speeds[id] = nil
         defer { schedule() }
         guard let error = error as NSError? else { return }
@@ -631,6 +639,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
         // At most three automatic tries each, so a dead server doesn't loop forever.
         if error.domain == NSURLErrorDomain, Self.connectionErrors.contains(error.code), (reconnectTries[id] ?? 0) < 3 {
             reconnectTries[id, default: 0] += 1
+            failedAtBytes[id] = max(failedAtBytes[id] ?? 0, writtenSoFar)
             networkFailed.insert(id)
             update(id) { $0.state = .failed; $0.error = Self.connectionLostMessage }
             // Fresh resume data, or none: never an older copy whose temporary file is gone.

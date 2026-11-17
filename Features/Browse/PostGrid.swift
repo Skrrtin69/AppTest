@@ -52,7 +52,7 @@ struct PostGrid<Footer: View>: View {
             let next = AppSettings.clamp(look.v.columns + step, 2, 5)
             guard step != 0, next != look.v.columns else { return }
             Haptics.tap()
-            withAnimation(.easeInOut(duration: 0.2)) { settings.gridColumns = next }
+            withAnimation(.easeInOut(duration: 0.2)) { settings.gridColumns = next; look.refresh() }
         })
         footer()
     }

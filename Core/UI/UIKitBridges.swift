@@ -30,9 +30,15 @@ enum Presenter {
     }
 
     /// Lets the user save copies of `urls` anywhere in the Files app.
-    static func exportToFiles(_ urls: [URL]) {
+    /// `onSaved` runs only when the user actually saved (not when they cancel).
+    static func exportToFiles(_ urls: [URL], onSaved: (() -> Void)? = nil) {
         guard !urls.isEmpty else { return }
         let picker = UIDocumentPickerViewController(forExporting: urls, asCopy: true)
+        if let done = onSaved {
+            let delegate = PickerDelegate(completion: { _ in done() })
+            picker.delegate = delegate
+            objc_setAssociatedObject(picker, &PickerDelegate.key, delegate, .OBJC_ASSOCIATION_RETAIN)
+        }
         present(picker)
     }
 
@@ -70,11 +76,11 @@ enum Presenter {
     static func exportFile(_ url: URL) { exportToFiles([url]) }
 
     /// Writes `data` to a temp file with `name` and offers to save it to Files.
-    static func exportData(_ data: Data, filename: String) {
+    static func exportData(_ data: Data, filename: String, onSaved: (() -> Void)? = nil) {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
         do {
             try data.write(to: url, options: .atomic)
-            exportToFiles([url])
+            exportToFiles([url], onSaved: onSaved)
         } catch {
             ToastCenter.shared.error(error, prefix: "Export failed")
         }

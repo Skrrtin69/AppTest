@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–33)
+## What's new (Phases 1–34)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -543,6 +543,15 @@ Settings › Tools › **Reverse Search Image**:
 
 **Out of the way (Phase 33)**
 - **Controls hide while a video plays:** in the viewer, the top bar, toolbar and video controls fade out 3 s after a video (built-in player or VLCKit) starts playing, never while you drag the scrubber. It happens once per post: after a tap brings them back they stay until you hide them, so a menu you open isn't closed under your finger. Turn it off in Settings › Reading & Viewer › *Hide controls while a video plays*.
+
+**Backups (Phase 34)**
+- **Last backup date:** Settings › Data › *Back Up Everything…* shows *Last backup: 3 days ago* (or *Never backed up*). It turns orange after 30 days, or if you've never backed up, once there are at least 10 favorites or Read Later posts. Nothing syncs to iCloud, so this is the only reminder; there are no pop-ups. Only a backup you actually saved counts (cancelling the Files sheet doesn't), and *Backup saved* confirms it.
+- **Fixes from a fourth review:**
+  - With *Show* or *Hide Opened Posts*, the grid no longer pages through the whole search on its own. It loads another page by itself only when the last one added nothing visible, up to 5 in a row; after that, **Load More**.
+  - Controls no longer hide on a paused video after a playing one: each player now reports only for itself, and a page leaving clears its own state.
+  - Posts waiting for Wi-Fi no longer start at launch before the connection type is known (on mobile data they used to start).
+  - A download that keeps getting cut off at the same point (or restarts from zero) now stops after three tries instead of retrying forever.
+  - Controls don't hide while the Info panel is open, and pinch-to-resize animates again.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

@@ -117,10 +117,25 @@ enum Backup {
             : "Restored " + parts.joined(separator: ", ") + "."
     }
 
+    static let lastBackupKey = "lastBackupDate"
+    static var lastBackup: Date? { UserDefaults.standard.object(forKey: lastBackupKey) as? Date }
+
+    /// "Last backup: 3 days ago" / "Never backed up", and whether it's worth a nudge
+    /// (30+ days, or never, once there's something worth keeping).
+    static func status(now: Date = Date()) -> (text: String, stale: Bool) {
+        let worthKeeping = LibraryStore.shared.favorites.count + ReadLaterStore.shared.entries.count >= 10
+        guard let d = lastBackup else { return ("Never backed up", worthKeeping) }
+        let f = RelativeDateTimeFormatter(); f.unitsStyle = .full
+        return ("Last backup: " + f.localizedString(for: d, relativeTo: now), worthKeeping && now.timeIntervalSince(d) > 30 * 86_400)
+    }
+
     static func exportNow() {
         do {
             let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
-            Presenter.exportData(try make(), filename: "MediaDeck-backup-\(f.string(from: Date())).json")
+            Presenter.exportData(try make(), filename: "MediaDeck-backup-\(f.string(from: Date())).json") {
+                UserDefaults.standard.set(Date(), forKey: lastBackupKey)
+                ToastCenter.shared.show("Backup saved", style: .success)
+            }
         } catch { ToastCenter.shared.error(error, prefix: "Backup failed") }
     }
 

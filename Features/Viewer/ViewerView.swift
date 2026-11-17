@@ -109,8 +109,7 @@ struct ViewerView: View {
         }
         .onDisappear {
             ViewedStore.shared.holdChanges = false
-            VideoActivity.shared.playing = false
-            VideoActivity.shared.scrubbing = false
+            VideoActivity.shared.reset()
             if settings.rotationLock != "auto" { OrientationLock.apply("auto") }
             // Swiped to another post: the grid scrolls to it when the viewer closes.
             if let k = current?.key, k != startKey { ViewerReturn.shared.closed(on: k) }
@@ -134,13 +133,13 @@ struct ViewerView: View {
             if !slideshow { Haptics.tap() }
         }
         // A playing video: the controls step aside after 3 s (a tap brings them back).
-        .task(id: "\(chrome)-\(activity.playing)-\(activity.scrubbing)-\(index)") {
+        .task(id: "\(chrome)-\(activity.playing)-\(activity.scrubbing)-\(index)-\(showInfo)") {
             // Once per post: controls you bring back with a tap stay until you hide them
             // (so a menu opened from them isn't closed under your finger).
             guard settings.autoHideVideoControls, chrome, activity.playing, !activity.scrubbing,
                   current?.mediaType == .video, !showInfo, autoHidOnIndex != index else { return }
             try? await Task.sleep(nanoseconds: 3_000_000_000)
-            guard !Task.isCancelled, chrome, activity.playing, !activity.scrubbing else { return }
+            guard !Task.isCancelled, chrome, activity.playing, !activity.scrubbing, !showInfo else { return }
             autoHidOnIndex = index
             withAnimation { chrome = false }
         }

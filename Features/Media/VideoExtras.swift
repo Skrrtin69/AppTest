@@ -348,6 +348,28 @@ final class VideoSound: ObservableObject {
 /// themselves a few seconds after playback starts (not while you drag the scrubber).
 final class VideoActivity: ObservableObject {
     static let shared = VideoActivity()
-    @Published var playing = false
+    @Published private(set) var playing = false
     @Published var scrubbing = false
+    /// The player that reported last; only it can say it stopped, so a page leaving can't
+    /// clear the state of the page that just arrived (or leave a stale "playing").
+    private var owner: ObjectIdentifier?
+
+    func report(_ player: AnyObject, playing p: Bool) {
+        owner = ObjectIdentifier(player)
+        if playing != p { playing = p }
+    }
+
+    /// The player's page is no longer the current one.
+    func release(_ player: AnyObject) {
+        guard owner == ObjectIdentifier(player) else { return }
+        owner = nil
+        if playing { playing = false }
+        if scrubbing { scrubbing = false }
+    }
+
+    func reset() {
+        owner = nil
+        if playing { playing = false }
+        if scrubbing { scrubbing = false }
+    }
 }

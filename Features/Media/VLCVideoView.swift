@@ -172,7 +172,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     @Published var position: Float = 0
     @Published var duration: Double = 0
     @Published var isPlaying = false {
-        didSet { if active, isPlaying != oldValue { VideoActivity.shared.playing = isPlaying } }
+        didSet { if active, isPlaying != oldValue { VideoActivity.shared.report(self, playing: isPlaying) } }
     }
     @Published var timeText = ""
     /// Playback has begun at least once (the paused icon only shows after that).
@@ -306,7 +306,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     /// instant). A closed stream reopens only for the current post.
     func setActive(_ on: Bool) {
         active = on
-        if on { VideoActivity.shared.playing = isPlaying }
+        if on { VideoActivity.shared.report(self, playing: isPlaying) } else { VideoActivity.shared.release(self) }
         guard loaded else { return }
         if closed {
             if on, !inBackground { reopen(play: true) }

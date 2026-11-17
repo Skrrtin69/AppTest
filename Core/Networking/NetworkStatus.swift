@@ -10,6 +10,8 @@ final class NetworkStatus {
     private(set) var isExpensive = false
     /// Any working connection (Wi-Fi, mobile data or wired).
     private(set) var isOnline = true
+    /// False until the first answer arrives: before that, the values above are guesses.
+    private(set) var known = false
 
     /// Posted on the main queue when the connection switches between metered and not, or
     /// goes away or comes back.
@@ -28,6 +30,7 @@ final class NetworkStatus {
                 self.isCellular = cellular
                 self.isExpensive = expensive
                 self.isOnline = online
+                self.known = true
                 // Also on the first answer, so anything waiting for Wi-Fi can start at launch,
                 // and when the connection comes back (downloads cut off by it retry).
                 if wasMetered != self.onMeteredData || wasOnline != self.isOnline || !self.reported {

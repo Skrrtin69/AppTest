@@ -345,8 +345,18 @@ struct SettingsView: View {
                 Section {
                     NavigationLink(destination: StorageView()) { Label("Storage", systemImage: "chart.bar.xaxis") }
                         .accessibilityIdentifier("storageView")
-                    Button { Backup.exportNow() } label: { Label("Back Up Everything…", systemImage: "externaldrive.badge.plus") }
-                        .disabled(lock.decoyActive)
+                    Button { Backup.exportNow() } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label("Back Up Everything…", systemImage: "externaldrive.badge.plus")
+                            if !lock.decoyActive {
+                                let st = Backup.status()
+                                // Nothing syncs to iCloud, so a quiet reminder when it's been a while.
+                                Text(st.text).font(.caption).foregroundColor(st.stale ? .orange : .secondary)
+                                    .padding(.leading, 30)
+                            }
+                        }
+                    }
+                    .disabled(lock.decoyActive)
                     Button { Backup.importNow() } label: { Label("Restore from Backup…", systemImage: "externaldrive.badge.checkmark") }
                         .disabled(lock.decoyActive)
                     Button("Export Settings to Files") { exportSettings() }
