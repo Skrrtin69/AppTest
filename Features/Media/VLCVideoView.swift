@@ -11,6 +11,8 @@ import MobileVLCKit
 struct VLCVideoView: View {
     let url: URL
     let isActive: Bool
+    /// The viewer post this video belongs to (see VideoActivity.pageChanged).
+    var pageKey: String? = nil
     var siteID: String? = nil
     var speed: Double = 1
     var loop: Bool = true
@@ -55,13 +57,17 @@ struct VLCVideoView: View {
         let (u, site) = (url, siteID)
         model.reopenURL = { Self.sourceURL(u, siteID: site) }
         model.loop = loop
-        model.onFinished = isActive ? onFinished : nil
+        model.pageKey = pageKey
+        // Called only while this page is the current one (see the delegate).
+        model.onFinished = onFinished
         model.onReady = onReady
         model.onError = onError
         model.onStatus = onStatus
         model.onClosed = onClosed
         model.setRate(speed)
-        model.setActive(isActive)
+        // The viewer's current post wins over isActive, which can be stale for a page that
+        // has just gone off screen (the pager repeats onAppear for those).
+        model.setActive(VideoActivity.shared.isCurrent(pageKey, fallback: isActive))
     }
 
     static func sourceURL(_ url: URL, siteID: String?) -> URL {
@@ -189,6 +195,8 @@ final class VLCPlayerModel: NSObject, ObservableObject {
     var onError: ((String) -> Void)?
     var onStatus: ((String) -> Void)?
     var onClosed: (() -> Void)?
+    /// The viewer post this player belongs to (see VideoActivity.pageChanged).
+    var pageKey: String?
     /// Whether this video should be playing (autoplay, Play, or a reopen of a playing one),
     /// as opposed to paused by the user.
     private var wantsPlay = false
@@ -250,6 +258,12 @@ final class VLCPlayerModel: NSObject, ObservableObject {
             // The viewer closed: stop (a safety net if SwiftUI keeps this player a moment longer).
             nc.addObserver(forName: VideoActivity.viewerClosed, object: nil, queue: .main) { [weak self] _ in
                 self?.pauseForViewerClose()
+            },
+            // The viewer moved to another post: follow it directly (the page's own isActive
+            // isn't updated once it's off screen).
+            nc.addObserver(forName: VideoActivity.pageChanged, object: nil, queue: .main) { [weak self] _ in
+                guard let self = self, let mine = self.pageKey, let current = VideoActivity.shared.currentPage else { return }
+                self.setActive(mine == current)
             },
             nc.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] note in
                 guard let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
@@ -584,7 +598,7 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
                     resumeAtMs = 0
                     if let u = reopenURL?() ?? firstURL { player.media = Self.media(u, startMs: 0) }
                     player.play()
-                } else {
+                } else if active {
                     onFinished?()
                 }
             default:

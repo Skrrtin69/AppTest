@@ -351,7 +351,25 @@ final class VideoActivity: ObservableObject {
     /// Posted when the viewer closes: every player pauses (a safety net in case SwiftUI keeps
     /// a page's player alive a little longer).
     static let viewerClosed = Notification.Name("MediaDeckViewerClosed")
+    /// Posted when the viewer moves to another post. Players listen for it directly: the
+    /// pager doesn't update a page that has just gone off screen, so a page's isActive
+    /// can stay true there (an MP4 kept playing its sound after you swiped on).
+    static let pageChanged = Notification.Name("MediaDeckViewerPageChanged")
+    /// The post on screen in the viewer (its key), nil outside the viewer.
+    private(set) var currentPage: String?
     @Published private(set) var playing = false
+
+    func setCurrentPage(_ key: String?) {
+        guard currentPage != key else { return }
+        currentPage = key
+        NotificationCenter.default.post(name: Self.pageChanged, object: nil)
+    }
+
+    /// Whether the post `key` is the one on screen; `fallback` when that isn't known.
+    func isCurrent(_ key: String?, fallback: Bool) -> Bool {
+        guard let k = key, let c = currentPage else { return fallback }
+        return k == c
+    }
     @Published var scrubbing = false
     /// The player that reported last; only it can say it stopped, so a page leaving can't
     /// clear the state of the page that just arrived (or leave a stale "playing").

@@ -111,6 +111,7 @@ struct ViewerView: View {
             ViewedStore.shared.holdChanges = false
             VideoActivity.shared.reset()
             NotificationCenter.default.post(name: VideoActivity.viewerClosed, object: nil)
+            VideoActivity.shared.setCurrentPage(nil)
             if settings.rotationLock != "auto" { OrientationLock.apply("auto") }
             // Swiped to another post: the grid scrolls to it when the viewer closes.
             if let k = current?.key, k != startKey { ViewerReturn.shared.closed(on: k) }
@@ -124,9 +125,12 @@ struct ViewerView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { OrientationLock.apply(settings.rotationLock) }
             }
             prefetchNeighbors()
+            VideoActivity.shared.setCurrentPage(current?.key)
             ViewedStore.shared.holdChanges = true
             if let p = current, source?.isPrivate != true { ViewedStore.shared.markViewed(p); RecentlyViewedStore.shared.record(p) }
         }
+        // Also when the post under the same index changes (a post hidden or removed).
+        .onChange(of: current?.key) { VideoActivity.shared.setCurrentPage($0) }
         .onChange(of: index) { _ in
             prefetchNeighbors()
             loadMoreIfNeeded()
@@ -672,7 +676,7 @@ struct ViewerPage: View {
                     if let light = lighterVideoURL { lighterSize = await MediaSize.shared.size(of: light, siteID: post.siteID) }
                 }
             } else if post.mediaType == .video {
-                MediaVideoView(url: lighterVideo ?? post.mediaURL, isActive: isActive, showControls: showControls, siteID: post.siteID,
+                MediaVideoView(url: lighterVideo ?? post.mediaURL, isActive: isActive, pageKey: post.key, showControls: showControls, siteID: post.siteID,
                                onFinished: onFinished, onTap: { onTap(0.5) })
             } else {
                 FullImagePage(post: post, aspect: aspect, isActive: isActive, onFinished: onFinished,

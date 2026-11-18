@@ -342,7 +342,7 @@ Settings › Tools › **Reverse Search Image**:
 - **Adapter fields:** `tagCountPath` (where a suggestion's post count is) and `tagNamePath` (where its name is; overrides `autocompleteNameKey`). Both are optional. Without `tagCountPath`, the app looks for `post_count`, `count`, `posts`, `postCount`, `total` and `use_count`, then a count written in the label ("blush (3922720)"). Legacy boards are detected at `index.php?page=autocomplete2&term=…` and `public/autocomplete.php?q=…`. Auto-Configure fills in `tagCountPath` when the suggestions include a count.
 - **Requirement:** both features need a working suggestions address (`autocompletePath`). Auto-Configure now accepts a suggestions address only if its answers actually match what was typed. Some addresses ignore the query and always return the newest tags, and those are now rejected.
 
-## What's new (Phases 1–36)
+## What's new (Phases 1–37)
 
 **Playback and errors**
 - Videos that come in both MP4 and WebM play as MP4 (native, with sound). WebM-only videos play with sound in the web player; tap the speaker to mute/unmute.
@@ -567,6 +567,12 @@ A full review of video playback while paging (the original paging fix is intact)
 - **The built-in player no longer pauses on the pager's false "disappear"** while you swipe, a repeated "appear" no longer undoes your pause, and when iOS pauses it (headphones out, a call) the play button shows it.
 - A neighbouring page no longer shows "didn't start within N seconds" when you swipe to it; holding for 2× is released if the stream closes mid-hold.
 - **Follow-up review of these fixes:** a VLCKit video arriving with autoplay on now plays even when its surface is rebuilt a moment later; a stream still opening when you swipe away is paused as soon as it starts (no sound from a page you left); a first-frame preview cut short by a swipe no longer leaves the page stuck on "Loading video..."; after headphones are unplugged a surface rebuild doesn't start the video again through the speaker; the loading watchdog restarts after each reopen, so a reopen that hangs ends in the Retry card; and closing the viewer pauses every player (except one in Picture in Picture) as a safety net.
+
+**Device fixes (Phase 37)**
+- **An MP4 kept playing its sound after you swiped to the next post.** The pager doesn't update a page once it's off screen, so the player never heard it had left. The viewer now tells every player which post is on screen, and they pause or start from that directly.
+- **"Loading video..." could come back over a video that was already playing** and stay there even after the download finished. A player that was replaced (a silent retry, a rebuilt page) reported "closed" a moment later, and that was applied to the new player. Ready, error and timeout now belong to one player each, and reports from a replaced one are ignored.
+- **When the built-in player can't play an MP4, it now falls back to VLCKit** (when it's on) instead of the web player, and the reason is written to the Debug Console.
+- The mute and speed buttons on the video controls are now matching pills.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

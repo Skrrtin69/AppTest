@@ -127,8 +127,8 @@ struct SpeedButton: View {
             }
         } label: {
             Text(label).font(.caption.weight(.bold).monospacedDigit()).foregroundColor(.white)
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(Capsule().fill(Color.black.opacity(0.5)))
+                .frame(minWidth: 34).frame(height: 24).padding(.horizontal, 4)
+                .background(Capsule().fill(Color.white.opacity(0.16)))
         } primaryAction: {
             settings.cycleSpeed(); Haptics.tap()
         }
@@ -142,9 +142,15 @@ struct MuteButton: View {
     @ObservedObject private var sound = VideoSound.shared
     var body: some View {
         Button { sound.muted.toggle(); Haptics.tap() } label: {
-            Image(systemName: sound.muted ? "speaker.slash.fill" : "speaker.wave.2.fill").foregroundColor(.white)
-                .frame(width: 26)
+            Image(systemName: sound.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.white)
+                // Same pill as the speed button next to it; the icon doesn't change width.
+                .frame(width: 34, height: 24)
+                .background(Capsule().fill(Color.white.opacity(sound.muted ? 0.28 : 0.16)))
+                .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(sound.muted ? "Sound off" : "Sound on")
     }
 }
@@ -152,6 +158,9 @@ struct MuteButton: View {
 struct MediaVideoView: View {
     let url: URL
     let isActive: Bool
+    /// The viewer post this video belongs to: the players follow the viewer's current post
+    /// directly (see VideoActivity.pageChanged), not only isActive.
+    var pageKey: String? = nil
     var showControls: Bool = true
     var siteID: String? = nil
     var onFinished: (() -> Void)? = nil
@@ -163,54 +172,73 @@ struct MediaVideoView: View {
     /// What AVPlayer opens (an MP4 sent under a .webm name plays through the proxy as .mp4).
     @State private var nativeURL: URL?
     @State private var engine: String?
-    @State private var webReady = false
-    @State private var webTimedOut = false
     @State private var webAttempt = 0
+    /// Each state below names the player it came from (address + attempt). Only the current
+    /// player's reports count: a replaced player closing a moment later used to put
+    /// "Loading video..." back over the new one, which was already playing, for good.
+    @State private var readyKey: String?
+    @State private var timedOutKey: String?
     /// The page's player reported an error (decoder, network): shown at once, no waiting.
-    @State private var webError: String?
-    /// Which video (address + attempt) webReady / webError belong to.
-    @State private var watchedKey: String?
+    @State private var errorKey: String?
+    @State private var errorMessage = ""
     /// The video that already had its one silent retry.
     @State private var autoRetried: URL?
     /// How many times the VLC stream was closed (for the loading watchdog).
     @State private var closures = 0
     @ObservedObject private var network = NetworkSpeed.shared
 
+    private var attemptKey: String { "\(url.absoluteString)#\(webAttempt)" }
+    private var webReady: Bool { readyKey == attemptKey }
+    private var webTimedOut: Bool { timedOutKey == attemptKey }
+    private var webError: String? { errorKey == attemptKey ? errorMessage : nil }
+    /// This page is the viewer's current post (isActive can be stale for a page that has
+    /// just left the screen).
+    private var active: Bool { VideoActivity.shared.isCurrent(pageKey, fallback: isActive) }
+
     var body: some View {
+        let key = attemptKey
+        let active = self.active
         ZStack(alignment: .topLeading) {
             switch path {
             case .none:
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             case .some(.native):
-                NativeVideoView(url: nativeURL ?? url, resumeKey: url, isActive: isActive, showControls: showControls, onFinished: onFinished, onTap: onTap) {
+                NativeVideoView(url: nativeURL ?? url, resumeKey: url, pageKey: pageKey, isActive: active, showControls: showControls, onFinished: onFinished, onTap: onTap) {
                     Task {
                         await PlaybackRouter.shared.markFailed(url)
-                        path = .web
+                        // VLCKit plays MP4 too, through the proxy (with the site's headers); the
+                        // web player could sit on "Loading video..." with some of these.
+                        let vlc = AppSettings.shared.useVLC && VLCVideoView.available
+                        DebugLog.log("Video", "AVPlayer couldn't play \(url.lastPathComponent): switching to \(vlc ? "VLCKit" : "the web player")")
+                        path = vlc ? .vlc : .web
                     }
                 }
             case .some(.vlc):
-                VLCVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
+                VLCVideoView(url: url, isActive: active, pageKey: pageKey, siteID: siteID, speed: settings.playbackSpeed,
                              loop: !settings.autoAdvance, showControls: showControls, onFinished: onFinished, onTap: onTap,
-                             onReady: { webReady = true; webError = nil },
-                             onError: { reportError($0) }, onStatus: { engine = $0 },
-                             onClosed: { webReady = false; closures += 1 })
+                             onReady: { ready(key) },
+                             onError: { reportError($0, key: key) }, onStatus: { engine = $0 },
+                             onClosed: {
+                                 if readyKey == key { readyKey = nil }
+                                 closures += 1
+                             })
                     // Per address too: if the pager hands this view to another post, it gets
                     // its own player instead of the old video carrying on under it.
                     .id("\(url.absoluteString)#\(webAttempt)")
                     .overlay { loadingOverlay }
                     // Also re-armed after each close, so a reopen that hangs still ends in the card.
-                    .task(id: "\(url.absoluteString)#\(webAttempt)#\(isActive)#\(closures)") { await watchStart() }
+                    .task(id: "\(key)#\(active)#\(closures)") { await watchStart() }
             case .some(.web):
-                WebVideoView(url: url, isActive: isActive, siteID: siteID, speed: settings.playbackSpeed,
+                WebVideoView(url: url, isActive: active, siteID: siteID, speed: settings.playbackSpeed,
                              loop: !settings.autoAdvance, onFinished: onFinished,
-                             onReady: { webReady = true; webError = nil },
-                             onError: { reportError($0) }) { engine = $0 }
+                             onReady: { ready(key) },
+                             onError: { reportError($0, key: key) }) { engine = $0 }
                     .id("\(url.absoluteString)#\(webAttempt)")
                     .overlay(alignment: .bottomTrailing) {
                         if showControls { SpeedButton().padding(.trailing, 70).padding(.bottom, 145) }
                     }
                     .overlay { loadingOverlay }
-                    .task(id: "\(url.absoluteString)#\(webAttempt)#\(isActive)") { await watchStart() }
+                    .task(id: "\(key)#\(active)") { await watchStart() }
             }
             if let p = path, showControls {
                 Text(p != .native ? "\(p.label) · \(engine ?? "loading…")" : p.label)
@@ -256,38 +284,39 @@ struct MediaVideoView: View {
                         }
     }
 
+    /// The player for `key` can play (again): it clears its error too.
+    func ready(_ key: String) {
+        readyKey = key
+        if errorKey == key { errorKey = nil }
+    }
+
     /// Many failures are a dropped connection: the first error for a video retries once
-    /// without showing anything; a second one shows the card.
-    func reportError(_ message: String) {
+    /// without showing anything; a second one shows the card. Errors from a player that
+    /// was already replaced don't count.
+    func reportError(_ message: String, key: String) {
+        guard key == attemptKey else { return }
+        if readyKey == key { readyKey = nil }
         if autoRetried != url {
             autoRetried = url
             DebugLog.log("Video", "Error (\(message)): retrying once before showing it")
             webAttempt += 1
         } else {
-            webError = message
+            errorKey = key
+            errorMessage = message
         }
     }
 
     func watchStart() async {
-        // The pager re-runs this task (onAppear) for pages that never left while you swipe,
-        // and can hand this view's state to another post. A video that already started, or
-        // already showed its error, keeps that state (resetting it left "Loading video..."
-        // over a playing video, then the timeout card); a different video or a Retry starts over.
-        let key = "\(url.absoluteString)#\(webAttempt)"
-        if watchedKey == key, webReady || webError != nil { return }
-        if watchedKey != key {
-            watchedKey = key
-            webReady = false
-            webError = nil
-        }
-        webTimedOut = false
+        // Ready, error and timeout belong to one player (attemptKey), so a re-run of this
+        // task (the pager repeats onAppear, a reopen re-arms it) never resets them.
+        let key = attemptKey
         // A neighbouring page doesn't start until it's the current one: no timeout for it
         // (it used to show "didn't start within N seconds" when you swiped to it).
-        guard isActive else { return }
+        guard active, !webReady, webError == nil else { return }
         let limit = network.videoTimeout
         try? await Task.sleep(nanoseconds: UInt64(limit * 1_000_000_000))
-        if !Task.isCancelled, !webReady {
-            webTimedOut = true
+        if !Task.isCancelled, key == attemptKey, !webReady, webError == nil {
+            timedOutKey = key
             DebugLog.log("WebVideo", "No canplay within \(Int(limit)) s (\(network.summary)): \(DebugLog.redact(url))")
         }
     }
@@ -354,6 +383,9 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
     var onFinished: (() -> Void)?
     /// Whether this video's page is the one on screen (kept current by the view).
     var isActivePage = false
+    /// The viewer post this player belongs to (see VideoActivity.pageChanged).
+    var pageKey: String?
+    private var pageObserver: NSObjectProtocol?
     /// The post's own address: the key for the saved playback spot.
     let resumeKey: URL
     /// Picked up from a saved spot; announced once when playback starts.
@@ -374,6 +406,11 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         viewerClosedObserver = NotificationCenter.default.addObserver(forName: VideoActivity.viewerClosed, object: nil, queue: .main) { [weak self] _ in
             guard let self = self, !self.pipActive else { return }
             self.pause()
+        }
+        // The viewer moved to another post: pause here, or start if it's this one. Straight
+        // from the viewer: the page's own isActive isn't updated once it's off screen.
+        pageObserver = NotificationCenter.default.addObserver(forName: VideoActivity.pageChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.followCurrentPage() }
         }
         // Paused by iOS (headphones out, a call, PiP closed): show it. The end of the video
         // is left to the end observer (it loops or moves on).
@@ -415,8 +452,25 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         }
         statusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
             if item.status == .failed {
-                Task { @MainActor in self?.failed = true }
+                let why = item.error?.localizedDescription ?? "unknown error"
+                Task { @MainActor in
+                    DebugLog.log("Video", "AVPlayer failed: \(why)")
+                    self?.failed = true
+                }
             }
+        }
+    }
+
+    private func followCurrentPage() {
+        guard let mine = pageKey, let current = VideoActivity.shared.currentPage else { return }
+        if mine == current {
+            guard !isActivePage else { return }
+            isActivePage = true
+            VideoActivity.shared.report(self, playing: isPlaying)
+            if AppSettings.shared.videosAutoplay { autoplayed = true; play() }
+        } else {
+            if isActivePage { isActivePage = false; VideoActivity.shared.release(self) }
+            if !pipActive, isPlaying || player.rate != 0 { pause() }
         }
     }
 
@@ -484,6 +538,7 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         player.pause()
         rateObservation?.invalidate(); rateObservation = nil
         if let o = viewerClosedObserver { NotificationCenter.default.removeObserver(o); viewerClosedObserver = nil }
+        if let o = pageObserver { NotificationCenter.default.removeObserver(o); pageObserver = nil }
         if let t = timeObserver { player.removeTimeObserver(t); timeObserver = nil }
         if let e = endObserver { NotificationCenter.default.removeObserver(e); endObserver = nil }
         statusObservation = nil
@@ -544,6 +599,7 @@ struct NativeVideoView: View {
     let url: URL
     /// The post's own address (the key for the saved playback spot).
     var resumeKey: URL? = nil
+    var pageKey: String? = nil
     let isActive: Bool
     var showControls: Bool = true
     var onFinished: (() -> Void)? = nil
@@ -591,6 +647,7 @@ struct NativeVideoView: View {
         }
         if holder.controller == nil { holder.controller = VideoController(url: url, resumeKey: key) }
         if let c = holder.controller {
+            c.pageKey = pageKey
             c.isActivePage = isActive
             c.onFinished = { [weak c] in if c?.isActivePage == true { onFinished?() } }
         }
