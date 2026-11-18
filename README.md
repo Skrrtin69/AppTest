@@ -573,6 +573,9 @@ A full review of video playback while paging (the original paging fix is intact)
 - **"Loading video..." could come back over a video that was already playing** and stay there even after the download finished. A player that was replaced (a silent retry, a rebuilt page) reported "closed" a moment later, and that was applied to the new player. Ready, error and timeout now belong to one player each, and reports from a replaced one are ignored.
 - **When the built-in player can't play an MP4, it now falls back to VLCKit** (when it's on) instead of the web player, and the reason is written to the Debug Console.
 - The mute and speed buttons on the video controls are now matching pills.
+- **One video plays at a time.** Any player that starts tells the others to pause (except one in Picture in Picture), and a player that starts for a post that isn't on screen pauses itself, whichever site or player it is.
+- **Picture in Picture is set up only for the video on screen.** Each setup talks to iOS's PiP service on the main thread, and every nearby page used to make its own. This was a suspect for a freeze while swiping.
+- **Freezes and crashes leave a trace.** The Debug Console's log is also written to a file as it happens, and Copy log includes the end of the previous run. A watchdog notes when the main thread stops responding. VLCKit's stop and reopen, and Picture in Picture setup, are logged just before they run.
 
 **Shortcuts:** "Search in MediaDeck" asks for tags and opens the app on that search (iOS 16+).
 

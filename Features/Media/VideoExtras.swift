@@ -355,6 +355,9 @@ final class VideoActivity: ObservableObject {
     /// pager doesn't update a page that has just gone off screen, so a page's isActive
     /// can stay true there (an MP4 kept playing its sound after you swiped on).
     static let pageChanged = Notification.Name("MediaDeckViewerPageChanged")
+    /// Posted by a player (the object) that started playing: every other player pauses, so
+    /// there's never sound from two videos at once, whatever the pager did.
+    static let started = Notification.Name("MediaDeckVideoStarted")
     /// The post on screen in the viewer (its key), nil outside the viewer.
     private(set) var currentPage: String?
     @Published private(set) var playing = false

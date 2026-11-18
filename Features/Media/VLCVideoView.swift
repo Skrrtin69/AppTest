@@ -265,12 +265,29 @@ final class VLCPlayerModel: NSObject, ObservableObject {
                 guard let self = self, let mine = self.pageKey, let current = VideoActivity.shared.currentPage else { return }
                 self.setActive(mine == current)
             },
+            // Another video started: stop (one sound at a time).
+            nc.addObserver(forName: VideoActivity.started, object: nil, queue: .main) { [weak self] note in
+                guard let self = self, note.object as AnyObject? !== self else { return }
+                self.pauseForOtherVideo()
+            },
             nc.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] note in
                 guard let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
                       AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable else { return }
                 self?.pauseForRouteLoss()
             },
         ]
+    }
+
+    /// This page is the viewer's current post (the model's own `active` can lag behind).
+    fileprivate var isCurrentPage: Bool { VideoActivity.shared.isCurrent(pageKey, fallback: active) }
+
+    private func pauseForOtherVideo() {
+        #if canImport(MobileVLCKit)
+        guard loaded, !closed, player.isPlaying, !pauseOnStart else { return }
+        wantsPlay = false
+        player.pause()
+        DebugLog.log("VLC", "Paused: another video started")
+        #endif
     }
 
     private func pauseForViewerClose() {
@@ -312,6 +329,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         guard loaded else {
             loaded = true
             firstURL = url
+            DebugLog.log("VLC", "Opening a stream")
             player.delegate = self
             player.drawable = view
             if let k = resumeKey, let t = VideoResumeStore.shared.position(for: k) {
@@ -396,10 +414,11 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         readySent = false
         lastStop = Date()
         if holding { holding = false; player.rate = Float(AppSettings.shared.playbackSpeed) }
+        // Logged before stop(): it waits for VLC's threads, so a freeze there shows up here.
+        DebugLog.log("VLC", "Closing (\(why)) at \(resumeAtMs) ms")
         player.stop()
         // close() runs inside SwiftUI's view updates (load / surfaceGone): report it after.
         if let cb = onClosed { DispatchQueue.main.async { cb() } }
-        DebugLog.log("VLC", "Closed (\(why)) at \(resumeAtMs) ms")
     }
 
     /// Opens the stream again on the current surface at the saved time.
@@ -408,6 +427,7 @@ final class VLCPlayerModel: NSObject, ObservableObject {
         closed = false
         readySent = false
         opened = Date()
+        DebugLog.log("VLC", "Reopening at \(resumeAtMs) ms\(play ? ", playing" : ", paused")")
         player.delegate = self
         player.drawable = view
         player.media = Self.media(url, startMs: resumeAtMs)
@@ -419,7 +439,6 @@ final class VLCPlayerModel: NSObject, ObservableObject {
             player.audio?.isMuted = true
         }
         player.play()
-        DebugLog.log("VLC", "Reopened at \(resumeAtMs) ms\(play ? ", playing" : ", paused")")
     }
 
     private func endPeek() {
@@ -570,7 +589,11 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
             switch state {
             case .playing:
                 // A stream still opening when you swiped away starts after the pause: stop it.
-                if !active, !pauseOnStart { player.pause(); return }
+                if !isCurrentPage, !pauseOnStart {
+                    DebugLog.log("VLC", "Paused a video that started off screen")
+                    player.pause(); return
+                }
+                if !pauseOnStart { NotificationCenter.default.post(name: VideoActivity.started, object: self) }
                 markReady()
             case .error:
                 if let s = lastStop, Date().timeIntervalSince(s) < 2 {
@@ -592,6 +615,7 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
                 if let k = resumeKey { VideoResumeStore.shared.clear(k) }
                 if loop {
                     lastStop = Date()
+                    DebugLog.log("VLC", "Looping")
                     player.stop()
                     // From the start: the media carries the time it was opened at, and
                     // replaying it as-is restarted there.
@@ -613,7 +637,7 @@ extension VLCPlayerModel: VLCMediaPlayerDelegate {
         let now = Double(player.time.intValue) / 1000
         DispatchQueue.main.async { [self] in
             guard !closed else { return }
-            if !active, !pauseOnStart, player.isPlaying { player.pause() }
+            if !isCurrentPage, !pauseOnStart, player.isPlaying { player.pause() }
             markReady()
             // Reopened while not playing: the first time update means a frame is on screen.
             if pauseOnStart {

@@ -8,6 +8,11 @@ struct MediaDeckApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var boot = BootModel()
 
+    init() {
+        // Writes a freeze (main thread not responding) to the log file, which survives it.
+        HangWatchdog.start()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView(boot: boot)

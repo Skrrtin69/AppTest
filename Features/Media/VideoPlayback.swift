@@ -382,7 +382,16 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
     /// Called when the video ends while auto-advance is on.
     var onFinished: (() -> Void)?
     /// Whether this video's page is the one on screen (kept current by the view).
-    var isActivePage = false
+    /// Only that page's player has a Picture in Picture controller: each one talks to iOS's
+    /// PiP service on the main thread, and every nearby page used to make its own.
+    var isActivePage = false {
+        didSet {
+            guard isActivePage != oldValue else { return }
+            if isActivePage { preparePiP() } else { releasePiP() }
+        }
+    }
+    private var startedObserver: NSObjectProtocol?
+    private weak var lastLayer: AVPlayerLayer?
     /// The viewer post this player belongs to (see VideoActivity.pageChanged).
     var pageKey: String?
     private var pageObserver: NSObjectProtocol?
@@ -398,6 +407,7 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
 
     init(url: URL, resumeKey: URL? = nil) {
         self.resumeKey = resumeKey ?? url
+        DebugLog.log("Video", "AVPlayer opening \(url.lastPathComponent)")
         let item = AVPlayerItem(asset: AVURLAsset.withSiteHeaders(url))
         player = AVPlayer(playerItem: item)
         super.init()
@@ -412,6 +422,15 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         pageObserver = NotificationCenter.default.addObserver(forName: VideoActivity.pageChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.followCurrentPage() }
         }
+        // Another video started: this one stops (one sound at a time).
+        startedObserver = NotificationCenter.default.addObserver(forName: VideoActivity.started, object: nil, queue: .main) { [weak self] note in
+            Task { @MainActor in
+                guard let self = self, note.object as AnyObject? !== self, !self.pipActive,
+                      self.isPlaying || self.player.rate != 0 else { return }
+                DebugLog.log("Video", "Paused: another video started")
+                self.pause()
+            }
+        }
         // Paused by iOS (headphones out, a call, PiP closed): show it. The end of the video
         // is left to the end observer (it loops or moves on).
         rateObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
@@ -420,6 +439,16 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
                 let playing = p.timeControlStatus != .paused
                 if !playing, let item = p.currentItem, item.duration.isNumeric,
                    item.currentTime().seconds >= item.duration.seconds - 0.3 { return }
+                if playing {
+                    // Never play for a post that isn't on screen (a page the pager kept, or
+                    // a player it replaced): that was sound from a video you'd left.
+                    if let mine = self.pageKey, let current = VideoActivity.shared.currentPage, mine != current, !self.pipActive {
+                        DebugLog.log("Video", "Paused a video that started off screen")
+                        self.pause()
+                        return
+                    }
+                    if p.timeControlStatus == .playing { NotificationCenter.default.post(name: VideoActivity.started, object: self) }
+                }
                 if self.isPlaying != playing { self.isPlaying = playing }
             }
         }
@@ -476,17 +505,31 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
 
     var pipPossible: Bool { pip != nil && AVPictureInPictureController.isPictureInPictureSupported() }
 
-    /// Called once the video's layer exists.
+    /// Called once the video's layer exists (and again when the view gets a new one).
     func attach(layer: AVPlayerLayer) {
-        guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        lastLayer = layer
+        if isActivePage { preparePiP() }
+    }
+
+    /// Picture in Picture for the video on screen only.
+    private func preparePiP() {
+        guard let layer = lastLayer, AVPictureInPictureController.isPictureInPictureSupported() else { return }
         // Already tied to this layer, or floating right now: keep it.
         if pip != nil && (pipLayer === layer || pipActive) { return }
         pipLayer = layer
+        DebugLog.log("Video", "Setting up Picture in Picture")
         let c = AVPictureInPictureController(playerLayer: layer)
         c?.delegate = self
         // Going to the Home Screen while a video plays continues it in a floating window.
         c?.canStartPictureInPictureAutomaticallyFromInline = true
         pip = c
+        objectWillChange.send()
+    }
+
+    private func releasePiP() {
+        guard pip != nil, !pipActive else { return }
+        pip = nil
+        pipLayer = nil
         objectWillChange.send()
     }
 
@@ -539,6 +582,7 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
         rateObservation?.invalidate(); rateObservation = nil
         if let o = viewerClosedObserver { NotificationCenter.default.removeObserver(o); viewerClosedObserver = nil }
         if let o = pageObserver { NotificationCenter.default.removeObserver(o); pageObserver = nil }
+        if let o = startedObserver { NotificationCenter.default.removeObserver(o); startedObserver = nil }
         if let t = timeObserver { player.removeTimeObserver(t); timeObserver = nil }
         if let e = endObserver { NotificationCenter.default.removeObserver(e); endObserver = nil }
         statusObservation = nil
