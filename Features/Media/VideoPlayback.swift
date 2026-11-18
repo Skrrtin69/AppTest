@@ -405,7 +405,11 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
     /// The layer Picture in Picture is tied to (the view can be rebuilt with a new layer).
     private weak var pipLayer: AVPlayerLayer?
 
+    /// The address AVPlayer opens.
+    let sourceURL: URL
+
     init(url: URL, resumeKey: URL? = nil) {
+        self.sourceURL = url
         self.resumeKey = resumeKey ?? url
         DebugLog.log("Video", "AVPlayer opening \(url.lastPathComponent)")
         let item = AVPlayerItem(asset: AVURLAsset.withSiteHeaders(url))
@@ -639,6 +643,69 @@ final class VideoController: NSObject, ObservableObject, AVPictureInPictureContr
     }
 }
 
+/// One AVPlayer per viewer post, kept for the last few posts you were on, so a page the
+/// pager rebuilds gets the same player back (same spot, no new download) instead of a
+/// second one. Players that drop out, and all of them when the viewer closes, are shut down
+/// (except one in Picture in Picture, which ends when the floating window closes).
+@MainActor
+final class VideoControllerPool {
+    static let shared = VideoControllerPool()
+    /// Oldest first. Six covers the current post and the two on each side.
+    private var entries: [(key: String, controller: VideoController)] = []
+    private let capacity = 6
+    private var closeObserver: NSObjectProtocol?
+    private var pageObserver: NSObjectProtocol?
+
+    private init() {
+        closeObserver = NotificationCenter.default.addObserver(forName: VideoActivity.viewerClosed, object: nil, queue: .main) { _ in
+            Task { @MainActor in VideoControllerPool.shared.releaseAll() }
+        }
+        // The post on screen counts as just used, so it's never the one dropped.
+        pageObserver = NotificationCenter.default.addObserver(forName: VideoActivity.pageChanged, object: nil, queue: .main) { _ in
+            Task { @MainActor in
+                guard let k = VideoActivity.shared.currentPage else { return }
+                VideoControllerPool.shared.touch(k)
+            }
+        }
+    }
+
+    func controller(for key: String, url: URL, resumeKey: URL) -> VideoController {
+        if let i = entries.firstIndex(where: { $0.key == key }) {
+            let e = entries[i]
+            if e.controller.sourceURL == url && e.controller.resumeKey == resumeKey {
+                entries.remove(at: i)
+                entries.append(e)
+                return e.controller
+            }
+            // The same post with another file (the lighter version was chosen): replace it.
+            entries.remove(at: i)
+            shutDown(e.controller)
+        }
+        let c = VideoController(url: url, resumeKey: resumeKey)
+        entries.append((key, c))
+        while entries.count > capacity {
+            let old = entries.removeFirst()
+            shutDown(old.controller)
+        }
+        return c
+    }
+
+    private func touch(_ key: String) {
+        guard let i = entries.firstIndex(where: { $0.key == key }) else { return }
+        entries.append(entries.remove(at: i))
+    }
+
+    func releaseAll() {
+        let all = entries
+        entries = []
+        all.forEach { shutDown($0.controller) }
+    }
+
+    private func shutDown(_ c: VideoController) {
+        if c.pipActive { c.viewGone = true } else { c.teardown() }
+    }
+}
+
 struct NativeVideoView: View {
     let url: URL
     /// The post's own address (the key for the saved playback spot).
@@ -652,18 +719,12 @@ struct NativeVideoView: View {
 
     @StateObject private var holder = ControllerHolder()
 
-    /// Owns the player for as long as the page exists. The pager fires onDisappear for
-    /// pages that aren't really leaving, so the player is released here, when SwiftUI drops
-    /// the page, not on onDisappear (which restarted the video from the beginning).
+    /// The page's player. It belongs to VideoControllerPool, not to the page: the pager
+    /// rebuilds the pages next to the current one several times per swipe, and each
+    /// rebuild used to make another player for the same post (the old ones played on
+    /// unseen, or paused the one on screen).
     final class ControllerHolder: ObservableObject {
         @Published var controller: VideoController?
-        deinit {
-            guard let c = controller else { return }
-            Task { @MainActor in
-                // A video in Picture in Picture keeps playing after the viewer closes.
-                if c.pipActive { c.viewGone = true } else { c.teardown() }
-            }
-        }
     }
 
     private var key: URL { resumeKey ?? url }
@@ -682,15 +743,12 @@ struct NativeVideoView: View {
         .onChange(of: key) { _ in prepare() }
     }
 
-    /// Makes the player if there isn't one for this post. (The pager can hand this view's
-    /// state to another post: a player for a different video is replaced.)
+    /// Takes this post's player from the pool (one per post, made on first use). The pager
+    /// can hand this view's state to another post: that post's own player is used then.
     private func prepare() {
-        if let c = holder.controller, c.resumeKey != key {
-            if c.pipActive { c.viewGone = true } else { c.teardown() }
-            holder.controller = nil
-        }
-        if holder.controller == nil { holder.controller = VideoController(url: url, resumeKey: key) }
-        if let c = holder.controller {
+        let c = VideoControllerPool.shared.controller(for: pageKey ?? key.absoluteString, url: url, resumeKey: key)
+        if holder.controller !== c { holder.controller = c }
+        do {
             c.pageKey = pageKey
             c.isActivePage = isActive
             c.onFinished = { [weak c] in if c?.isActivePage == true { onFinished?() } }
